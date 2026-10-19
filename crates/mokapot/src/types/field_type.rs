@@ -248,31 +248,21 @@ impl FieldType {
     }
 
     /// Parses a field type from the beginning of `input`, advancing it past the parsed type.
-    pub(crate) fn parse_prefix(input: &mut &[u8]) -> Result<Self, InvalidDescriptor> {
-        if let Ok(pt) = PrimitiveType::parse_prefix(input) {
-            Ok(Self::Base(pt))
-        } else if let Some(mut rest) = input.strip_prefix(b"[") {
-            Self::parse_prefix(&mut rest)
-                .map(FieldType::into_array_type)
-                .inspect(|_| *input = rest)
-        } else if let Some(rest) = input.strip_prefix(b"L") {
-            let semicolon = rest
-                .iter()
-                .position(|byte| *byte == b';')
-                .ok_or(InvalidDescriptor)?;
-            let (class_name, after_semi) = rest.split_at(semicolon);
-            let after_semi = &after_semi[1..];
-            if class_name.is_empty() {
-                Err(InvalidDescriptor)
-            } else {
-                let class_name = JavaStr::from_cesu8(class_name).map_err(|_| InvalidDescriptor)?;
+    pub(crate) fn parse_prefix(input: &mut &JavaStr) -> Result<Self, InvalidDescriptor> {
+        let (tag, mut rest) = input.split_first_ascii().ok_or(InvalidDescriptor)?;
+        let field_type = match tag {
+            b'[' => Self::parse_prefix(&mut rest)?.into_array_type(),
+            b'L' => {
+                let (class_name, after_semi) =
+                    rest.split_once_ascii(b';').ok_or(InvalidDescriptor)?;
                 let class_name = ClassName::try_from(class_name).map_err(|_| InvalidDescriptor)?;
-                *input = after_semi;
-                Ok(class_name.into())
+                rest = after_semi;
+                class_name.into()
             }
-        } else {
-            Err(InvalidDescriptor)
-        }
+            _ => Self::Base(PrimitiveType::try_from(char::from(tag))?),
+        };
+        *input = rest;
+        Ok(field_type)
     }
 
     /// Creates an array type with the given type as its elements.
@@ -334,9 +324,9 @@ impl TryFrom<&JavaStr> for FieldType {
     type Error = InvalidDescriptor;
 
     fn try_from(descriptor: &JavaStr) -> Result<Self, Self::Error> {
-        let mut bytes = descriptor.as_bytes();
-        let field_type = Self::parse_prefix(&mut bytes)?;
-        if bytes.is_empty() {
+        let mut rest = descriptor;
+        let field_type = Self::parse_prefix(&mut rest)?;
+        if rest.as_bytes().is_empty() {
             Ok(field_type)
         } else {
             Err(InvalidDescriptor)
@@ -474,11 +464,11 @@ mod tests {
             prop_assert_eq!(descriptor.parse::<FieldType>(), Ok(field_type.clone()));
             let with_suffix_text = format!("{descriptor}{suffix}");
             let with_suffix = JavaString::from(with_suffix_text.as_str());
-            let mut input = with_suffix.as_java_str().as_bytes();
+            let mut input = with_suffix.as_java_str();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Ok(field_type));
             let has_suffix = !suffix.is_empty();
             let suffix = JavaString::from(suffix);
-            prop_assert_eq!(input, suffix.as_java_str().as_bytes());
+            prop_assert_eq!(input, suffix.as_java_str());
             if has_suffix {
                 prop_assert_eq!(with_suffix_text.parse::<FieldType>(), Err(InvalidDescriptor));
             }
@@ -491,9 +481,9 @@ mod tests {
         ) {
             let descriptor = format!("{}L{class_name}", "[".repeat(usize::from(dim)));
             let encoded = JavaString::from(descriptor.as_str());
-            let mut input = encoded.as_java_str().as_bytes();
+            let mut input = encoded.as_java_str();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, encoded.as_java_str().as_bytes());
+            prop_assert_eq!(input, encoded.as_java_str());
             prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
         }
 
@@ -513,9 +503,9 @@ mod tests {
         ) {
             let descriptor = format!("{}{element}", "[".repeat(usize::from(dim)));
             let encoded = JavaString::from(descriptor.as_str());
-            let mut input = encoded.as_java_str().as_bytes();
+            let mut input = encoded.as_java_str();
             prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, encoded.as_java_str().as_bytes());
+            prop_assert_eq!(input, encoded.as_java_str());
             prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
         }
     }

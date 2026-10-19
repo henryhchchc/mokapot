@@ -52,6 +52,28 @@ impl JavaStr {
         mutf8::decode_strict(&self.bytes).map_err(|_| JavaStrDecodeError)
     }
 
+    pub(crate) fn split_first_ascii(&self) -> Option<(u8, &Self)> {
+        let (&first, rest) = self.bytes.split_first()?;
+        if !first.is_ascii() {
+            return None;
+        }
+        // SAFETY: Removing an ASCII byte preserves modified UTF-8 validity.
+        Some((first, unsafe { Self::from_cesu8_unchecked(rest) }))
+    }
+
+    pub(crate) fn split_once_ascii(&self, separator: u8) -> Option<(&Self, &Self)> {
+        assert!(separator.is_ascii());
+        let index = self.bytes.iter().position(|&byte| byte == separator)?;
+        let (before, after) = self.bytes.split_at(index);
+        // SAFETY: ASCII separators cannot occur inside a multibyte sequence.
+        Some(unsafe {
+            (
+                Self::from_cesu8_unchecked(before),
+                Self::from_cesu8_unchecked(&after[1..]),
+            )
+        })
+    }
+
     pub(crate) fn split_ascii(&self, separator: u8) -> impl DoubleEndedIterator<Item = &Self> {
         assert!(separator.is_ascii());
         self.bytes
@@ -366,6 +388,7 @@ mod tests {
             b"text",
             b"/x/",
             b"a/\xed\xa0\x80/b",
+            b"\xed\xa0\x80/\xc0\x80/",
             &[0xc0, 0x80],
             &[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
             &[0xed, 0xa0, 0x80],
@@ -375,6 +398,20 @@ mod tests {
             &[0xe0, 0xa0, 0x80, 0xed, 0x9f, 0xbf, 0xef, 0xbf, 0xbf],
         ] {
             let view = JavaStr::from_cesu8(bytes).unwrap();
+            if let Some((first, rest)) = view.split_first_ascii() {
+                assert!(first.is_ascii());
+                assert_eq!(bytes, [&[first], rest.as_bytes()].concat());
+                assert!(JavaStr::from_cesu8(rest.as_bytes()).is_ok());
+            } else {
+                assert!(bytes.first().is_none_or(|byte| !byte.is_ascii()));
+            }
+            if let Some((before, after)) = view.split_once_ascii(b'/') {
+                assert_eq!(bytes, [before.as_bytes(), b"/", after.as_bytes()].concat());
+                assert!(JavaStr::from_cesu8(before.as_bytes()).is_ok());
+                assert!(JavaStr::from_cesu8(after.as_bytes()).is_ok());
+            } else {
+                assert!(!bytes.contains(&b'/'));
+            }
             for part in view.split_ascii(b'/') {
                 assert!(JavaStr::from_cesu8(part.as_bytes()).is_ok());
             }
