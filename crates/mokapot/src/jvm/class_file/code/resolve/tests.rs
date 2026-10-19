@@ -196,7 +196,7 @@ fn borrowing_instruction_fixture() -> (Class, crate::jvm::code::MethodBodyData) 
 
 #[test]
 fn instructions_borrow_pool_operands_and_preserve_lookup() {
-    use crate::jvm::{ConstantValue, code::MethodBody};
+    use crate::jvm::{ConstantValueView, code::MethodBody};
 
     let (class, data) = borrowing_instruction_fixture();
     let body = MethodBody::new(&class, &data);
@@ -239,8 +239,8 @@ fn instructions_borrow_pool_operands_and_preserve_lookup() {
         Instruction::Ldc(value) | Instruction::LdcW(value) => value,
         _ => panic!("expected a constant"),
     };
-    assert_eq!(constant(17.into()), &ConstantValue::Integer(42));
-    assert!(std::ptr::eq(constant(17.into()), constant(19.into())));
+    assert_eq!(constant(17.into()), ConstantValueView::Integer(42));
+    assert_eq!(constant(17.into()), constant(19.into()));
     let Instruction::InvokeDynamic {
         bootstrap_method_index,
         name,

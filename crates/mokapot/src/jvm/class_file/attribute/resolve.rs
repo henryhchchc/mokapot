@@ -22,7 +22,7 @@ impl Resolve for raw::ConstantValue {
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         ctx.constant_pool
-            .intern_constant(self.constantvalue_index.get())
+            .constant_value_id(self.constantvalue_index.get())
     }
 }
 

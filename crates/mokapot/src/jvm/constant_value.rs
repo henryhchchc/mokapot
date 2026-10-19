@@ -4,7 +4,10 @@ use std::{cmp::Ordering, hash::Hash};
 
 use derive_more::Display;
 
-use super::{JavaString, class::MethodHandle};
+use super::{
+    JavaStr, JavaString,
+    class::{MethodHandle, MethodHandleView},
+};
 use crate::{
     intrinsics::see_jvm_spec,
     types::{
@@ -50,75 +53,137 @@ pub enum ConstantValue {
     Dynamic(u16, JavaString, FieldType),
 }
 
-impl PartialEq<Self> for ConstantValue {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Null, Self::Null) => true,
-            (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
-            (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
-            (Self::Float(lhs), Self::Float(rhs)) => lhs.to_bits() == rhs.to_bits(),
-            (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
-            (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
-            (Self::Double(lhs), Self::Double(rhs)) => lhs.to_bits() == rhs.to_bits(),
-            (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
-            (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
-            (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
-            (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
-            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
-                lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
+/// A borrowed compile-time constant value.
+#[doc = see_jvm_spec!(4, 4)]
+#[derive(Debug, Clone, Copy, Display)]
+pub enum ConstantValueView<'pool> {
+    /// The `null` value.
+    #[display("null")]
+    Null,
+    /// A primitive integer value.
+    #[display("int({_0})")]
+    Integer(i32),
+    /// A primitive floating point value.
+    #[display("float({_0})")]
+    Float(f32),
+    /// A primitive long value.
+    #[display("long({_0})")]
+    Long(i64),
+    /// A primitive double value.
+    #[display("double({_0})")]
+    Double(f64),
+    /// A string literal.
+    #[display("{_0}")]
+    String(&'pool JavaStr),
+    /// A class literal.
+    #[display("{_0}.class")]
+    Class(&'pool ReferenceType),
+    /// A method handle.
+    #[display("{_0:?}")]
+    Handle(MethodHandleView<'pool>),
+    /// A method type.
+    #[display("{_0:?}")]
+    MethodType(&'pool MethodDescriptor),
+    /// A dynamic constant.
+    #[display("Dynamic({_0}, {_1}, {_2})")]
+    Dynamic(u16, &'pool JavaStr, &'pool FieldType),
+}
+
+impl From<ConstantValueView<'_>> for ConstantValue {
+    fn from(value: ConstantValueView<'_>) -> Self {
+        match value {
+            ConstantValueView::Null => Self::Null,
+            ConstantValueView::Integer(value) => Self::Integer(value),
+            ConstantValueView::Float(value) => Self::Float(value),
+            ConstantValueView::Long(value) => Self::Long(value),
+            ConstantValueView::Double(value) => Self::Double(value),
+            ConstantValueView::String(value) => Self::String(value.to_owned()),
+            ConstantValueView::Class(value) => Self::Class(value.clone()),
+            ConstantValueView::Handle(value) => Self::Handle(value.into()),
+            ConstantValueView::MethodType(value) => Self::MethodType(value.clone()),
+            ConstantValueView::Dynamic(bootstrap, name, ty) => {
+                Self::Dynamic(bootstrap, name.to_owned(), ty.clone())
             }
-            _ => false,
         }
     }
 }
 
-impl PartialOrd for ConstantValue {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (Self::Null, Self::Null) => Some(Ordering::Equal),
-            (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
-            (Self::Long(lhs), Self::Long(rhs)) => lhs.partial_cmp(rhs),
-            (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
-                (true, true) => Some(Ordering::Equal),
-                (false, false) => lhs.partial_cmp(rhs),
-                _ => None,
-            },
-            (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
-                (true, true) => Some(Ordering::Equal),
-                (false, false) => lhs.partial_cmp(rhs),
-                _ => None,
-            },
-            (Self::String(lhs), Self::String(rhs)) => lhs.partial_cmp(rhs),
-            _ => None,
-        }
-    }
-}
-
-impl Eq for ConstantValue {}
-
-impl Hash for ConstantValue {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        core::mem::discriminant(self).hash(state);
-        match self {
-            Self::Integer(v) => v.hash(state),
-            Self::Long(v) => v.hash(state),
-            Self::Float(v) if !v.is_nan() => {
-                v.to_bits().hash(state);
-            }
-            Self::Double(v) if !v.is_nan() => {
-                v.to_bits().hash(state);
-            }
-            Self::Null | Self::Float(_) | Self::Double(_) => {}
-            Self::String(v) => v.hash(state),
-            Self::Class(v) => v.hash(state),
-            Self::Handle(v) => v.hash(state),
-            Self::MethodType(v) => v.hash(state),
-            Self::Dynamic(v0, v1, v2) => {
-                (v0, v1, v2).hash(state);
+macro_rules! impl_value_semantics {
+    ($ty:ty) => {
+        impl PartialEq<Self> for $ty {
+            fn eq(&self, other: &Self) -> bool {
+                match (self, other) {
+                    (Self::Null, Self::Null) => true,
+                    (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
+                    (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+                    (Self::Float(lhs), Self::Float(rhs)) => lhs.to_bits() == rhs.to_bits(),
+                    (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
+                    (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+                    (Self::Double(lhs), Self::Double(rhs)) => lhs.to_bits() == rhs.to_bits(),
+                    (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
+                    (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
+                    (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
+                    (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
+                    (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
+                        lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
+                    }
+                    _ => false,
+                }
             }
         }
-    }
+
+        impl PartialOrd for $ty {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                match (self, other) {
+                    (Self::Null, Self::Null) => Some(Ordering::Equal),
+                    (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
+                    (Self::Long(lhs), Self::Long(rhs)) => lhs.partial_cmp(rhs),
+                    (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
+                        (true, true) => Some(Ordering::Equal),
+                        (false, false) => lhs.partial_cmp(rhs),
+                        _ => None,
+                    },
+                    (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
+                        (true, true) => Some(Ordering::Equal),
+                        (false, false) => lhs.partial_cmp(rhs),
+                        _ => None,
+                    },
+                    (Self::String(lhs), Self::String(rhs)) => lhs.partial_cmp(rhs),
+                    _ => None,
+                }
+            }
+        }
+
+        impl Eq for $ty {}
+
+        impl Hash for $ty {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                core::mem::discriminant(self).hash(state);
+                match self {
+                    Self::Integer(v) => v.hash(state),
+                    Self::Long(v) => v.hash(state),
+                    Self::Float(v) if !v.is_nan() => {
+                        v.to_bits().hash(state);
+                    }
+                    Self::Double(v) if !v.is_nan() => {
+                        v.to_bits().hash(state);
+                    }
+                    Self::Null | Self::Float(_) | Self::Double(_) => {}
+                    Self::String(v) => v.hash(state),
+                    Self::Class(v) => v.hash(state),
+                    Self::Handle(v) => v.hash(state),
+                    Self::MethodType(v) => v.hash(state),
+                    Self::Dynamic(v0, v1, v2) => {
+                        (v0, v1, v2).hash(state);
+                    }
+                }
+            }
+        }
+    };
 }
+
+impl_value_semantics!(ConstantValue);
+impl_value_semantics!(ConstantValueView<'_>);
 
 #[cfg(test)]
 mod tests {
@@ -127,7 +192,7 @@ mod tests {
         hash::{Hash, Hasher},
     };
 
-    use super::ConstantValue;
+    use super::{ConstantValue, ConstantValueView};
 
     #[test]
     fn floating_point_identity() {
@@ -142,7 +207,7 @@ mod tests {
             f32::from_bits(0x7f80_0001),
             f32::from_bits(0xffc0_0042),
         ]
-        .map(ConstantValue::Float);
+        .map(ConstantValueView::Float);
         let doubles = [
             f64::NEG_INFINITY,
             -1.0,
@@ -154,19 +219,24 @@ mod tests {
             f64::from_bits(0x7ff0_0000_0000_0001),
             f64::from_bits(0xfff8_0000_0000_0042),
         ]
-        .map(ConstantValue::Double);
+        .map(ConstantValueView::Double);
 
-        for values in [floats, doubles] {
-            for (i, lhs) in values.iter().enumerate() {
-                for (j, rhs) in values.iter().enumerate() {
-                    assert_eq!(lhs == rhs, i.min(6) == j.min(6));
-                    if lhs == rhs {
-                        let mut lhs_hash = DefaultHasher::new();
-                        let mut rhs_hash = DefaultHasher::new();
-                        lhs.hash(&mut lhs_hash);
-                        rhs.hash(&mut rhs_hash);
-                        assert_eq!(lhs_hash.finish(), rhs_hash.finish());
-                    }
+        check_identity(&floats);
+        check_identity(&doubles);
+        check_identity(&floats.map(ConstantValue::from));
+        check_identity(&doubles.map(ConstantValue::from));
+    }
+
+    fn check_identity(values: &[impl Eq + Hash]) {
+        for (i, lhs) in values.iter().enumerate() {
+            for (j, rhs) in values.iter().enumerate() {
+                assert_eq!(lhs == rhs, i.min(6) == j.min(6));
+                if lhs == rhs {
+                    let mut lhs_hash = DefaultHasher::new();
+                    let mut rhs_hash = DefaultHasher::new();
+                    lhs.hash(&mut lhs_hash);
+                    rhs.hash(&mut rhs_hash);
+                    assert_eq!(lhs_hash.finish(), rhs_hash.finish());
                 }
             }
         }

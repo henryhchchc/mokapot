@@ -3,11 +3,15 @@
 use std::num::NonZeroU16;
 
 #[cfg(test)]
-use crate::jvm::references::{FieldRef, MethodRef};
+use crate::jvm::{
+    ConstantValue,
+    class::MethodHandle,
+    references::{FieldRef, MethodRef},
+};
 
 use crate::{
     jvm::{
-        ConstantValue, JavaStr, JavaString,
+        ConstantValueView, JavaStr, JavaString,
         class::{MethodHandleData, MethodHandleView},
         class_file::constant_pool::storage::{PoolStorage, Slot},
         class_file::constant_pool::{RawConstantPool, RawEntry},
@@ -30,7 +34,6 @@ pub struct ConstantPool {
     method_descriptors: ValueCache<MethodDescriptor>,
     field_types: ValueCache<FieldType>,
     return_types: ValueCache<ReturnType>,
-    constants: ValueCache<ConstantValue>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,7 +109,7 @@ pub(crate) struct FieldTypeId(u16);
 pub(crate) struct ReturnTypeId(u16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ConstantValueId(u16);
+pub(crate) struct ConstantValueId(NonZeroU16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FieldRefId(NonZeroU16);
@@ -355,9 +358,57 @@ impl ConstantPool {
     }
     #[cfg(test)]
     pub(crate) fn insert_constant(&mut self, value: ConstantValue) -> ConstantValueId {
-        let id = u16::try_from(self.constants.values.len()).expect("test constants fit in u16");
-        self.constants.values.push(value);
-        ConstantValueId(id)
+        let entry = match value {
+            ConstantValue::Null => panic!("null is not a pool constant"),
+            ConstantValue::Integer(value) => Entry::Integer(value),
+            ConstantValue::Float(value) => Entry::Float(value),
+            ConstantValue::Long(value) => Entry::Long(value),
+            ConstantValue::Double(value) => Entry::Double(value),
+            ConstantValue::String(value) => Entry::String(self.insert_utf8(value)),
+            ConstantValue::Class(value) => Entry::Class {
+                reference_type: value,
+                is_binary_name: false,
+            },
+            ConstantValue::MethodType(value) => {
+                Entry::MethodType(self.insert_method_descriptor(value))
+            }
+            ConstantValue::Dynamic(bootstrap_method_attr_index, name, ty) => Entry::Dynamic {
+                bootstrap_method_attr_index,
+                name_and_type: self.insert_field_name_and_type(name, ty),
+            },
+            ConstantValue::Handle(value) => Entry::MethodHandle(match value {
+                MethodHandle::RefGetField(value) => {
+                    MethodHandleData::GetField(self.insert_field_ref(value))
+                }
+                MethodHandle::RefGetStatic(value) => {
+                    MethodHandleData::GetStatic(self.insert_field_ref(value))
+                }
+                MethodHandle::RefPutField(value) => {
+                    MethodHandleData::PutField(self.insert_field_ref(value))
+                }
+                MethodHandle::RefPutStatic(value) => {
+                    MethodHandleData::PutStatic(self.insert_field_ref(value))
+                }
+                MethodHandle::RefInvokeVirtual(value) => {
+                    MethodHandleData::InvokeVirtual(self.insert_method_ref(value))
+                }
+                MethodHandle::RefInvokeStatic(value) => {
+                    MethodHandleData::InvokeStatic(self.insert_method_ref(value))
+                }
+                MethodHandle::RefInvokeSpecial(value) => {
+                    MethodHandleData::InvokeSpecial(self.insert_method_ref(value))
+                }
+                MethodHandle::RefNewInvokeSpecial(value) => {
+                    MethodHandleData::NewInvokeSpecial(self.insert_method_ref(value))
+                }
+                MethodHandle::RefInvokeInterface(value) => {
+                    MethodHandleData::InvokeInterface(self.insert_method_ref(value))
+                }
+            }),
+        };
+        let index = self.inner.push(entry);
+        self.extend_test_sources();
+        ConstantValueId(NonZeroU16::new(index).expect("nonzero test index"))
     }
 
     #[cfg(test)]
@@ -366,7 +417,6 @@ impl ConstantPool {
         self.method_descriptors.extend_sources(count);
         self.field_types.extend_sources(count);
         self.return_types.extend_sources(count);
-        self.constants.extend_sources(count);
     }
 
     #[cfg(test)]
@@ -499,15 +549,15 @@ impl ConstantPool {
     pub(crate) fn return_type(&self, id: ReturnTypeId) -> &ReturnType {
         self.return_types.get(id.0)
     }
-    pub(crate) fn intern_constant(&mut self, index: u16) -> Result<ConstantValueId, ParseError> {
-        if let Some(id) = self.constants.lookup(index) {
-            return Ok(ConstantValueId(id));
-        }
-        let value = self.get_constant_value(index)?;
-        self.constants.insert(index, value).map(ConstantValueId)
+    pub(crate) fn constant_value_id(&self, index: u16) -> Result<ConstantValueId, ParseError> {
+        self.get_constant_value(index)?;
+        Ok(ConstantValueId(
+            NonZeroU16::new(index).expect("validated nonzero pool index"),
+        ))
     }
-    pub(crate) fn constant_value(&self, id: ConstantValueId) -> &ConstantValue {
-        self.constants.get(id.0)
+    pub(crate) fn constant_value(&self, id: ConstantValueId) -> ConstantValueView<'_> {
+        self.get_constant_value(id.0.get())
+            .expect("validated constant pool ID")
     }
     #[cfg(test)]
     pub(crate) fn insert_utf8(&mut self, value: JavaString) -> Utf8Id {
@@ -567,7 +617,6 @@ impl ConstantPool {
         self.method_descriptors.finish();
         self.field_types.finish();
         self.return_types.finish();
-        self.constants.finish();
         self
     }
 
@@ -580,7 +629,6 @@ impl ConstantPool {
             method_descriptors: ValueCache::new(1),
             field_types: ValueCache::new(1),
             return_types: ValueCache::new(1),
-            constants: ValueCache::new(1),
         }
     }
 
@@ -604,7 +652,6 @@ impl ConstantPool {
             method_descriptors: ValueCache::new(count),
             field_types: ValueCache::new(count),
             return_types: ValueCache::new(count),
-            constants: ValueCache::new(count),
         };
         // Each tier depends only on earlier tiers, regardless of source entry order.
         for tier in 0..4 {
@@ -681,28 +728,24 @@ impl ConstantPool {
         }
     }
 
-    pub(crate) fn get_constant_value(&self, index: u16) -> Result<ConstantValue, ParseError> {
+    fn get_constant_value(&self, index: u16) -> Result<ConstantValueView<'_>, ParseError> {
         Ok(match self.entry(index)? {
-            Entry::Integer(value) => ConstantValue::Integer(*value),
-            Entry::Float(value) => ConstantValue::Float(*value),
-            Entry::Long(value) => ConstantValue::Long(*value),
-            Entry::Double(value) => ConstantValue::Double(*value),
-            Entry::String(value) => ConstantValue::String(self.utf8(*value).to_owned()),
-            Entry::Class { reference_type, .. } => ConstantValue::Class(reference_type.clone()),
+            Entry::Integer(value) => ConstantValueView::Integer(*value),
+            Entry::Float(value) => ConstantValueView::Float(*value),
+            Entry::Long(value) => ConstantValueView::Long(*value),
+            Entry::Double(value) => ConstantValueView::Double(*value),
+            Entry::String(value) => ConstantValueView::String(self.utf8(*value)),
+            Entry::Class { reference_type, .. } => ConstantValueView::Class(reference_type),
             Entry::MethodType(value) => {
-                ConstantValue::MethodType(self.method_descriptor(*value).clone())
+                ConstantValueView::MethodType(self.method_descriptor(*value))
             }
-            Entry::MethodHandle(value) => ConstantValue::Handle(value.view(self).into()),
+            Entry::MethodHandle(value) => ConstantValueView::Handle(value.view(self)),
             Entry::Dynamic {
                 bootstrap_method_attr_index,
                 name_and_type,
             } => {
-                let (name, field_type) = self.field_name_and_type(*name_and_type);
-                ConstantValue::Dynamic(
-                    *bootstrap_method_attr_index,
-                    name.to_owned(),
-                    field_type.clone(),
-                )
+                let (name, ty) = self.field_name_and_type(*name_and_type);
+                ConstantValueView::Dynamic(*bootstrap_method_attr_index, name, ty)
             }
             entry => return Err(entry.type_mismatch("Loadable constant")),
         })
@@ -976,10 +1019,14 @@ mod tests {
         assert_eq!(field.name().as_bytes(), &[0xed, 0xa0, 0x80]);
         assert_eq!(FieldRef::from(field).name.as_bytes(), name.as_bytes());
         assert_eq!(MethodRef::from(method).name.as_bytes(), name.as_bytes());
-        assert_eq!(
-            pool.get_constant_value(17).unwrap(),
-            ConstantValue::Dynamic(1, name.to_owned(), field.field_type().clone())
-        );
+        let ConstantValueView::Dynamic(bootstrap, dynamic_name, ty) =
+            pool.constant_value(pool.constant_value_id(17).unwrap())
+        else {
+            panic!("expected dynamic constant");
+        };
+        assert_eq!(bootstrap, 1);
+        assert!(std::ptr::eq(dynamic_name, name));
+        assert!(std::ptr::eq(ty, field.field_type()));
     }
 
     #[test]
@@ -1127,13 +1174,13 @@ mod tests {
         assert_eq!(pool.intern_field_type(5).unwrap(), field_type);
         let return_type = pool.intern_return_type(6).unwrap();
         assert_eq!(pool.intern_return_type(6).unwrap(), return_type);
-        let constant = pool.intern_constant(2).unwrap();
-        assert_eq!(pool.intern_constant(2).unwrap(), constant);
+        let constant = pool.constant_value_id(2).unwrap();
+        assert_eq!(pool.constant_value_id(2).unwrap(), constant);
         for index in [0, 3, 7] {
             for result in [
                 pool.intern_field_type(index).map(|_| ()),
                 pool.intern_return_type(index).map(|_| ()),
-                pool.intern_constant(index).map(|_| ()),
+                pool.constant_value_id(index).map(|_| ()),
             ] {
                 assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
             }
@@ -1143,7 +1190,7 @@ mod tests {
         assert_eq!(pool.method_descriptor(descriptor).descriptor(), "()V");
         assert_eq!(pool.field_type(field_type).descriptor(), "I");
         assert_eq!(pool.return_type(return_type), &ReturnType::Void);
-        assert_eq!(pool.constant_value(constant), &ConstantValue::Long(0));
+        assert_eq!(pool.constant_value(constant), ConstantValueView::Long(0));
     }
 
     #[test]
@@ -1244,7 +1291,7 @@ mod tests {
                         let owned = MethodHandle::from(handle);
                         assert_eq!(owned.reference_kind(), kind);
                         assert_eq!(
-                            pool.get_constant_value(7).unwrap(),
+                            ConstantValue::from(pool.get_constant_value(7).unwrap()),
                             ConstantValue::Handle(owned)
                         );
                     }
@@ -1395,8 +1442,13 @@ mod tests {
         ]);
         let pool = ConstantPool::from_raw(raw).unwrap();
         assert_eq!(pool.get_java_string(1).unwrap().as_bytes(), bytes);
+        let constant = pool.constant_value(pool.constant_value_id(2).unwrap());
+        let ConstantValueView::String(value) = constant else {
+            panic!("expected string constant");
+        };
+        assert!(std::ptr::eq(value, pool.utf8(pool.utf8_id(1).unwrap())));
         assert_eq!(
-            pool.get_constant_value(2).unwrap(),
+            ConstantValue::from(constant),
             ConstantValue::String(expected)
         );
     }
