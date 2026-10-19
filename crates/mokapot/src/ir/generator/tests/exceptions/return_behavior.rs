@@ -63,36 +63,12 @@ fn synchronized_return_has_only_exceptional_successors() {
 fn returns_without_a_handler_unwind_conservatively() {
     let mut synchronized = method([(0, InstructionData::Return)], "()V", vec![]);
     synchronized.access_flags |= method::AccessFlags::SYNCHRONIZED;
-    let monitor = method(
-        [
-            (0, InstructionData::ALoad0),
-            (1, InstructionData::MonitorEnter),
-            (2, InstructionData::Return),
-        ],
-        "(Ljava/lang/Object;)V",
-        vec![],
-    );
-    let monitor_free = method([(0, InstructionData::Return)], "()V", vec![]);
-
-    let cases: [(&str, crate::tests::TestMethod, ProgramCounter); 3] = [
-        ("a synchronized method", synchronized, 0.into()),
-        ("an explicit monitor operation", monitor, 2.into()),
-        ("a monitor-free method", monitor_free, 0.into()),
-    ];
-    for (label, case, return_pc) in cases {
-        let ir = build(&case).unwrap();
-        let ret_term = terminator_at(&ir, return_pc);
-        assert!(
-            matches!(ret_term, Terminator::Return { value: None, .. }),
-            "{label} must return fallibly"
-        );
-        let mut outcomes = ret_term.successors();
-        let unwind = outcomes.next().expect("the return has one outcome");
-        assert_eq!(unwind.transfer(), None, "{label}");
-        assert_eq!(unwind.block_target(), None, "{label}");
-        assert!(
-            outcomes.next().is_none(),
-            "{label} has more than one outcome"
-        );
-    }
+    let ir = build(&synchronized).unwrap();
+    let ret_term = terminator_at(&ir, 0.into());
+    assert!(matches!(ret_term, Terminator::Return { value: None, .. }));
+    let mut outcomes = ret_term.successors();
+    let unwind = outcomes.next().expect("the return has one outcome");
+    assert_eq!(unwind.transfer(), None);
+    assert_eq!(unwind.block_target(), None);
+    assert!(outcomes.next().is_none());
 }

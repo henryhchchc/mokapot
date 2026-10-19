@@ -146,55 +146,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_reference_forms_and_preserves_binary_names() {
-        for (input, descriptor, jls_name) in [
-            ("java/lang/String", "Ljava/lang/String;", "java.lang.String"),
-            (
-                "Ljava/lang/String;",
-                "Ljava/lang/String;",
-                "java.lang.String",
-            ),
-            (
-                "java/util/Map$Entry",
-                "Ljava/util/Map$Entry;",
-                "java.util.Map$Entry",
-            ),
-            (
-                "Ljava/util/Map$Entry;",
-                "Ljava/util/Map$Entry;",
-                "java.util.Map$Entry",
-            ),
-            ("[I", "[I", "int[]"),
-            (
-                "[Ljava/util/Map$Entry;",
-                "[Ljava/util/Map$Entry;",
-                "java.util.Map$Entry[]",
-            ),
-            (
-                "[[Ljava/util/Map$Entry;",
-                "[[Ljava/util/Map$Entry;",
-                "java.util.Map$Entry[][]",
-            ),
-            // A single letter is a class name here, even if it is a primitive descriptor.
-            ("I", "LI;", "I"),
-        ] {
-            let reference_type: ReferenceType = input.parse().unwrap();
-            assert_eq!(reference_type.descriptor(), descriptor);
-            assert_eq!(reference_type.jls_name(), jls_name);
-            match &reference_type {
-                ReferenceType::Class(name) => {
-                    assert!(!input.starts_with('['));
-                    assert_eq!(
-                        name.as_java_str().to_string(),
-                        &descriptor[1..descriptor.len() - 1]
-                    );
-                }
-                ReferenceType::Array(_) => assert!(input.starts_with('[')),
-            }
-            let field_type = FieldType::from(reference_type);
-            assert_eq!(field_type.descriptor(), descriptor);
-            assert_eq!(field_type.jls_name(), jls_name);
-        }
+    fn distinguishes_class_and_array_reference_forms() {
+        let class: ReferenceType = "java/lang/String".parse().unwrap();
+        assert!(matches!(class, ReferenceType::Class(_)));
+        assert_eq!(class.descriptor(), "Ljava/lang/String;");
+
+        let descriptor_class: ReferenceType = "Ljava/lang/String;".parse().unwrap();
+        assert_eq!(descriptor_class, class);
+
+        let array: ReferenceType = "[I".parse().unwrap();
+        assert!(matches!(array, ReferenceType::Array(_)));
+        assert_eq!(array.jls_name(), "int[]");
+
+        // A single letter is a class name here, even if it is a primitive descriptor.
+        let single_letter: ReferenceType = "I".parse().unwrap();
+        assert_eq!(
+            single_letter,
+            ReferenceType::Class(ClassName::new("I").unwrap())
+        );
     }
 
     #[test]

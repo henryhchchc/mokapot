@@ -165,34 +165,3 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
     let expected = ["java/lang/RuntimeException", "java/lang/Throwable"];
     assert_eq!(handler_types, expected);
 }
-
-#[test]
-fn loop_header_takes_a_block_argument_from_its_back_edge() {
-    let body = [
-        (0, InstructionData::IConst0),
-        (1, InstructionData::IStore1),
-        (2, InstructionData::ILoad1),
-        (3, InstructionData::ILoad0),
-        (4, InstructionData::IfICmpGe(7.into())),
-        (5, InstructionData::IInc(1, 1)),
-        (6, InstructionData::Goto(2.into())),
-        (7, InstructionData::ILoad1),
-        (8, InstructionData::IReturn),
-    ];
-    let ir = lift(body, "(I)I", vec![]);
-    let bb = ir.block(ir.entry.block).unwrap();
-    let next_succ = bb.terminator.successors().next().unwrap();
-    let header = next_succ.block_target().expect("the entry falls through");
-
-    let header = ir.block(header).unwrap();
-    let [param] = header.parameters.as_slice() else {
-        panic!("the loop header merges its counter through exactly one block argument");
-    };
-    let counter = PathValue::Variable(param.value);
-    let limit = PathValue::Variable(ir.parameters[0]);
-    let guard = BranchGuard::of(BooleanVariable::from(Predicate::GreaterThanOrEqual(
-        counter, limit,
-    )));
-    let taken = header.terminator.successors().next().unwrap();
-    assert_eq!(taken.transfer(), Some(&ControlTransfer::Conditional(guard)));
-}

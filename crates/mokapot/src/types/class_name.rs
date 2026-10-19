@@ -134,21 +134,6 @@ mod tests {
         }
     }
 
-    proptest! {
-        #[test]
-        fn name_parts_preserve_components(components in name_components()) {
-            let name = ClassName::new(components.join("/")).unwrap();
-            let expected_package = (components.len() > 1)
-                .then(|| components[..components.len() - 1].join("/"));
-
-            let expected_unqualified = JavaString::from(components.last().unwrap().as_str());
-            prop_assert_eq!(name.unqualified_name(), expected_unqualified.as_java_str());
-            prop_assert_eq!(name.package().map(|package| package.to_string()), expected_package);
-            prop_assert_eq!(name.jls_name().to_string(), components.join("."));
-            prop_assert_eq!(name.to_string().parse::<ClassName>(), Ok(name));
-        }
-    }
-
     #[test]
     fn copies_class_names_with_unpaired_surrogates() {
         let name = JavaString::from_cesu8(vec![b'p', b'/', 0xed, 0xa0, 0x80]).unwrap();

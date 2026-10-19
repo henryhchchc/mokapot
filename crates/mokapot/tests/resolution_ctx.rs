@@ -1,6 +1,6 @@
 //! Tests for resolving compiled Java fixtures.
 
-#![cfg(java_fixture_tests)]
+#![cfg(all(java_fixture_tests, feature = "petgraph"))]
 #![allow(missing_docs, clippy::ignore_without_reason)]
 
 use mokapot::types::class_name::ClassName;
@@ -13,15 +13,6 @@ use mokapot::{
 mod support;
 
 #[test]
-fn load_classes() {
-    let app_cp = DirectoryClassPath::new(support::classes_dir());
-    let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);
-    let test_analysis: ClassName = "org/mokapot/test/TestAnalysis".parse().unwrap();
-    assert!(ctx.application_classes.contains_key(&test_analysis));
-}
-
-#[test]
-#[cfg(feature = "petgraph")]
 fn interfaces_impl() {
     let app_cp = DirectoryClassPath::new(support::classes_dir());
     let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);

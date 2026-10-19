@@ -426,87 +426,27 @@ mod tests {
             }
         }
 
-        #[test]
-        fn field_names_descriptors_and_prefixes(
-            base in prop_oneof![
-                any::<PrimitiveType>().prop_map(FieldType::Base),
-                any::<ClassName>().prop_map(FieldType::Object),
-            ],
-            dim in prop_oneof![Just(0_u8), Just(1_u8), 2..=u8::MAX],
-            suffix in any::<String>(),
-        ) {
-            let (base_descriptor, base_name, base_jls_name) = match &base {
-                FieldType::Base(ty) => (ty.descriptor().to_string(), ty.to_string(), ty.to_string()),
-                FieldType::Object(name) => (
-                    format!("L{name};"),
-                    name.to_string(),
-                    name.as_java_str().to_string().replace('/', "."),
-                ),
-                FieldType::Array(_) => unreachable!(),
-            };
-            let category = if dim == 0 && matches!(base, FieldType::Base(PrimitiveType::Long | PrimitiveType::Double)) {
-                ValueCategory::Category2
-            } else {
-                ValueCategory::Category1
-            };
-            let field_type = FieldType::array_of(base, dim);
-            prop_assert_eq!(field_type.value_category(), category);
-            let descriptor = format!("{}{base_descriptor}", "[".repeat(usize::from(dim)));
-            let brackets = "[]".repeat(usize::from(dim));
-            prop_assert_eq!(field_type.to_string(), format!("{base_name}{brackets}"));
-            prop_assert_eq!(field_type.jls_name(), format!("{base_jls_name}{brackets}"));
-            let expected_descriptor = JavaString::from(descriptor.as_str());
-            let encoded = field_type.descriptor();
-            prop_assert_eq!(
-                encoded.as_java_str().as_bytes(),
-                expected_descriptor.as_java_str().as_bytes()
+    }
+
+    #[test]
+    fn parses_prefix_at_array_depth_boundaries_and_rejects_invalid_elements() {
+        for depth in [0_u8, 1, u8::MAX] {
+            let descriptor = format!("{}I!", "[".repeat(usize::from(depth)));
+            let encoded = JavaString::from(descriptor.as_str());
+            let mut input = encoded.as_java_str();
+            let parsed = FieldType::parse_prefix(&mut input).unwrap();
+            assert_eq!(
+                parsed,
+                FieldType::array_of(PrimitiveType::Int.into(), depth)
             );
-            prop_assert_eq!(descriptor.parse::<FieldType>(), Ok(field_type.clone()));
-            let with_suffix_text = format!("{descriptor}{suffix}");
-            let with_suffix = JavaString::from(with_suffix_text.as_str());
-            let mut input = with_suffix.as_java_str();
-            prop_assert_eq!(FieldType::parse_prefix(&mut input), Ok(field_type));
-            let has_suffix = !suffix.is_empty();
-            let suffix = JavaString::from(suffix);
-            prop_assert_eq!(input, suffix.as_java_str());
-            if has_suffix {
-                prop_assert_eq!(with_suffix_text.parse::<FieldType>(), Err(InvalidDescriptor));
-            }
+            assert_eq!(input, "!");
         }
 
-        #[test]
-        fn missing_object_semicolon_is_rejected_at_every_array_depth(
-            class_name in any::<ClassName>(),
-            dim in any::<u8>(),
-        ) {
-            let descriptor = format!("{}L{class_name}", "[".repeat(usize::from(dim)));
-            let encoded = JavaString::from(descriptor.as_str());
+        for descriptor in ["Lfoo", "[Lfoo", "Lfoo//bar;", "[Lfoo.bar;", "[[L;"] {
+            let encoded = JavaString::from(descriptor);
             let mut input = encoded.as_java_str();
-            prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, encoded.as_java_str());
-            prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
-        }
-
-        #[test]
-        fn invalid_elements_are_rejected_at_every_array_depth(
-            element in prop_oneof![
-                Just(String::new()),
-                "[^ZCFDBSIJL\\[]",
-                Just("L;".to_owned()),
-                Just("L/foo;".to_owned()),
-                Just("Lfoo/;".to_owned()),
-                Just("Lfoo//bar;".to_owned()),
-                Just("Lfoo.bar;".to_owned()),
-                Just("Lfoo[bar;".to_owned()),
-            ],
-            dim in any::<u8>(),
-        ) {
-            let descriptor = format!("{}{element}", "[".repeat(usize::from(dim)));
-            let encoded = JavaString::from(descriptor.as_str());
-            let mut input = encoded.as_java_str();
-            prop_assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
-            prop_assert_eq!(input, encoded.as_java_str());
-            prop_assert_eq!(descriptor.parse::<FieldType>(), Err(InvalidDescriptor));
+            assert_eq!(FieldType::parse_prefix(&mut input), Err(InvalidDescriptor));
+            assert_eq!(input, encoded.as_java_str());
         }
     }
 

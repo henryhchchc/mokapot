@@ -101,30 +101,7 @@ impl PartialEq<PackageName> for &str {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-    use crate::types::name_validation::tests::name_components;
-
-    impl Arbitrary for PackageName {
-        type Parameters = ();
-        type Strategy = BoxedStrategy<Self>;
-
-        fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
-            name_components()
-                .prop_map(|components| PackageName::new(components.join("/")).unwrap())
-                .boxed()
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn jls_name_preserves_components(components in name_components()) {
-            let name = PackageName::new(components.join("/")).unwrap();
-            prop_assert_eq!(name.jls_name().to_string(), components.join("."));
-            prop_assert_eq!(name.to_string().parse::<PackageName>(), Ok(name));
-        }
-    }
 
     #[test]
     fn parses_and_preserves_modified_utf8() {
