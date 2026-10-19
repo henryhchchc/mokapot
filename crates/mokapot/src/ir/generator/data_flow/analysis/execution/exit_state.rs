@@ -16,7 +16,7 @@ use crate::{
 
 /// The frame and operations reached at a block's final instruction.
 pub(super) struct ExitState<'instruction> {
-    instruction: &'instruction Instruction,
+    instruction: Instruction<'instruction>,
     pc: ProgramCounter,
     /// The frame before the final instruction runs; handler frames derive from it.
     pre_final_frame: Option<Frame>,
@@ -26,7 +26,7 @@ pub(super) struct ExitState<'instruction> {
 impl<'instruction> ExitState<'instruction> {
     /// Snapshots the pre-final frame only when an exception arm enters a handler.
     pub(super) fn new(
-        instruction: &'instruction Instruction,
+        instruction: Instruction<'instruction>,
         pc: ProgramCounter,
         frame: Frame,
         exit: &BlockExit<BlockId>,
@@ -78,7 +78,7 @@ impl<'instruction> ExitState<'instruction> {
         operations: &mut Vec<(ProgramCounter, Operation)>,
     ) -> Result<FrameTerminator, FrameError> {
         let operation =
-            lifting::lift_instruction(values, self.instruction, self.pc, &mut self.frame)?;
+            lifting::lift_instruction(values, &self.instruction, self.pc, &mut self.frame)?;
         let has_exceptions = !exception_arms.is_empty();
         let exceptional = self.exception_arms(values, exception_arms)?;
         let normal = FrameArm::block(
@@ -120,7 +120,7 @@ impl<'instruction> ExitState<'instruction> {
         otherwise: BlockId,
     ) -> Result<FrameTerminator, FrameError> {
         let (taken_transfer, otherwise_transfer) =
-            effects::branch_transfers(self.instruction, &mut self.frame)?;
+            effects::branch_transfers(&self.instruction, &mut self.frame)?;
         let taken = FrameArm::block(ArmKey::Taken, taken, taken_transfer, self.frame.clone());
         let otherwise =
             FrameArm::block(ArmKey::Otherwise, otherwise, otherwise_transfer, self.frame);
@@ -161,7 +161,7 @@ impl<'instruction> ExitState<'instruction> {
         values: &mut ValueContext,
         exception_arms: Vec<ExceptionArm<BlockId>>,
     ) -> Result<FrameTerminator, FrameError> {
-        let value = effects::return_operand(self.instruction, &mut self.frame)?;
+        let value = effects::return_operand(&self.instruction, &mut self.frame)?;
         let exceptional = self.exception_arms(values, exception_arms)?;
         Ok(FrameTerminator::Return { value, exceptional })
     }
@@ -172,7 +172,7 @@ impl<'instruction> ExitState<'instruction> {
         values: &mut ValueContext,
         exception_arms: Vec<ExceptionArm<BlockId>>,
     ) -> Result<FrameTerminator, FrameError> {
-        let value = effects::throw_operand(self.instruction, &mut self.frame)?;
+        let value = effects::throw_operand(&self.instruction, &mut self.frame)?;
         let exceptional = self.exception_arms(values, exception_arms)?;
         Ok(FrameTerminator::Throw { value, exceptional })
     }

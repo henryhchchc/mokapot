@@ -110,7 +110,7 @@ fn test_a_class(class: &Class, variable_count_limit: usize) {
 
         // Naming every instruction exercises the decoder; the names themselves
         // are not asserted on.
-        for (_pc, insn) in body.instructions().iter() {
+        for (_pc, insn) in body.instructions() {
             let _ = insn.name();
         }
 

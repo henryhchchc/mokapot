@@ -123,21 +123,26 @@ pub(crate) struct TestExceptionHandler {
 }
 
 /// Builds a method named `test` in `org/mokapot/Test` from its body.
-pub(crate) fn method<I, PC>(
+pub(crate) fn method<'instruction, I, PC>(
     instructions: I,
     descriptor: &str,
     exception_table: Vec<TestExceptionHandler>,
     access_flags: AccessFlags,
 ) -> TestMethod
 where
-    I: IntoIterator<Item = (PC, Instruction)>,
+    I: IntoIterator<Item = (PC, Instruction<'instruction>)>,
     PC: Into<ProgramCounter>,
 {
+    let mut constant_pool = ConstantPool::new();
     let instructions = instructions
         .into_iter()
-        .map(|(pc, instruction)| (pc.into(), instruction))
+        .map(|(pc, instruction)| {
+            (
+                pc.into(),
+                crate::jvm::code::InstructionData::from_view(instruction, &mut constant_pool),
+            )
+        })
         .collect();
-    let mut constant_pool = ConstantPool::new();
     let name = constant_pool.insert_utf8("test".into());
     let descriptor =
         constant_pool.insert_method_descriptor(descriptor.parse().expect("valid test descriptor"));

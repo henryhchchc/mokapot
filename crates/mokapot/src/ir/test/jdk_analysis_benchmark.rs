@@ -7,7 +7,9 @@ use crate::jvm::code::Instruction;
 mod path_condition_corpus;
 use path_condition_corpus::{PathCorpus, predicate_limit};
 
-fn ir(instructions: impl IntoIterator<Item = (u16, Instruction)>) -> MokaIRMethod {
+fn ir<'instruction>(
+    instructions: impl IntoIterator<Item = (u16, Instruction<'instruction>)>,
+) -> MokaIRMethod {
     let fixture = method(instructions, "(I)V", Vec::new());
     MokaIRMethod::from_method(fixture.as_method()).unwrap()
 }

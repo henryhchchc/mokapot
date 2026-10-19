@@ -6,7 +6,7 @@ use std::{
     ops::{Bound, Range, RangeBounds},
 };
 
-use super::{Instruction, ProgramCounter};
+use super::{Instruction, InstructionData, InstructionList, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
@@ -23,7 +23,7 @@ use crate::{
 pub(crate) struct MethodBodyData {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub instructions: InstructionList<Instruction>,
+    pub instructions: InstructionStorage<InstructionData>,
     pub exception_table: Box<[ExceptionTableEntryData]>,
     pub line_number_table: Option<Box<[LineNumberTableEntry]>>,
     pub local_variable_table: Option<LocalVariableTableData>,
@@ -59,8 +59,8 @@ impl<'class> MethodBody<'class> {
 
     /// Returns the executable instructions.
     #[must_use]
-    pub const fn instructions(self) -> &'class InstructionList<Instruction> {
-        &self.data.instructions
+    pub const fn instructions(self) -> InstructionList<'class> {
+        InstructionList::new(self.class, &self.data.instructions)
     }
 
     /// Returns the exception handlers.
@@ -124,7 +124,7 @@ impl<'class> MethodBody<'class> {
 
     /// Returns the instruction at the given program counter.
     #[must_use]
-    pub fn instruction_at(self, pc: ProgramCounter) -> Option<&'class Instruction> {
+    pub fn instruction_at(self, pc: ProgramCounter) -> Option<Instruction<'class>> {
         self.instructions().get(&pc)
     }
 }
@@ -134,7 +134,7 @@ impl fmt::Debug for MethodBody<'_> {
         f.debug_struct("MethodBody")
             .field("max_stack", &self.max_stack())
             .field("max_locals", &self.max_locals())
-            .field("instructions", self.instructions())
+            .field("instructions", &self.instructions())
             .field(
                 "exception_table",
                 &self.exception_table().collect::<Vec<_>>(),
@@ -159,27 +159,10 @@ impl fmt::Debug for DebugAttributes<'_> {
     }
 }
 
-/// A list of instructions ordered by program counter.
-///
-/// Collecting duplicate program counters retains the last instruction for each.
-///
-/// ```
-/// use mokapot::jvm::code::{InstructionList, ProgramCounter, Instruction};
-///
-/// let start = ProgramCounter::ZERO;
-/// let end = ProgramCounter::from(3);
-/// let instructions: InstructionList<_> =
-///     [(end, Instruction::Return), (start, Instruction::Nop)].into_iter().collect();
-/// assert_eq!(instructions.entry_point(), Some((start, &Instruction::Nop)));
-/// assert_eq!(instructions.iter().map(|(pc, _)| pc).collect::<Vec<_>>(), [start, end]);
-/// assert_eq!(instructions.next_pc_of(&start), Some(end));
-/// assert_eq!(instructions.prev_pc_of(&end), Some(start));
-/// assert_eq!(instructions.next_pc_of(&end), None);
-/// ```
 #[derive(Debug, Clone)]
-pub struct InstructionList<I>(Vec<(ProgramCounter, I)>);
+pub(crate) struct InstructionStorage<I>(Vec<(ProgramCounter, I)>);
 
-impl<I, T> From<T> for InstructionList<I>
+impl<I, T> From<T> for InstructionStorage<I>
 where
     T: Into<BTreeMap<ProgramCounter, I>>,
 {
@@ -188,7 +171,7 @@ where
     }
 }
 
-impl<I> IntoIterator for InstructionList<I> {
+impl<I> IntoIterator for InstructionStorage<I> {
     type Item = (ProgramCounter, I);
 
     // TODO: Replace it with opaque type when it's stable.
@@ -200,21 +183,24 @@ impl<I> IntoIterator for InstructionList<I> {
     }
 }
 
-impl<'i, I> IntoIterator for &'i InstructionList<I> {
+impl<'i, I> IntoIterator for &'i InstructionStorage<I> {
     type Item = (ProgramCounter, &'i I);
 
     // TODO: Replace it with opaque type when it's stable.
     //       See https://github.com/rust-lang/rust/issues/63063.
-    type IntoIter = instruction_list::Iter<'i, I>;
+    type IntoIter = storage_iter::Iter<'i, I>;
 
     fn into_iter(self) -> Self::IntoIter {
-        instruction_list::Iter {
+        storage_iter::Iter {
             inner: self.0.iter(),
         }
     }
 }
 
-impl<I> InstructionList<I> {
+impl<I> InstructionStorage<I> {
+    pub(crate) fn as_slice(&self) -> &[(ProgramCounter, I)] {
+        &self.0
+    }
     pub(crate) fn from_ordered(instructions: Vec<(ProgramCounter, I)>) -> Self {
         debug_assert!(instructions.windows(2).all(|pair| pair[0].0 < pair[1].0));
         Self(instructions)
@@ -227,11 +213,10 @@ impl<I> InstructionList<I> {
         self.into_iter()
     }
 
-    /// Iterates over the instructions whose program counters are in `range`.
-    pub(crate) fn range(
+    pub(crate) fn range_slice(
         &self,
         range: impl RangeBounds<ProgramCounter>,
-    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &I)> {
+    ) -> &[(ProgramCounter, I)] {
         match (range.start_bound(), range.end_bound()) {
             (Bound::Excluded(start), Bound::Excluded(end)) => {
                 assert!(
@@ -255,13 +240,11 @@ impl<I> InstructionList<I> {
             Bound::Excluded(pc) => self.0.partition_point(|(key, _)| key < pc),
             Bound::Unbounded => self.0.len(),
         };
-        self.0[start..end]
-            .iter()
-            .map(|(pc, instruction)| (*pc, instruction))
+        &self.0[start..end]
     }
 }
 
-impl<I> Display for InstructionList<I>
+impl<I> Display for InstructionStorage<I>
 where
     I: Display,
 {
@@ -278,7 +261,7 @@ where
     }
 }
 
-impl<I> FromIterator<(ProgramCounter, I)> for InstructionList<I> {
+impl<I> FromIterator<(ProgramCounter, I)> for InstructionStorage<I> {
     fn from_iter<T: IntoIterator<Item = (ProgramCounter, I)>>(iter: T) -> Self {
         let mut instructions: Vec<_> = iter.into_iter().collect();
         instructions.sort_by_key(|(pc, _)| *pc);
@@ -294,12 +277,12 @@ impl<I> FromIterator<(ProgramCounter, I)> for InstructionList<I> {
     }
 }
 
-impl<I> InstructionList<I> {
+impl<I> InstructionStorage<I> {
     /// Returns the instruction at the given program counter.
     #[must_use]
-    pub fn get(&self, pc: &ProgramCounter) -> Option<&I> {
+    pub fn get(&self, pc: ProgramCounter) -> Option<&I> {
         self.0
-            .binary_search_by_key(pc, |(pc, _)| *pc)
+            .binary_search_by_key(&pc, |(pc, _)| *pc)
             .ok()
             .map(|index| &self.0[index].1)
     }
@@ -312,15 +295,15 @@ impl<I> InstructionList<I> {
 
     /// Returns the program counter of the next instruction after the given one.
     #[must_use]
-    pub fn next_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
-        let index = self.0.partition_point(|(key, _)| key <= pc);
+    pub fn next_pc_of(&self, pc: ProgramCounter) -> Option<ProgramCounter> {
+        let index = self.0.partition_point(|(key, _)| *key <= pc);
         self.0.get(index).map(|(pc, _)| *pc)
     }
 
     /// Returns the program counter of the previous instruction before the given one.
     #[must_use]
-    pub fn prev_pc_of(&self, pc: &ProgramCounter) -> Option<ProgramCounter> {
-        let index = self.0.partition_point(|(key, _)| key < pc);
+    pub fn prev_pc_of(&self, pc: ProgramCounter) -> Option<ProgramCounter> {
+        let index = self.0.partition_point(|(key, _)| *key < pc);
         index.checked_sub(1).map(|index| self.0[index].0)
     }
 
@@ -337,7 +320,7 @@ impl<I> InstructionList<I> {
     }
 }
 
-pub mod instruction_list {
+mod storage_iter {
     use std::slice;
 
     use crate::jvm::code::ProgramCounter;
@@ -554,10 +537,10 @@ mod test {
     #[test]
     fn instruction_at() {
         let data = MethodBodyData {
-            instructions: InstructionList::from([
-                (0.into(), Nop),
-                (1.into(), IConst0),
-                (2.into(), IConst1),
+            instructions: InstructionStorage::from([
+                (0.into(), InstructionData::Nop),
+                (1.into(), InstructionData::IConst0),
+                (2.into(), InstructionData::IConst1),
             ]),
             max_stack: 0,
             max_locals: 0,
@@ -570,15 +553,15 @@ mod test {
         };
         let class = Class::default();
         let body = MethodBody::new(&class, &data);
-        assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
+        assert_eq!(Some(IConst0), body.instruction_at(1.into()));
     }
 
     #[test]
     fn previous_pc() {
         let instruction_list =
-            InstructionList::from([(0.into(), 10), (1.into(), 20), (2.into(), 30)]);
-        assert_eq!(Some(0.into()), instruction_list.prev_pc_of(&1.into()));
-        assert_eq!(None, instruction_list.prev_pc_of(&0.into()));
+            InstructionStorage::from([(0.into(), 10), (1.into(), 20), (2.into(), 30)]);
+        assert_eq!(Some(0.into()), instruction_list.prev_pc_of(1.into()));
+        assert_eq!(None, instruction_list.prev_pc_of(0.into()));
     }
 }
 

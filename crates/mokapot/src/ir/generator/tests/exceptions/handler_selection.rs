@@ -6,7 +6,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
     let exception = cls_name("java/lang/Exception");
     let body = [
         (0, Instruction::ALoad0),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
+        (1, Instruction::CheckCast(&ref_t("java/lang/String"))),
         (2, Instruction::Pop),
         (3, Instruction::Return),
         (10, Instruction::AStore1),
