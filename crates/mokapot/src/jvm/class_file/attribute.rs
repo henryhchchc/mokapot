@@ -28,8 +28,8 @@ use crate::{
             nesting::{EnclosingMethodData, InnerClassData},
             record_component::RecordComponentData,
         },
-        class_file::constant_pool::{ClassId, ConstantValueId, PackageId, Utf8Id},
         code::{LineNumberTableEntry, MethodBodyData, StackMapFrameData},
+        constant_pool::{ClassId, ConstantValueId, PackageId, Utf8Id},
         method::ParameterInfoData,
         module::ModuleData,
     },
@@ -286,7 +286,7 @@ mod tests {
     use super::*;
     use crate::jvm::{
         class::Version,
-        class_file::constant_pool::{ConstantPool, RawConstantPool, RawEntry},
+        class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
         errors::ParseErrorKind,
     };
 
@@ -318,7 +318,7 @@ mod tests {
             let raw_pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
             let index = 1;
             let mut ctx = ResolutionContext {
-                constant_pool: ConstantPool::from_raw(raw_pool).unwrap(),
+                constant_pool: resolve(raw_pool).unwrap(),
                 class_version: Version::LATEST,
             };
             let payload = [0xaa, 0xbb];
@@ -353,7 +353,7 @@ mod tests {
             let pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
             let index = 1;
             let mut ctx = ResolutionContext {
-                constant_pool: ConstantPool::from_raw(pool).unwrap(),
+                constant_pool: resolve(pool).unwrap(),
                 class_version: Version::LATEST,
             };
             let count_width = match name {
@@ -384,7 +384,7 @@ mod tests {
             },
         ]);
         let attribute_name_index = 1;
-        let constant_pool = ConstantPool::from_raw(raw_pool).unwrap();
+        let constant_pool = resolve(raw_pool).unwrap();
         let mut ctx = ResolutionContext {
             constant_pool,
             class_version: Version::LATEST,
@@ -417,7 +417,7 @@ mod tests {
         ]);
         let attribute_name_index = 1;
         let mut ctx = ResolutionContext {
-            constant_pool: ConstantPool::from_raw(pool).unwrap(),
+            constant_pool: resolve(pool).unwrap(),
             class_version: Version::LATEST,
         };
         let bytes = [0xff, 1, 0, 2, 0, 0x10];

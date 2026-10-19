@@ -13,12 +13,8 @@ use crate::jvm::class_file::flags::parse_flags;
 mod decode;
 
 use super::{
-    ParseError, ResolutionContext,
-    attribute::AttributeInfo,
-    constant_pool::{ConstantPool, RawConstantPool},
-    field::FieldInfo,
-    method::MethodInfo,
-    resolve::Resolve,
+    ParseError, ResolutionContext, attribute::AttributeInfo, constant_pool::RawConstantPool,
+    field::FieldInfo, method::MethodInfo, resolve::Resolve,
 };
 use crate::{
     intrinsics::{ExactSizeIteratorExt, see_jvm_spec},
@@ -46,6 +42,62 @@ pub(crate) struct ClassFile<'a> {
 }
 
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
+
+const PREVIEW_FEATURES: u16 = u16::MAX;
+
+impl Version {
+    pub(super) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
+        match (major, minor) {
+            (45, minor) => Ok(Version::Jdk1_1(minor)),
+            (46, 0x0000) => Ok(Version::Jdk1_2),
+            (47, 0x0000) => Ok(Version::Jdk1_3),
+            (48, 0x0000) => Ok(Version::Jdk1_4),
+            (49, 0x0000) => Ok(Version::Jdk5),
+            (50, 0x0000) => Ok(Version::Jdk6),
+            (51, 0x0000) => Ok(Version::Jdk7),
+            (52, 0x0000) => Ok(Version::Jdk8),
+            (53, 0x0000) => Ok(Version::Jdk9),
+            (54, 0x0000) => Ok(Version::Jdk10),
+            (55, 0x0000) => Ok(Version::Jdk11),
+            (56, 0x0000) => Ok(Version::Jdk12(false)),
+            (56, PREVIEW_FEATURES) => Ok(Version::Jdk12(true)),
+            (57, 0x0000) => Ok(Version::Jdk13(false)),
+            (57, PREVIEW_FEATURES) => Ok(Version::Jdk13(true)),
+            (58, 0x0000) => Ok(Version::Jdk14(false)),
+            (58, PREVIEW_FEATURES) => Ok(Version::Jdk14(true)),
+            (59, 0x0000) => Ok(Version::Jdk15(false)),
+            (59, PREVIEW_FEATURES) => Ok(Version::Jdk15(true)),
+            (60, 0x0000) => Ok(Version::Jdk16(false)),
+            (60, PREVIEW_FEATURES) => Ok(Version::Jdk16(true)),
+            (61, 0x0000) => Ok(Version::Jdk17(false)),
+            (61, PREVIEW_FEATURES) => Ok(Version::Jdk17(true)),
+            (62, 0x0000) => Ok(Version::Jdk18(false)),
+            (62, PREVIEW_FEATURES) => Ok(Version::Jdk18(true)),
+            (63, 0x0000) => Ok(Version::Jdk19(false)),
+            (63, PREVIEW_FEATURES) => Ok(Version::Jdk19(true)),
+            (64, 0x0000) => Ok(Version::Jdk20(false)),
+            (64, PREVIEW_FEATURES) => Ok(Version::Jdk20(true)),
+            (65, 0x0000) => Ok(Version::Jdk21(false)),
+            (65, PREVIEW_FEATURES) => Ok(Version::Jdk21(true)),
+            (66, 0x0000) => Ok(Version::Jdk22(false)),
+            (66, PREVIEW_FEATURES) => Ok(Version::Jdk22(true)),
+            (67, 0x0000) => Ok(Version::Jdk23(false)),
+            (67, PREVIEW_FEATURES) => Ok(Version::Jdk23(true)),
+            (68, 0x0000) => Ok(Version::Jdk24(false)),
+            (68, PREVIEW_FEATURES) => Ok(Version::Jdk24(true)),
+            (69, 0x0000) => Ok(Version::Jdk25(false)),
+            (69, PREVIEW_FEATURES) => Ok(Version::Jdk25(true)),
+            (70, 0x0000) => Ok(Version::Jdk26(false)),
+            (70, PREVIEW_FEATURES) => Ok(Version::Jdk26(true)),
+            (71, 0x0000) => Ok(Version::Jdk27(false)),
+            (71, PREVIEW_FEATURES) => Ok(Version::Jdk27(true)),
+            (major, _) if major > Version::LATEST.major() => {
+                Err(ParseError::malform("Unsupported class version"))
+            }
+            _ => Err(ParseError::malform("Invalid class version")),
+        }
+    }
+}
 
 impl Class {
     /// Parses exactly one class file from the given bytes.
@@ -80,7 +132,7 @@ impl Class {
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags =
             parse_flags::<class::AccessFlags>(access_flags, "Invalid class access flags")?;
-        let constant_pool = ConstantPool::from_raw(constant_pool)?;
+        let constant_pool = super::constant_pool::resolve(constant_pool)?;
         let class_id = constant_pool.class_id(this_class)?;
         let class_name = constant_pool.class_name(class_id);
         let super_class = match super_class {

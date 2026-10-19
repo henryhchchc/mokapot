@@ -8,7 +8,7 @@ use crate::jvm::{
         AnnotationData, Annotations, AnnotationsData, TypeAnnotationData, TypeAnnotations,
     },
     attribute::{Attribute, AttributeData},
-    class_file::constant_pool::{FieldTypeId, Utf8Id},
+    constant_pool::{FieldTypeId, Utf8Id},
 };
 use crate::types::field_type::FieldType;
 

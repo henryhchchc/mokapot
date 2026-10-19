@@ -5,14 +5,14 @@ use std::fmt;
 use bitflags::bitflags;
 
 use super::{
-    Annotations, Class, DebugList, JavaStr, JavaString, Method, annotation,
+    Annotations, Class, DebugList, JavaStr, JavaString, annotation,
     annotation::{
         AnnotationData, AnnotationsData, ElementValueData, ParameterAnnotations,
         TypeAnnotationData, TypeAnnotations,
     },
     attribute::{Attribute, AttributeData},
-    class_file::constant_pool::{ClassId, MethodDescriptorId, Utf8Id},
     code,
+    constant_pool::{ClassId, MethodDescriptorId, Utf8Id},
     references::MethodRef,
 };
 use crate::intrinsics::see_jvm_spec;
@@ -21,6 +21,14 @@ use crate::types::{class_name::ClassName, method_descriptor::MethodDescriptor};
 
 /// A generic type signature for a method.
 pub type Signature = JavaString;
+
+/// A method declared by a JVM class.
+#[doc = see_jvm_spec!(4, 6)]
+#[derive(Clone, Copy)]
+pub struct Method<'class> {
+    pub(super) class: &'class Class,
+    pub(super) data: &'class MethodData,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct MethodData {

@@ -1,15 +1,10 @@
 //! Indexed constant-pool entries and binary parsing.
 
 mod decode;
-mod resolved;
-mod storage;
-pub(crate) use resolved::{
-    ClassId, ConstantPool, ConstantValueId, FieldNameAndTypeId, FieldRefId, FieldTypeId,
-    InvokeDynamicId, MethodDescriptorId, MethodHandleId, MethodNameAndTypeId, MethodRefId,
-    ModuleId, PackageId, ReferenceTypeId, ReturnTypeId, Utf8Id,
-};
+mod resolve;
+pub(super) use resolve::{ConstantPoolBuilder, resolve};
 
-use self::storage::{PoolStorage, Slot};
+use crate::jvm::constant_pool::storage::{PoolStorage, Slot};
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::class_file::{Decode, ParseError},
@@ -72,6 +67,10 @@ impl<'a> RawConstantPool<'a> {
     #[must_use]
     pub const fn count(&self) -> u16 {
         self.inner.count()
+    }
+
+    pub(super) fn into_slots(self) -> Box<[Slot<RawEntry<'a>>]> {
+        self.inner.into_slots()
     }
 }
 

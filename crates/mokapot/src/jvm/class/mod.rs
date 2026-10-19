@@ -15,7 +15,7 @@ use std::borrow::Borrow;
 
 use bitflags::bitflags;
 
-use super::{Class, Field, Method, errors::ParseError};
+use super::{Field, Method};
 use crate::{
     intrinsics::see_jvm_spec,
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
@@ -23,6 +23,67 @@ use crate::{
 
 /// A generic type signature for a class.
 pub type Signature = super::JavaString;
+
+/// A JVM class.
+#[doc = see_jvm_spec!(4, 1)]
+#[derive(Debug, Clone)]
+pub struct Class {
+    pub(crate) constant_pool: super::ConstantPool,
+    /// The version of the class file.
+    pub version: Version,
+    /// The access modifiers of the class.
+    pub access_flags: AccessFlags,
+    /// The class or interface name in JVM internal form (e.g., `org/mokapot/jvm/Class`).
+    pub(crate) name: super::constant_pool::ClassId,
+    /// A reference to the superclass of the class.
+    /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
+    #[expect(clippy::struct_field_names, reason = "Uses the JVM superclass term")]
+    pub(crate) super_class: Option<super::constant_pool::ClassId>,
+    /// The interfaces implemented by the class.
+    pub(crate) interfaces: Box<[super::constant_pool::ClassId]>,
+    /// The fields declared the class.
+    pub(crate) fields: Box<[super::field::FieldData]>,
+    /// The methods declared by the class.
+    pub(crate) methods: Box<[super::method::MethodData]>,
+    /// The path to the source file.
+    pub(crate) source_file: Option<super::constant_pool::Utf8Id>,
+    /// The inner classes.
+    pub(crate) inner_classes: Box<[nesting::InnerClassData]>,
+    /// The outer class and method of the class.
+    pub(crate) enclosing_method: Option<nesting::EnclosingMethodData>,
+    /// The source debug extension.
+    pub source_debug_extension: Option<Box<[u8]>>,
+    /// The annotations of the class.
+    pub(crate) annotations: super::annotation::AnnotationsData<super::annotation::AnnotationData>,
+    /// The type annotations of the class.
+    pub(crate) type_annotations:
+        super::annotation::AnnotationsData<super::annotation::TypeAnnotationData>,
+    /// The bootstrap methods of the class, which are used to generate dynamic callsites.
+    pub(crate) bootstrap_methods: Box<[bootstrap::BootstrapMethodData]>,
+    /// The information of the module if the class is `module-info`.
+    pub(crate) module: Option<super::module::ModuleData>,
+    /// The packages of the module.
+    pub(crate) module_packages: Box<[super::constant_pool::PackageId]>,
+    /// The main class of the module.
+    #[expect(clippy::struct_field_names, reason = "Matches the JVM attribute name")]
+    pub(crate) module_main_class: Option<super::constant_pool::ClassId>,
+    /// The nearest outer class of the class.
+    pub(crate) nest_host: Option<super::constant_pool::ClassId>,
+    /// The nested classes of the class.
+    pub(crate) nest_members: Box<[super::constant_pool::ClassId]>,
+    /// The permitted subclasses of the class if the class is `sealed`.
+    pub(crate) permitted_subclasses: Box<[super::constant_pool::ClassId]>,
+    /// Indicates whether the class is synthesized by the compiler.
+    pub is_synthetic: bool,
+    /// Indicates whether the class is deprecated.
+    pub is_deprecated: bool,
+    /// The generic signature of the class.
+    pub(crate) signature: Option<super::constant_pool::Utf8Id>,
+    /// The record components of the class if the class is `record`.
+    pub(crate) record: Option<Box<[record_component::RecordComponentData]>>,
+    /// JVM attributes that are not specified by the JVM specification.
+    pub(crate) other_attributes: Box<[super::attribute::AttributeData]>,
+}
 
 impl Class {
     /// Iterates over the methods declared by this class.
@@ -137,8 +198,6 @@ impl Class {
     }
 }
 
-const PREVIEW_FEATURES: u16 = 0xFFFF;
-
 /// The version of a class file.
 #[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
@@ -202,58 +261,6 @@ pub enum Version {
 impl Version {
     /// The latest supported JDK version (non-preview).
     pub const LATEST: Self = Self::Jdk27(false);
-
-    pub(crate) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
-        match (major, minor) {
-            (45, minor) => Ok(Self::Jdk1_1(minor)),
-            (46, 0x0000) => Ok(Self::Jdk1_2),
-            (47, 0x0000) => Ok(Self::Jdk1_3),
-            (48, 0x0000) => Ok(Self::Jdk1_4),
-            (49, 0x0000) => Ok(Self::Jdk5),
-            (50, 0x0000) => Ok(Self::Jdk6),
-            (51, 0x0000) => Ok(Self::Jdk7),
-            (52, 0x0000) => Ok(Self::Jdk8),
-            (53, 0x0000) => Ok(Self::Jdk9),
-            (54, 0x0000) => Ok(Self::Jdk10),
-            (55, 0x0000) => Ok(Self::Jdk11),
-            (56, 0x0000) => Ok(Self::Jdk12(false)),
-            (56, PREVIEW_FEATURES) => Ok(Self::Jdk12(true)),
-            (57, 0x0000) => Ok(Self::Jdk13(false)),
-            (57, PREVIEW_FEATURES) => Ok(Self::Jdk13(true)),
-            (58, 0x0000) => Ok(Self::Jdk14(false)),
-            (58, PREVIEW_FEATURES) => Ok(Self::Jdk14(true)),
-            (59, 0x0000) => Ok(Self::Jdk15(false)),
-            (59, PREVIEW_FEATURES) => Ok(Self::Jdk15(true)),
-            (60, 0x0000) => Ok(Self::Jdk16(false)),
-            (60, PREVIEW_FEATURES) => Ok(Self::Jdk16(true)),
-            (61, 0x0000) => Ok(Self::Jdk17(false)),
-            (61, PREVIEW_FEATURES) => Ok(Self::Jdk17(true)),
-            (62, 0x0000) => Ok(Self::Jdk18(false)),
-            (62, PREVIEW_FEATURES) => Ok(Self::Jdk18(true)),
-            (63, 0x0000) => Ok(Self::Jdk19(false)),
-            (63, PREVIEW_FEATURES) => Ok(Self::Jdk19(true)),
-            (64, 0x0000) => Ok(Self::Jdk20(false)),
-            (64, PREVIEW_FEATURES) => Ok(Self::Jdk20(true)),
-            (65, 0x0000) => Ok(Self::Jdk21(false)),
-            (65, PREVIEW_FEATURES) => Ok(Self::Jdk21(true)),
-            (66, 0x0000) => Ok(Self::Jdk22(false)),
-            (66, PREVIEW_FEATURES) => Ok(Self::Jdk22(true)),
-            (67, 0x0000) => Ok(Self::Jdk23(false)),
-            (67, PREVIEW_FEATURES) => Ok(Self::Jdk23(true)),
-            (68, 0x0000) => Ok(Self::Jdk24(false)),
-            (68, PREVIEW_FEATURES) => Ok(Self::Jdk24(true)),
-            (69, 0x0000) => Ok(Self::Jdk25(false)),
-            (69, PREVIEW_FEATURES) => Ok(Self::Jdk25(true)),
-            (70, 0x0000) => Ok(Self::Jdk26(false)),
-            (70, PREVIEW_FEATURES) => Ok(Self::Jdk26(true)),
-            (71, 0x0000) => Ok(Self::Jdk27(false)),
-            (71, PREVIEW_FEATURES) => Ok(Self::Jdk27(true)),
-            (major, _) if major > Self::LATEST.major() => {
-                Err(ParseError::malform("Unsupported class version"))
-            }
-            _ => Err(ParseError::malform("Invalid class version")),
-        }
-    }
 
     /// Returns `true` if this class file is compiled with `--enable-preview`.
     #[must_use]
@@ -408,6 +415,3 @@ bitflags! {
         const ENUM = 0x4000;
     }
 }
-
-#[cfg(test)]
-mod tests;

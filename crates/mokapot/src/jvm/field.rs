@@ -10,7 +10,7 @@ use crate::{
             AnnotationData, Annotations, AnnotationsData, TypeAnnotationData, TypeAnnotations,
         },
         attribute::{Attribute, AttributeData},
-        class_file::constant_pool::{ConstantValueId, FieldTypeId, Utf8Id},
+        constant_pool::{ConstantValueId, FieldTypeId, Utf8Id},
         references::FieldRef,
     },
     types::{field_type::FieldType, reference_type::ReferenceType},

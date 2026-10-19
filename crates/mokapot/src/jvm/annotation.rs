@@ -3,8 +3,8 @@ use std::fmt;
 
 use super::{
     Class, ConstantValueView, DebugList, JavaStr,
-    class_file::constant_pool::{ConstantValueId, FieldTypeId, ReturnTypeId, Utf8Id},
     code::{LocalVariableId, ProgramCounter},
+    constant_pool::{ConstantValueId, FieldTypeId, ReturnTypeId, Utf8Id},
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -240,6 +240,38 @@ impl fmt::Debug for Annotation<'_> {
                 &DebugList::new(|| self.element_value_pairs()),
             )
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn annotation_equality_compares_values_across_pools() {
+        let [(first_class, first_data), (second_class, second_data)] =
+            [false, true].map(|offset| {
+                let mut class = Class::default();
+                let pool = &mut class.constant_pool;
+                if offset {
+                    pool.insert_field_type("I".parse().unwrap());
+                    pool.insert_utf8("unused".into());
+                }
+                let annotation_type = pool.insert_field_type("LExample;".parse().unwrap());
+                let name = pool.insert_utf8("value".into());
+                let value = pool.insert_utf8("answer".into());
+                let data = AnnotationData {
+                    annotation_type,
+                    element_value_pairs: Box::new([(name, ElementValueData::String(value))]),
+                };
+                (class, data)
+            });
+
+        assert_ne!(first_data, second_data);
+        assert_eq!(
+            Annotation::new(&first_class, &first_data),
+            Annotation::new(&second_class, &second_data)
+        );
     }
 }
 
@@ -555,7 +587,7 @@ pub enum TypeArgumentLocation {
     MethodReference,
 }
 
-/// Information about the target of a [`TypeAnnotation`](super::TypeAnnotation).
+/// Information about the target of a [`TypeAnnotation`].
 #[doc = see_jvm_spec!(4, 7, 20, 1)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetInfo {
