@@ -3,6 +3,8 @@
 
 use std::{str::FromStr, sync::Arc};
 
+use derive_more::Display;
+
 use super::{name_validation::validate_internal_name, package_name::PackageName};
 use crate::{
     intrinsics::see_jvm_spec,
@@ -23,7 +25,8 @@ use crate::{
 /// assert_eq!(name.package().unwrap().as_java_str(), "java/util");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 1)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
+#[display("{}", self.as_java_str())]
 pub struct ClassName(Arc<JavaStr>);
 
 /// An invalid class or interface name.
@@ -76,12 +79,6 @@ impl ClassName {
 impl AsRef<JavaStr> for ClassName {
     fn as_ref(&self) -> &JavaStr {
         self.as_java_str()
-    }
-}
-
-impl std::fmt::Display for ClassName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.as_java_str(), f)
     }
 }
 
