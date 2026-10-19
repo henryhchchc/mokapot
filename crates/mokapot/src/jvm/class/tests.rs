@@ -1,6 +1,7 @@
 use proptest::prelude::*;
 
 use super::*;
+use crate::jvm::references::{FieldRef, MethodRef};
 
 fn assert_version_matches_spec(major: u16, minor: u16) {
     let valid = major == 45
