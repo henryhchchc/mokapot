@@ -54,10 +54,9 @@ struct MockClassPath<'a> {
 impl ClassPath for MockClassPath<'_> {
     fn find_class(&self, name: &ClassName) -> Result<Class, Error> {
         self.counter.fetch_add(1, Ordering::Relaxed);
-        Ok(Class {
-            name: name.clone(),
-            ..Default::default()
-        })
+        let mut class = Class::default();
+        class.name = class.constant_pool.insert_class_name(name.clone());
+        Ok(class)
     }
 }
 
@@ -73,7 +72,7 @@ fn caching_class_loader_load_once() {
                 let name = &name;
                 scope.spawn(move || {
                     for _ in 0..25 {
-                        assert_eq!(loader.load_class(name).unwrap().name, *name);
+                        assert_eq!(loader.load_class(name).unwrap().name(), name);
                     }
                 })
             })

@@ -7,18 +7,15 @@ use crate::intrinsics::ExactSizeIteratorExt;
 use super::{ParseError, ResolutionContext, resolve::Resolve};
 use crate::{
     jvm::{
-        Annotation, ConstantValue, TypeAnnotation,
+        ConstantValue,
         annotation::{
-            ElementValue, OffsetOf, TargetInfo, TypeArgumentLocation, TypeParameterLocation,
-            TypePathElement, VariableKind,
+            AnnotationData, ElementValueData, OffsetOf, TargetInfo, TypeAnnotationData,
+            TypeArgumentLocation, TypeParameterLocation, TypePathElement, VariableKind,
         },
         code::LocalVariableId,
         errors::ParsingErrorContext,
     },
-    types::{
-        field_type::{FieldType, PrimitiveType},
-        method_descriptor::ReturnType,
-    },
+    types::field_type::PrimitiveType,
 };
 
 impl TryFrom<raw::TypePathElement> for TypePathElement {
@@ -39,25 +36,24 @@ impl TryFrom<raw::TypePathElement> for TypePathElement {
 }
 
 impl Resolve for raw::Annotation {
-    type Output = Annotation;
+    type Output = AnnotationData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::Annotation {
             type_index,
             element_value_pairs,
         } = raw;
-        let annotation_type = FieldType::try_from(ctx.constant_pool.get_utf8(type_index)?)
-            .context("Invalid annotation type descriptor")?;
+        let annotation_type = ctx.constant_pool.intern_field_type(type_index)?;
         let element_value_pairs = element_value_pairs
             .into_iter()
             .map(|(name_idx, raw_value)| {
-                let element_name = ctx.constant_pool.get_str(name_idx)?;
+                let element_name = ctx.constant_pool.utf8_id(name_idx)?;
                 let element_value = raw_value.resolve(ctx)?;
-                Ok((element_name.into_owned(), element_value))
+                Ok((element_name, element_value))
             })
             .try_collect_exact()?;
-        Ok(Annotation {
+        Ok(AnnotationData {
             annotation_type,
             element_value_pairs,
         })
@@ -65,9 +61,9 @@ impl Resolve for raw::Annotation {
 }
 
 impl Resolve for raw::TypeAnnotation<'_> {
-    type Output = TypeAnnotation;
+    type Output = TypeAnnotationData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::TypeAnnotation {
             target_info,
@@ -82,17 +78,16 @@ impl Resolve for raw::TypeAnnotation<'_> {
             .copied()
             .map(TypePathElement::try_from)
             .try_collect_exact()?;
-        let annotation_type = FieldType::try_from(ctx.constant_pool.get_utf8(type_index)?)
-            .context("Invalid annotation type descriptor")?;
+        let annotation_type = ctx.constant_pool.intern_field_type(type_index)?;
         let element_value_pairs = element_value_pairs
             .into_iter()
             .map(|(name_idx, value)| {
-                let element_name = ctx.constant_pool.get_str(name_idx)?;
+                let element_name = ctx.constant_pool.utf8_id(name_idx)?;
                 let element_value = value.resolve(ctx)?;
-                Ok((element_name.into_owned(), element_value))
+                Ok((element_name, element_value))
             })
             .try_collect_exact()?;
-        Ok(TypeAnnotation {
+        Ok(TypeAnnotationData {
             annotation_type,
             target_info,
             target_path,
@@ -243,38 +238,33 @@ impl<'a> TryFrom<raw::TargetInfo<'a>> for TargetInfo {
 }
 
 impl Resolve for raw::ElementValueInfo {
-    type Output = ElementValue;
+    type Output = ElementValueData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
-        let cp = &ctx.constant_pool;
+        let cp = &mut ctx.constant_pool;
         match raw {
             raw::ElementValueInfo::Const(
                 tag @ (b'B' | b'C' | b'I' | b'S' | b'Z' | b'F' | b'D' | b'J'),
                 idx,
             ) => {
                 use ConstantValue::{Double, Float, Integer, Long};
-                let value = cp.get_constant_value(idx)?;
-                match (tag, value) {
-                    (b'B', it @ Integer(_)) => Ok(ElementValue::Primitive(PrimitiveType::Byte, it)),
-                    (b'C', it @ Integer(_)) => Ok(ElementValue::Primitive(PrimitiveType::Char, it)),
-                    (b'I', it @ Integer(_)) => Ok(ElementValue::Primitive(PrimitiveType::Int, it)),
-                    (b'S', it @ Integer(_)) => {
-                        Ok(ElementValue::Primitive(PrimitiveType::Short, it))
-                    }
-                    (b'Z', it @ Integer(_)) => {
-                        Ok(ElementValue::Primitive(PrimitiveType::Boolean, it))
-                    }
-                    (b'F', it @ Float(_)) => Ok(ElementValue::Primitive(PrimitiveType::Float, it)),
-                    (b'D', it @ Double(_)) => {
-                        Ok(ElementValue::Primitive(PrimitiveType::Double, it))
-                    }
-                    (b'J', it @ Long(_)) => Ok(ElementValue::Primitive(PrimitiveType::Long, it)),
-                    _ => Err(ParseError::malform("Constant value type mismatch")),
-                }
+                let id = cp.intern_constant(idx)?;
+                let kind = match (tag, cp.constant_value(id)) {
+                    (b'B', Integer(_)) => PrimitiveType::Byte,
+                    (b'C', Integer(_)) => PrimitiveType::Char,
+                    (b'I', Integer(_)) => PrimitiveType::Int,
+                    (b'S', Integer(_)) => PrimitiveType::Short,
+                    (b'Z', Integer(_)) => PrimitiveType::Boolean,
+                    (b'F', Float(_)) => PrimitiveType::Float,
+                    (b'D', Double(_)) => PrimitiveType::Double,
+                    (b'J', Long(_)) => PrimitiveType::Long,
+                    _ => return Err(ParseError::malform("Constant value type mismatch")),
+                };
+                Ok(ElementValueData::Primitive(kind, id))
             }
             raw::ElementValueInfo::Const(b's', idx) => {
-                Ok(ElementValue::String(cp.get_java_string(idx)?))
+                Ok(ElementValueData::String(cp.utf8_id(idx)?))
             }
             raw::ElementValueInfo::Const(_, _) => {
                 Err(ParseError::malform("Invalid constant value tag"))
@@ -283,28 +273,26 @@ impl Resolve for raw::ElementValueInfo {
                 type_name_index,
                 const_name_index,
             } => {
-                let enum_type = FieldType::try_from(cp.get_utf8(type_name_index)?)
-                    .context("Invalid enum type descriptor")?;
-                let const_name = cp.get_str(const_name_index)?.into_owned();
-                Ok(ElementValue::EnumConstant {
+                let enum_type = cp.intern_field_type(type_name_index)?;
+                let const_name = cp.utf8_id(const_name_index)?;
+                Ok(ElementValueData::EnumConstant {
                     enum_type,
                     const_name,
                 })
             }
             raw::ElementValueInfo::ClassInfo(idx) => {
-                let return_descriptor = ReturnType::try_from(cp.get_utf8(idx)?)
-                    .context("Invalid return type descriptor")?;
-                Ok(ElementValue::Class { return_descriptor })
+                let return_descriptor = cp.intern_return_type(idx)?;
+                Ok(ElementValueData::Class { return_descriptor })
             }
             raw::ElementValueInfo::Annotation(annotation_info) => Ok(
-                ElementValue::AnnotationInterface(annotation_info.resolve(ctx)?),
+                ElementValueData::AnnotationInterface(annotation_info.resolve(ctx)?),
             ),
             raw::ElementValueInfo::Array(values) => {
                 let values = values
                     .into_iter()
                     .map(|raw_value| raw_value.resolve(ctx))
                     .try_collect_exact()?;
-                Ok(ElementValue::Array(values))
+                Ok(ElementValueData::Array(values))
             }
         }
     }

@@ -11,7 +11,7 @@ use crate::jvm::{
 impl Resolve for raw::StackMapFrameInfo {
     type Output = StackMapFrame;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         match raw {
             raw::StackMapFrameInfo::SameFrame { frame_type } => Ok(StackMapFrame::SameFrame {
@@ -78,7 +78,7 @@ impl Resolve for raw::StackMapFrameInfo {
 
 impl Resolve for raw::VerificationTypeInfo {
     type Output = VerificationType;
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         match raw {
             raw::VerificationTypeInfo::Top => Ok(VerificationType::TopVariable),

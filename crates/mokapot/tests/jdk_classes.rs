@@ -110,14 +110,14 @@ fn test_a_class(class: &Class, variable_count_limit: usize) {
 
         // Naming every instruction exercises the decoder; the names themselves
         // are not asserted on.
-        for (_pc, insn) in body.instructions.iter() {
+        for (_pc, insn) in body.instructions().iter() {
             let _ = insn.name();
         }
 
         let ir_method = MokaIRMethod::from_method(method).unwrap_or_else(|e| {
             panic!(
                 "Failed to build {}::{}{}: {e}",
-                class.name,
+                class.name(),
                 method.name(),
                 method.descriptor().descriptor()
             );

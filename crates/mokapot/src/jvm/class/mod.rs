@@ -1,16 +1,20 @@
 //! JVM classes and interfaces
 
-use crate::types::class_name::ClassName;
+pub(crate) mod bootstrap;
+mod metadata;
+pub(crate) mod nesting;
+pub(crate) mod record_component;
+pub use bootstrap::BootstrapMethod;
+pub use nesting::{EnclosingMethod, InnerClassInfo};
+pub use record_component::RecordComponent;
 
 use std::borrow::Borrow;
 
 use bitflags::bitflags;
 
 use super::{
-    Annotation, Annotations, Class, ConstantValue, Field, Method,
-    annotation::ElementValue,
+    Class, Field, Method,
     errors::ParseError,
-    field,
     references::{FieldRef, MethodRef},
 };
 use crate::{
@@ -46,15 +50,78 @@ impl Class {
         self.get_method(super::JavaString::from(name).as_java_str(), descriptor)
     }
 
-    /// Gets a field of the class by its name and type.
+    /// Iterates over fields declared by this class.
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = Field<'_>> + DoubleEndedIterator {
+        self.fields.iter().map(|data| Field { class: self, data })
+    }
+    /// Gets a field by name and type.
+    pub fn get_field<T: Borrow<FieldType>>(
+        &self,
+        name: &super::JavaStr,
+        field_type: T,
+    ) -> Option<Field<'_>> {
+        self.fields()
+            .find(|field| field.name() == name && field.field_type() == field_type.borrow())
+    }
+    /// Gets a field using a Rust string name.
+    pub fn get_field_str<T: Borrow<FieldType>>(
+        &self,
+        name: &str,
+        field_type: T,
+    ) -> Option<Field<'_>> {
+        self.fields()
+            .find(|field| field.name() == name && field.field_type() == field_type.borrow())
+    }
+    /// Returns record components, if the class is a record.
     #[must_use]
-    pub fn get_field<T>(&self, name: &str, field_type: T) -> Option<&Field>
-    where
-        T: Borrow<FieldType>,
-    {
-        self.fields
+    pub fn record(
+        &self,
+    ) -> Option<impl ExactSizeIterator<Item = RecordComponent<'_>> + DoubleEndedIterator> {
+        self.record.as_ref().map(|items| {
+            items
+                .iter()
+                .map(|data| RecordComponent { class: self, data })
+        })
+    }
+    /// Iterates over inner-class information.
+    pub fn inner_classes(
+        &self,
+    ) -> impl ExactSizeIterator<Item = InnerClassInfo<'_>> + DoubleEndedIterator {
+        self.inner_classes
             .iter()
-            .find(|f| f.name == name && &f.field_type == field_type.borrow())
+            .map(|data| InnerClassInfo { class: self, data })
+    }
+    /// Returns the enclosing method information, if present.
+    #[must_use]
+    pub fn enclosing_method(&self) -> Option<EnclosingMethod<'_>> {
+        self.enclosing_method
+            .as_ref()
+            .map(|data| EnclosingMethod { owner: self, data })
+    }
+    /// Iterates over bootstrap methods.
+    pub fn bootstrap_methods(
+        &self,
+    ) -> impl ExactSizeIterator<Item = BootstrapMethod<'_>> + DoubleEndedIterator {
+        self.bootstrap_methods
+            .iter()
+            .map(|data| BootstrapMethod { class: self, data })
+    }
+    /// Returns module information, if present.
+    #[must_use]
+    pub fn module(&self) -> Option<super::Module<'_>> {
+        self.module
+            .as_ref()
+            .map(|data| super::Module { class: self, data })
+    }
+    /// Returns annotations on this class.
+    #[must_use]
+    pub const fn annotations(&self) -> super::Annotations<'_> {
+        super::Annotations::new(self, &self.annotations)
+    }
+    /// Returns type annotations on this class.
+    #[must_use]
+    pub const fn type_annotations(&self) -> super::TypeAnnotations<'_> {
+        super::TypeAnnotations::new(self, &self.type_annotations)
     }
 
     /// Checks if the class is an interface.
@@ -67,26 +134,6 @@ impl Class {
     #[must_use]
     pub const fn is_abstract(&self) -> bool {
         self.access_flags.contains(AccessFlags::ABSTRACT)
-    }
-}
-
-impl Annotation {
-    /// The default name of the annotation element.
-    pub const DEFAULT_ELEMENT_NAME: &'static str = "value";
-
-    /// Gets the value of the annotation element.
-    #[must_use]
-    pub fn get_element_value(&self, name: &str) -> Option<&ElementValue> {
-        self.element_value_pairs
-            .iter()
-            .find(|(pair_name, _)| pair_name == name)
-            .map(|(_, value)| value)
-    }
-
-    /// Gets the value of the `value` element of the annotation.
-    #[must_use]
-    pub fn get_value(&self) -> Option<&ElementValue> {
-        self.get_element_value(Self::DEFAULT_ELEMENT_NAME)
     }
 }
 
@@ -300,40 +347,6 @@ impl Version {
     }
 }
 
-/// The information of an inner class.
-#[doc = see_jvm_spec!(4, 7, 6)]
-#[derive(Debug, Clone)]
-pub struct InnerClassInfo {
-    /// The inner class.
-    pub inner_class: ClassName,
-    /// The outer class.
-    pub outer_class: Option<ClassName>,
-    /// The name of the inner class.
-    pub inner_name: Option<String>,
-    /// The access flags of the inner class.
-    pub access_flags: NestedClassAccessFlags,
-}
-
-/// The information of an enclosing method of a [`Class`].
-#[doc = see_jvm_spec!(4, 7, 7)]
-#[derive(Debug, Clone)]
-pub struct EnclosingMethod {
-    /// The class being enclosed.
-    pub class: ClassName,
-    /// The name and descriptor of the enclosing method.
-    pub method_name_and_desc: Option<(super::JavaString, MethodDescriptor)>,
-}
-
-/// The information of a bootstrap method.
-#[doc = see_jvm_spec!(4, 7, 23)]
-#[derive(Debug, Clone)]
-pub struct BootstrapMethod {
-    /// The method handle of the bootstrap method.
-    pub method: MethodHandle,
-    /// The argument that are passed to the bootstrap method.
-    pub arguments: Box<[ConstantValue]>,
-}
-
 /// A method handle.
 #[doc = see_jvm_spec!(4, 4, 8)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -366,24 +379,6 @@ impl MethodHandle {
         // SAFETY: Self is marked as repr(u8)
         unsafe { enum_discriminant(self) }
     }
-}
-
-/// The record components of a [`Class`] that represents a `record`.
-#[doc = see_jvm_spec!(4, 7, 30)]
-#[derive(Debug, Clone)]
-pub struct RecordComponent {
-    /// The name of the component.
-    pub name: String,
-    /// The type of the component.
-    pub component_type: FieldType,
-    /// The generic signature of the component.
-    pub signature: Option<field::Signature>,
-    /// The annotations.
-    pub annotations: Annotations<super::Annotation>,
-    /// The type annotations.
-    pub type_annotations: Annotations<super::TypeAnnotation>,
-    /// Unrecognized JVM attributes.
-    pub other_attributes: Box<[(String, Box<[u8]>)]>,
 }
 
 bitflags! {

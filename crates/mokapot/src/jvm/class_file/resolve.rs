@@ -8,13 +8,13 @@ use super::{Decode, ParseError, ResolutionContext};
 pub(super) trait Resolve: Sized {
     type Output;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError>;
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError>;
 }
 
 /// Decodes and resolves one structure within a bounded payload.
 pub(super) fn decode_resolved<'input, R>(
     bytes: &mut &'input [u8],
-    ctx: &ResolutionContext,
+    ctx: &mut ResolutionContext,
 ) -> Result<R::Output, ParseError>
 where
     R: Decode<'input> + Resolve,
@@ -25,7 +25,7 @@ where
 /// Resolves fixed-width raw entries into a boxed slice.
 pub(super) fn resolve_table<R: Copy + Resolve>(
     entries: &[R],
-    ctx: &ResolutionContext,
+    ctx: &mut ResolutionContext,
 ) -> Result<Box<[R::Output]>, ParseError> {
     entries
         .iter()

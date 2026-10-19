@@ -1,7 +1,9 @@
 use crate::{
     jvm::{
-        Annotations, Class, ConstantPool, Method, class,
-        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
+        Class, ConstantPool, Method,
+        annotation::AnnotationsData,
+        class,
+        code::{ExceptionTableEntry, Instruction, MethodBodyData, ProgramCounter},
         method::{AccessFlags, MethodData},
     },
     types::class_name::ClassName,
@@ -41,11 +43,13 @@ pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8; 40] {
 
 impl Default for Class {
     fn default() -> Self {
+        let mut constant_pool = ConstantPool::new();
+        let name = constant_pool.insert_class_name(ClassName::new("$default$").unwrap());
         Self {
             version: class::Version::LATEST,
-            constant_pool: ConstantPool::new(),
+            constant_pool,
             access_flags: class::AccessFlags::empty(),
-            name: ClassName::new("$default$").unwrap(),
+            name,
             super_class: None,
             interfaces: Box::default(),
             fields: Box::default(),
@@ -54,8 +58,8 @@ impl Default for Class {
             inner_classes: Box::default(),
             enclosing_method: None,
             source_debug_extension: None,
-            annotations: Annotations::default(),
-            type_annotations: Annotations::default(),
+            annotations: AnnotationsData::default(),
+            type_annotations: AnnotationsData::default(),
             bootstrap_methods: Box::default(),
             module: None,
             module_packages: Box::default(),
@@ -130,16 +134,19 @@ where
     let name = constant_pool.insert_utf8("test".into());
     let descriptor =
         constant_pool.insert_method_descriptor(descriptor.parse().expect("valid test descriptor"));
-    let class = Class {
-        constant_pool,
-        name: "org/mokapot/Test"
+    let owner = constant_pool.insert_class_name(
+        "org/mokapot/Test"
             .parse()
             .expect("the owner must be a valid class reference"),
+    );
+    let class = Class {
+        constant_pool,
+        name: owner,
         methods: Box::new([MethodData {
             access_flags,
             name,
             descriptor,
-            body: Some(MethodBody {
+            body: Some(MethodBodyData {
                 max_stack: 4,
                 max_locals: 4,
                 instructions,
@@ -147,13 +154,13 @@ where
                 line_number_table: None,
                 local_variable_table: None,
                 stack_map_table: None,
-                type_annotations: Annotations::default(),
+                type_annotations: AnnotationsData::default(),
                 other_attributes: Box::new([]),
             }),
             exceptions: Box::new([]),
-            annotations: Annotations::default(),
-            type_annotations: Annotations::default(),
-            parameter_annotations: Annotations::default(),
+            annotations: AnnotationsData::default(),
+            type_annotations: AnnotationsData::default(),
+            parameter_annotations: AnnotationsData::default(),
             annotation_default: None,
             parameters: Box::new([]),
             is_synthetic: false,

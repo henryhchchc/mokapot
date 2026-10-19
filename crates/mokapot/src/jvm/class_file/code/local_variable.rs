@@ -22,12 +22,12 @@ pub(crate) struct LocalVariableDescriptorEntry {
 pub(crate) struct LocalVariableSignatureEntry {
     pub id: LocalVariableId,
     pub name: JavaString,
-    pub signature: crate::jvm::field::Signature,
+    pub signature: JavaString,
 }
 
 impl Resolve for raw::LocalVariableInfo {
     type Output = LocalVariableDescriptorEntry;
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::LocalVariableInfo {
             start_pc,
@@ -57,7 +57,7 @@ impl Resolve for raw::LocalVariableInfo {
 
 impl Resolve for raw::LocalVariableTypeInfo {
     type Output = LocalVariableSignatureEntry;
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::LocalVariableTypeInfo {
             start_pc,

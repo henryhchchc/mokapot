@@ -70,7 +70,7 @@ where
                     cp.find_class(&class_name)
                         .expect("A class name yielded by the class path must be found.")
                 })
-                .map(|it| (it.name.clone(), it))
+                .map(|it| (it.name().clone(), it))
         })
         .collect()
 }

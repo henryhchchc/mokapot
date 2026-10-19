@@ -12,74 +12,34 @@ use super::raw;
 use crate::{
     intrinsics::ExactSizeIteratorExt,
     jvm::{
-        ConstantValue, JavaString,
-        class::InnerClassInfo,
         code::LineNumberTableEntry,
         method::{ParameterAccessFlags, ParameterInfo},
     },
-    types::{class_name::ClassName, package_name::PackageName},
 };
 
 impl Resolve for raw::ConstantValue {
-    type Output = ConstantValue;
+    type Output = super::super::constant_pool::ConstantValueId;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         ctx.constant_pool
-            .get_constant_value(self.constantvalue_index.get())
-    }
-}
-
-impl Resolve for raw::Signature {
-    type Output = JavaString;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        ctx.constant_pool
-            .get_java_string(self.signature_index.get())
-    }
-}
-
-impl Resolve for raw::SourceFile {
-    type Output = String;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        ctx.constant_pool
-            .get_str(self.sourcefile_index.get())
-            .map(std::borrow::Cow::into_owned)
-    }
-}
-
-impl Resolve for raw::ModuleMainClass {
-    type Output = ClassName;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        ctx.constant_pool
-            .get_class_name(self.main_class_index.get())
-    }
-}
-
-impl Resolve for raw::NestHost {
-    type Output = ClassName;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        ctx.constant_pool
-            .get_class_name(self.host_class_index.get())
+            .intern_constant(self.constantvalue_index.get())
     }
 }
 
 impl Resolve for &raw::Exceptions {
-    type Output = Box<[ClassName]>;
+    type Output = Box<[super::super::constant_pool::ClassId]>;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_indices(&self.exception_index_table, |index| {
-            ctx.constant_pool.get_class_name(index)
+            ctx.constant_pool.class_id(index)
         })
     }
 }
 
 impl Resolve for &raw::InnerClasses {
-    type Output = Box<[InnerClassInfo]>;
+    type Output = Box<[crate::jvm::class::nesting::InnerClassData]>;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_table(&self.classes, ctx)
     }
 }
@@ -87,7 +47,7 @@ impl Resolve for &raw::InnerClasses {
 impl Resolve for &raw::LineNumberTable {
     type Output = Box<[LineNumberTableEntry]>;
 
-    fn resolve(self, _ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, _ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         Ok(self
             .line_number_table
             .iter()
@@ -100,7 +60,7 @@ impl Resolve for &raw::LineNumberTable {
 impl Resolve for &raw::LocalVariableTable {
     type Output = Box<[LocalVariableDescriptorEntry]>;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_table(&self.local_variable_table, ctx)
     }
 }
@@ -108,7 +68,7 @@ impl Resolve for &raw::LocalVariableTable {
 impl Resolve for &raw::LocalVariableTypeTable {
     type Output = Box<[LocalVariableSignatureEntry]>;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_table(&self.local_variable_type_table, ctx)
     }
 }
@@ -116,38 +76,8 @@ impl Resolve for &raw::LocalVariableTypeTable {
 impl Resolve for &raw::MethodParameters {
     type Output = Box<[ParameterInfo]>;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         resolve_table(&self.parameters, ctx)
-    }
-}
-
-impl Resolve for &raw::ModulePackages {
-    type Output = Box<[PackageName]>;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        resolve_indices(&self.package_index, |index| {
-            ctx.constant_pool.get_package_name(index)
-        })
-    }
-}
-
-impl Resolve for &raw::NestMembers {
-    type Output = Box<[ClassName]>;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        resolve_indices(&self.classes, |index| {
-            ctx.constant_pool.get_class_name(index)
-        })
-    }
-}
-
-impl Resolve for &raw::PermittedSubclasses {
-    type Output = Box<[ClassName]>;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        resolve_indices(&self.classes, |index| {
-            ctx.constant_pool.get_class_name(index)
-        })
     }
 }
 
@@ -164,7 +94,7 @@ fn resolve_indices<T>(
 impl Resolve for raw::MethodParameterInfo {
     type Output = ParameterInfo;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::MethodParameterInfo {
             name_index,

@@ -38,7 +38,7 @@ pub(super) fn generate(method: Method<'_>) -> Result<MokaIRMethod, MokaIRBuildEr
         access_flags: method.access_flags(),
         name: method.name().to_owned(),
         descriptor: method.descriptor().clone(),
-        owner: method.owner().name.clone(),
+        owner: method.owner().name().clone(),
         source_map,
         entry,
         this,

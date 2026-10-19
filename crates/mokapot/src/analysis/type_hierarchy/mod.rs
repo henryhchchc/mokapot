@@ -21,12 +21,12 @@ impl ClassHierarchy {
         let mut inheritance: HashMap<ClassName, HashSet<ClassName>> = HashMap::new();
         let mut super_classes: HashMap<ClassName, ClassName> = HashMap::new();
         for class in classes {
-            if let Some(ref super_class) = class.super_class {
+            if let Some(super_class) = class.super_class() {
                 inheritance
                     .entry(super_class.clone())
                     .or_default()
-                    .insert(class.name.clone());
-                super_classes.insert(class.name.clone(), super_class.clone());
+                    .insert(class.name().clone());
+                super_classes.insert(class.name().clone(), super_class.clone());
             }
         }
         Self {
@@ -76,15 +76,15 @@ impl InterfaceImplHierarchy {
         let mut implementations: HashMap<ClassName, HashSet<ClassName>> = HashMap::new();
         let mut implementers: HashMap<ClassName, HashSet<ClassName>> = HashMap::new();
         for class in classes {
-            for interface in &class.interfaces {
+            for interface in class.interfaces() {
                 implementations
-                    .entry(class.name.clone())
+                    .entry(class.name().clone())
                     .or_default()
                     .insert(interface.clone());
                 implementers
                     .entry(interface.clone())
                     .or_default()
-                    .insert(class.name.clone());
+                    .insert(class.name().clone());
             }
         }
         Self {

@@ -3,7 +3,10 @@
 mod decode;
 mod resolved;
 mod storage;
-pub(crate) use resolved::{ConstantPool, MethodDescriptorId, Utf8Id};
+pub(crate) use resolved::{
+    ClassId, ConstantPool, ConstantValueId, FieldTypeId, MethodDescriptorId, MethodHandleId,
+    MethodNameAndTypeId, ModuleId, PackageId, ReturnTypeId, Utf8Id,
+};
 
 use self::storage::{PoolStorage, Slot};
 use crate::{
