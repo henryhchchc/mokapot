@@ -4,6 +4,7 @@ mod method_body;
 mod pc;
 
 pub use instruction::{Instruction, WideInstruction};
+pub(crate) use method_body::MethodBodyData;
 pub use method_body::{
     ExceptionTableEntry, InstructionList, LineNumberTableEntry, LocalVariableId,
     LocalVariableTable, LocalVariableTableEntry, MethodBody, StackMapFrame, VerificationType,

@@ -86,8 +86,8 @@ mod tests {
     fn rejects_every_truncated_prefix() {
         let bytes = object_bytes();
         let class = Class::from_bytes(&bytes).unwrap();
-        assert_eq!(class.name, "java/lang/Object");
-        assert!(class.super_class.is_none());
+        assert_eq!(class.name().as_java_str(), "java/lang/Object");
+        assert!(class.super_class().is_none());
         for end in 0..bytes.len() {
             let error = Class::from_bytes(&bytes[..end]).unwrap_err();
             assert_eq!(error.kind(), ParseErrorKind::Malformed, "prefix {end}");

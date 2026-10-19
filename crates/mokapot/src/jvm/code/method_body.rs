@@ -2,46 +2,134 @@ use crate::types::class_name::ClassName;
 
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Display,
+    fmt::{self, Display},
     ops::{Bound, Range, RangeBounds},
 };
 
 use super::{Instruction, ProgramCounter};
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{Annotations, JavaString, TypeAnnotation, errors::ParseError, field::Signature},
+    jvm::{
+        Class, JavaString,
+        annotation::{AnnotationsData, TypeAnnotationData, TypeAnnotations},
+        attribute::{Attribute, AttributeData},
+        errors::ParseError,
+    },
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
-/// The body of a method.
-#[doc = see_jvm_spec!(4, 7, 3)]
 #[derive(Debug, Clone)]
-pub struct MethodBody {
-    /// The maximum number of values on the operand stack of the method.
+pub(crate) struct MethodBodyData {
     pub max_stack: u16,
-    /// The maximum number of local variables in the method.
     pub max_locals: u16,
-    /// The executable instructions.
     pub instructions: InstructionList<Instruction>,
-    /// The exception handlers table.
     pub exception_table: Box<[ExceptionTableEntry]>,
-    /// The line number table.
     pub line_number_table: Option<Box<[LineNumberTableEntry]>>,
-    /// The local variable table.
     pub local_variable_table: Option<LocalVariableTable>,
-    /// The stack map table.
     pub stack_map_table: Option<Box<[StackMapFrame]>>,
-    /// The type annotations.
-    pub type_annotations: Annotations<TypeAnnotation>,
-    /// Unrecognized JVM attributes.
-    pub other_attributes: Box<[(String, Box<[u8]>)]>,
+    pub type_annotations: AnnotationsData<TypeAnnotationData>,
+    pub other_attributes: Box<[AttributeData]>,
 }
 
-impl MethodBody {
+/// The body of a method.
+#[doc = see_jvm_spec!(4, 7, 3)]
+#[derive(Clone, Copy)]
+pub struct MethodBody<'class> {
+    class: &'class Class,
+    data: &'class MethodBodyData,
+}
+
+impl<'class> MethodBody<'class> {
+    pub(crate) const fn new(class: &'class Class, data: &'class MethodBodyData) -> Self {
+        Self { class, data }
+    }
+
+    /// Returns the maximum operand stack depth.
+    #[must_use]
+    pub const fn max_stack(self) -> u16 {
+        self.data.max_stack
+    }
+
+    /// Returns the maximum number of local variables.
+    #[must_use]
+    pub const fn max_locals(self) -> u16 {
+        self.data.max_locals
+    }
+
+    /// Returns the executable instructions.
+    #[must_use]
+    pub const fn instructions(self) -> &'class InstructionList<Instruction> {
+        &self.data.instructions
+    }
+
+    /// Returns the exception handlers.
+    #[must_use]
+    pub fn exception_table(self) -> &'class [ExceptionTableEntry] {
+        &self.data.exception_table
+    }
+
+    /// Returns the line number table.
+    #[must_use]
+    pub fn line_number_table(self) -> Option<&'class [LineNumberTableEntry]> {
+        self.data.line_number_table.as_deref()
+    }
+
+    /// Returns the local variable table.
+    #[must_use]
+    pub const fn local_variable_table(self) -> Option<&'class LocalVariableTable> {
+        self.data.local_variable_table.as_ref()
+    }
+
+    /// Returns the stack map table.
+    #[must_use]
+    pub fn stack_map_table(self) -> Option<&'class [StackMapFrame]> {
+        self.data.stack_map_table.as_deref()
+    }
+
+    /// Returns the type annotations.
+    #[must_use]
+    pub const fn type_annotations(self) -> TypeAnnotations<'class> {
+        TypeAnnotations::new(self.class, &self.data.type_annotations)
+    }
+
+    /// Returns the unrecognized attributes.
+    pub fn other_attributes(
+        self,
+    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator {
+        self.data
+            .other_attributes
+            .iter()
+            .map(move |data| Attribute::new(self.class, data))
+    }
+
     /// Returns the instruction at the given program counter.
     #[must_use]
-    pub fn instruction_at(&self, pc: ProgramCounter) -> Option<&Instruction> {
-        self.instructions.get(&pc)
+    pub fn instruction_at(self, pc: ProgramCounter) -> Option<&'class Instruction> {
+        self.instructions().get(&pc)
+    }
+}
+
+impl fmt::Debug for MethodBody<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MethodBody")
+            .field("max_stack", &self.max_stack())
+            .field("max_locals", &self.max_locals())
+            .field("instructions", self.instructions())
+            .field("exception_table", &self.exception_table())
+            .field("line_number_table", &self.line_number_table())
+            .field("local_variable_table", &self.local_variable_table())
+            .field("stack_map_table", &self.stack_map_table())
+            .field("type_annotations", &self.type_annotations())
+            .field("other_attributes", &DebugAttributes(*self))
+            .finish()
+    }
+}
+
+struct DebugAttributes<'class>(MethodBody<'class>);
+
+impl fmt::Debug for DebugAttributes<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.0.other_attributes()).finish()
     }
 }
 
@@ -276,7 +364,7 @@ mod test {
 
     #[test]
     fn instruction_at() {
-        let body = MethodBody {
+        let data = MethodBodyData {
             instructions: InstructionList::from([
                 (0.into(), Nop),
                 (1.into(), IConst0),
@@ -288,9 +376,11 @@ mod test {
             line_number_table: None,
             local_variable_table: None,
             stack_map_table: None,
-            type_annotations: Annotations::default(),
+            type_annotations: AnnotationsData::default(),
             other_attributes: Box::new([]),
         };
+        let class = Class::default();
+        let body = MethodBody::new(&class, &data);
         assert_eq!(Some(&IConst0), body.instruction_at(1.into()));
     }
 
@@ -388,7 +478,7 @@ impl LocalVariableTable {
         &mut self,
         key: LocalVariableId,
         name: JavaString,
-        signature: Signature,
+        signature: JavaString,
     ) -> Result<(), ParseError> {
         let entry = self.entries.entry(key).or_default();
         if let Some(existing_name) = entry.name.as_ref()
@@ -429,7 +519,7 @@ pub struct LocalVariableTableEntry {
     /// The type of the variable.
     pub var_type: Option<FieldType>,
     /// The generic signature of the variable.
-    pub signature: Option<Signature>,
+    pub signature: Option<JavaString>,
 }
 
 /// The type of a value in the stack map table for verification.

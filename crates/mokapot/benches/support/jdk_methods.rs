@@ -33,7 +33,7 @@ pub fn build_ir(method: Method<'_>) -> MokaIRMethod {
     MokaIRMethod::from_method(method).unwrap_or_else(|error| {
         panic!(
             "cannot build {}::{}{}: {error}",
-            method.owner().name,
+            method.owner().name(),
             method.name(),
             method.descriptor().descriptor()
         )

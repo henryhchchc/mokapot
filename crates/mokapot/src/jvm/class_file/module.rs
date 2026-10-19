@@ -1,116 +1,19 @@
-//! Module decoding and resolution.
+//! Module attribute decoding and resolution.
 
 use crate::intrinsics::ExactSizeIteratorExt;
 
 pub(super) mod raw;
 
 use crate::jvm::class_file::flags::parse_flags;
-
-use super::{ParseError, ResolutionContext, resolve::Resolve};
 use crate::jvm::{
-    Module,
-    module::{Export, Open, Provide, Require},
+    class_file::{ParseError, ResolutionContext, resolve::Resolve},
+    module::{ExportData, ModuleData, OpenData, ProvideData, RequireData},
 };
 
-impl Resolve for raw::RequiresInfo {
-    type Output = Require;
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::RequiresInfo {
-            requires_index,
-            requires_flags,
-            requires_version_index,
-        } = raw;
-        let requires_index = requires_index.get();
-        let requires_flags = requires_flags.get();
-        let requires_version_index = requires_version_index.get();
-        let module = ctx.constant_pool.get_module_ref(requires_index)?;
-        let flags = parse_flags(requires_flags, "Invalid access flag")?;
-        let version = if requires_version_index > 0 {
-            Some(
-                ctx.constant_pool
-                    .get_str(requires_version_index)?
-                    .into_owned(),
-            )
-        } else {
-            None
-        };
-        Ok(Require {
-            module,
-            flags,
-            version,
-        })
-    }
-}
-
-impl Resolve for &raw::ExportsInfo {
-    type Output = Export;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::ExportsInfo {
-            exports_index,
-            exports_to,
-            exports_flags,
-            ..
-        } = raw;
-
-        let package = ctx.constant_pool.get_package_name(exports_index.get())?;
-        let flags = parse_flags(exports_flags.get(), "Invalid access flag")?;
-        let to = exports_to
-            .iter()
-            .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
-            .try_collect_exact()?;
-        Ok(Export { package, flags, to })
-    }
-}
-
-impl Resolve for &raw::OpensInfo {
-    type Output = Open;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::OpensInfo {
-            opens_index,
-            opens_to,
-            opens_flags,
-            ..
-        } = raw;
-
-        let package = ctx.constant_pool.get_package_name(opens_index.get())?;
-        let flags = parse_flags(opens_flags.get(), "Invalid access flag")?;
-        let to = opens_to
-            .iter()
-            .map(|idx| ctx.constant_pool.get_module_ref(idx.get()))
-            .try_collect_exact()?;
-        Ok(Open { package, flags, to })
-    }
-}
-
-impl Resolve for &raw::ProvidesInfo {
-    type Output = Provide;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::ProvidesInfo {
-            provides_index,
-            provides_with,
-            ..
-        } = raw;
-        let service = ctx.constant_pool.get_class_name(provides_index.get())?;
-        let with = provides_with
-            .iter()
-            .map(|idx| ctx.constant_pool.get_class_name(idx.get()))
-            .try_collect_exact()?;
-        Ok(Provide { service, with })
-    }
-}
-
 impl Resolve for raw::ModuleInfo<'_> {
-    type Output = Module;
+    type Output = ModuleData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw::ModuleInfo {
             module_name_index,
             module_flags,
@@ -120,40 +23,77 @@ impl Resolve for raw::ModuleInfo<'_> {
             opens,
             uses,
             provides,
-        } = raw;
-        let name = ctx.constant_pool.get_module_ref(module_name_index)?.name;
+        } = self;
+
+        let name = ctx.constant_pool.module_id(module_name_index)?;
         let flags = parse_flags(module_flags, "Invalid access flag")?;
         let version = if module_version_index > 0 {
-            Some(
-                ctx.constant_pool
-                    .get_str(module_version_index)?
-                    .into_owned(),
-            )
+            Some(ctx.constant_pool.utf8_id(module_version_index)?)
         } else {
             None
         };
+
         let requires = requires
             .iter()
-            .copied()
-            .map(|raw| raw.resolve(ctx))
+            .map(|raw| {
+                Ok(RequireData {
+                    module: ctx.constant_pool.module_id(raw.requires_index.get())?,
+                    flags: parse_flags(raw.requires_flags.get(), "Invalid access flag")?,
+                    version: if raw.requires_version_index.get() > 0 {
+                        Some(
+                            ctx.constant_pool
+                                .utf8_id(raw.requires_version_index.get())?,
+                        )
+                    } else {
+                        None
+                    },
+                })
+            })
             .try_collect_exact()?;
         let exports = exports
-            .into_iter()
-            .map(|raw| raw.resolve(ctx))
+            .iter()
+            .map(|raw| {
+                let package = ctx.constant_pool.package_id(raw.exports_index.get())?;
+                let flags = parse_flags(raw.exports_flags.get(), "Invalid access flag")?;
+                let to = raw
+                    .exports_to
+                    .iter()
+                    .map(|id| ctx.constant_pool.module_id(id.get()))
+                    .try_collect_exact()?;
+                Ok(ExportData { package, flags, to })
+            })
             .try_collect_exact()?;
         let opens = opens
-            .into_iter()
-            .map(|raw| raw.resolve(ctx))
+            .iter()
+            .map(|raw| {
+                let package = ctx.constant_pool.package_id(raw.opens_index.get())?;
+                let flags = parse_flags(raw.opens_flags.get(), "Invalid access flag")?;
+                let to = raw
+                    .opens_to
+                    .iter()
+                    .map(|id| ctx.constant_pool.module_id(id.get()))
+                    .try_collect_exact()?;
+                Ok(OpenData { package, flags, to })
+            })
             .try_collect_exact()?;
         let uses = uses
             .iter()
-            .map(|idx| ctx.constant_pool.get_class_name(idx.get()))
+            .map(|id| ctx.constant_pool.class_id(id.get()))
             .try_collect_exact()?;
         let provides = provides
-            .into_iter()
-            .map(|raw| raw.resolve(ctx))
+            .iter()
+            .map(|raw| {
+                let service = ctx.constant_pool.class_id(raw.provides_index.get())?;
+                let with = raw
+                    .provides_with
+                    .iter()
+                    .map(|id| ctx.constant_pool.class_id(id.get()))
+                    .try_collect_exact()?;
+                Ok(ProvideData { service, with })
+            })
             .try_collect_exact()?;
-        Ok(Module {
+
+        Ok(ModuleData {
             name,
             flags,
             version,

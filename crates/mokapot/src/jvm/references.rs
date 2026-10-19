@@ -61,7 +61,7 @@ impl MethodRef {
 #[display("{name}")]
 pub struct ModuleRef {
     /// The name of the module.
-    pub name: String,
+    pub name: JavaString,
 }
 
 #[cfg(test)]

@@ -3,8 +3,13 @@
 use bitflags::bitflags;
 
 use super::{
-    Annotation, Annotations, Class, JavaStr, JavaString, Method, TypeAnnotation, annotation,
-    class_file::constant_pool::{MethodDescriptorId, Utf8Id},
+    Annotations, Class, JavaStr, JavaString, Method, annotation,
+    annotation::{
+        AnnotationData, AnnotationsData, ElementValueData, ParameterAnnotations,
+        TypeAnnotationData, TypeAnnotations,
+    },
+    attribute::{Attribute, AttributeData},
+    class_file::constant_pool::{ClassId, MethodDescriptorId, Utf8Id},
     code,
     references::MethodRef,
 };
@@ -20,17 +25,17 @@ pub(crate) struct MethodData {
     pub access_flags: AccessFlags,
     pub name: Utf8Id,
     pub descriptor: MethodDescriptorId,
-    pub body: Option<code::MethodBody>,
-    pub exceptions: Box<[ClassName]>,
-    pub annotations: Annotations<Annotation>,
-    pub type_annotations: Annotations<TypeAnnotation>,
-    pub parameter_annotations: Annotations<Box<[Annotation]>>,
-    pub annotation_default: Option<annotation::ElementValue>,
+    pub body: Option<code::MethodBodyData>,
+    pub exceptions: Box<[ClassId]>,
+    pub annotations: AnnotationsData<AnnotationData>,
+    pub type_annotations: AnnotationsData<TypeAnnotationData>,
+    pub parameter_annotations: AnnotationsData<Box<[AnnotationData]>>,
+    pub annotation_default: Option<ElementValueData>,
     pub parameters: Box<[ParameterInfo]>,
     pub is_synthetic: bool,
     pub is_deprecated: bool,
-    pub signature: Option<Signature>,
-    pub other_attributes: Box<[(String, Box<[u8]>)]>,
+    pub signature: Option<Utf8Id>,
+    pub other_attributes: Box<[AttributeData]>,
 }
 
 impl<'class> Method<'class> {
@@ -62,38 +67,48 @@ impl<'class> Method<'class> {
 
     /// The method body, if present.
     #[must_use]
-    pub const fn body(&self) -> Option<&'class code::MethodBody> {
-        self.data.body.as_ref()
+    pub fn body(&self) -> Option<code::MethodBody<'class>> {
+        self.data
+            .body
+            .as_ref()
+            .map(|data| code::MethodBody::new(self.class, data))
     }
 
     /// The declared checked exceptions.
-    #[must_use]
-    pub fn exceptions(&self) -> &'class [ClassName] {
-        &self.data.exceptions
+    pub fn exceptions(
+        self,
+    ) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator {
+        self.data
+            .exceptions
+            .iter()
+            .map(|id| self.class.constant_pool.class_name(*id))
     }
 
     /// The method annotations.
     #[must_use]
-    pub const fn annotations(&self) -> &'class Annotations<Annotation> {
-        &self.data.annotations
+    pub const fn annotations(&self) -> Annotations<'class> {
+        Annotations::new(self.class, &self.data.annotations)
     }
 
     /// The method type annotations.
     #[must_use]
-    pub const fn type_annotations(&self) -> &'class Annotations<TypeAnnotation> {
-        &self.data.type_annotations
+    pub const fn type_annotations(&self) -> TypeAnnotations<'class> {
+        TypeAnnotations::new(self.class, &self.data.type_annotations)
     }
 
     /// The parameter annotations.
     #[must_use]
-    pub const fn parameter_annotations(&self) -> &'class Annotations<Box<[Annotation]>> {
-        &self.data.parameter_annotations
+    pub const fn parameter_annotations(&self) -> ParameterAnnotations<'class> {
+        ParameterAnnotations::new(self.class, &self.data.parameter_annotations)
     }
 
     /// The default annotation value, if present.
     #[must_use]
-    pub const fn annotation_default(&self) -> Option<&'class annotation::ElementValue> {
-        self.data.annotation_default.as_ref()
+    pub fn annotation_default(&self) -> Option<annotation::ElementValue<'class>> {
+        self.data
+            .annotation_default
+            .as_ref()
+            .map(|data| annotation::ElementValue::new(self.class, data))
     }
 
     /// The method parameter information.
@@ -117,13 +132,19 @@ impl<'class> Method<'class> {
     /// The generic signature, if present.
     #[must_use]
     pub fn signature(&self) -> Option<&'class JavaStr> {
-        self.data.signature.as_deref()
+        self.data
+            .signature
+            .map(|id| self.class.constant_pool.utf8(id))
     }
 
     /// The unrecognized method attributes.
-    #[must_use]
-    pub fn other_attributes(&self) -> &'class [(String, Box<[u8]>)] {
-        &self.data.other_attributes
+    pub fn other_attributes(
+        self,
+    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator {
+        self.data
+            .other_attributes
+            .iter()
+            .map(|data| Attribute::new(self.class, data))
     }
 
     /// The method of a static initializer block.
@@ -147,7 +168,7 @@ impl<'class> Method<'class> {
     #[must_use]
     pub fn as_ref(&self) -> MethodRef {
         MethodRef {
-            owner: ReferenceType::Class(self.owner().name.clone()),
+            owner: ReferenceType::Class(self.owner().name().clone()),
             name: self.name().to_owned(),
             descriptor: self.descriptor().clone(),
         }
@@ -157,12 +178,12 @@ impl<'class> Method<'class> {
 impl std::fmt::Debug for Method<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Method")
-            .field("owner", &self.owner().name)
+            .field("owner", &self.owner().name())
             .field("access_flags", &self.access_flags())
             .field("name", &self.name())
             .field("descriptor", &self.descriptor())
             .field("body", &self.body())
-            .field("exceptions", &self.exceptions())
+            .field("exceptions", &self.exceptions().collect::<Vec<_>>())
             .field("annotations", &self.annotations())
             .field("type_annotations", &self.type_annotations())
             .field("parameter_annotations", &self.parameter_annotations())
@@ -171,7 +192,10 @@ impl std::fmt::Debug for Method<'_> {
             .field("is_synthetic", &self.is_synthetic())
             .field("is_deprecated", &self.is_deprecated())
             .field("signature", &self.signature())
-            .field("other_attributes", &self.other_attributes())
+            .field(
+                "other_attributes",
+                &self.other_attributes().collect::<Vec<_>>(),
+            )
             .finish()
     }
 }
@@ -278,13 +302,15 @@ mod tests {
             AccessFlags::PUBLIC,
         );
         let mut class = fixture.as_method().owner().clone();
-        class.name = "Other".parse().unwrap();
+        class.name = class
+            .constant_pool
+            .insert_class_name("Other".parse().unwrap());
         let descriptor: MethodDescriptor = "()V".parse().unwrap();
         let method = class.get_method_str("test", &descriptor).unwrap();
         assert!(std::ptr::eq(method.owner(), &raw const class));
         assert_eq!(
             method.as_ref().owner,
-            ReferenceType::Class(class.name.clone())
+            ReferenceType::Class(class.name().clone())
         );
         assert!(class.get_method_str("missing", &descriptor).is_none());
         assert!(
@@ -293,7 +319,10 @@ mod tests {
                 .is_none()
         );
         let body = class.methods().next().unwrap().body().unwrap();
-        assert_eq!(body.instructions.get(&0.into()), Some(&Instruction::Return));
+        assert_eq!(
+            body.instructions().get(&0.into()),
+            Some(&Instruction::Return)
+        );
     }
 
     #[test]

@@ -30,7 +30,7 @@ pub(super) fn analyze(method: Method<'_>) -> Result<Cfg<'_>, Error> {
 /// propagation begins.
 pub(crate) struct Cfg<'method> {
     method: Method<'method>,
-    body: &'method MethodBody,
+    body: MethodBody<'method>,
     entry: BlockId,
     blocks: HashMap<BlockId, CfgNode>,
 }
@@ -40,7 +40,7 @@ impl<'method> Cfg<'method> {
         self.method
     }
 
-    pub const fn body(&self) -> &'method MethodBody {
+    pub const fn body(&self) -> MethodBody<'method> {
         self.body
     }
 
@@ -62,7 +62,7 @@ impl<'method> Cfg<'method> {
         start: ProgramCounter,
         end: ProgramCounter,
     ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &Instruction)> {
-        self.body().instructions.range(start..=end)
+        self.body().instructions().range(start..=end)
     }
 }
 

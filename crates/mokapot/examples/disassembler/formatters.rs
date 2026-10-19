@@ -79,7 +79,7 @@ impl<'a> ClassFormatter<'a> {
 /// formatted as text. This formatter handles field declarations including
 /// access modifiers, type, name, and constant values if present.
 pub struct FieldFormatter<'a> {
-    field: &'a Field,
+    field: Field<'a>,
 }
 
 impl<'a> FieldFormatter<'a> {
@@ -88,7 +88,7 @@ impl<'a> FieldFormatter<'a> {
     /// # Arguments
     ///
     /// * `field` - Reference to the Field to format
-    pub const fn new(field: &'a Field) -> Self {
+    pub const fn new(field: Field<'a>) -> Self {
         Self { field }
     }
 
@@ -102,7 +102,7 @@ impl<'a> FieldFormatter<'a> {
     ///
     /// A space-separated string of access flag keywords
     pub fn format_access_flags(&self) -> String {
-        let flags = self.field.access_flags;
+        let flags = self.field.access_flags();
         let mut result = Vec::new();
 
         if flags.contains(field::AccessFlags::PUBLIC) {
@@ -153,10 +153,10 @@ impl Display for FieldFormatter<'_> {
         }
 
         // Print field type and name
-        write!(f, "{} {}", self.field.field_type, self.field.name)?;
+        write!(f, "{} {}", self.field.field_type(), self.field.name())?;
 
         // For constant fields, print their value
-        if let Some(value) = &self.field.constant_value {
+        if let Some(value) = self.field.constant_value() {
             write!(f, " = {value}")?;
         }
 

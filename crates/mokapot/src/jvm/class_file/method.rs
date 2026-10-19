@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{Annotations, Method, class_file::ResolutionContext, method},
+    jvm::{Method, class_file::ResolutionContext, method},
 };
 
 /// The raw representation of a `method_info` structure.
@@ -22,12 +22,6 @@ pub(super) struct MethodInfo<'a> {
     name_index: u16,
     descriptor_index: u16,
     attributes: Box<[&'a AttributeInfo]>,
-}
-
-impl MethodInfo<'_> {
-    pub(super) const fn descriptor_index(&self) -> u16 {
-        self.descriptor_index
-    }
 }
 
 impl<'a> Decode<'a> for MethodInfo<'a> {
@@ -47,20 +41,26 @@ impl<'a> Decode<'a> for MethodInfo<'a> {
 impl Resolve for MethodInfo<'_> {
     type Output = method::MethodData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let MethodInfo {
             access_flags,
             name_index,
             descriptor_index,
             attributes,
-        } = raw;
+        } = self;
         let access_flags =
             parse_flags::<method::AccessFlags>(access_flags, "Invalid method access flags")?;
         let name = ctx.constant_pool.utf8_id(name_index)?;
-        let descriptor = ctx.constant_pool.method_descriptor_id(descriptor_index)?;
+        let descriptor = ctx
+            .constant_pool
+            .intern_method_descriptor(descriptor_index)?;
         let name_value = ctx.constant_pool.utf8(name);
-        let descriptor_value = ctx.constant_pool.method_descriptor(descriptor);
+        let is_initializer = name_value == Method::CLASS_INITIALIZER_NAME;
+        let has_parameters = !ctx
+            .constant_pool
+            .method_descriptor(descriptor)
+            .parameters_types
+            .is_empty();
         let bytes = name_value.as_bytes();
         if bytes.is_empty()
             || bytes
@@ -68,7 +68,7 @@ impl Resolve for MethodInfo<'_> {
                 .any(|byte| matches!(byte, b'.' | b';' | b'[' | b'/'))
             || (bytes.iter().any(|byte| matches!(byte, b'<' | b'>'))
                 && name_value != Method::CONSTRUCTOR_NAME
-                && name_value != Method::CLASS_INITIALIZER_NAME)
+                && !is_initializer)
         {
             return Err(ParseError::malform("Invalid method name"));
         }
@@ -103,7 +103,7 @@ impl Resolve for MethodInfo<'_> {
         // If the method is either `native` or `abstract`, and is not a class or interface initialization method
         if (access_flags.contains(method::AccessFlags::NATIVE)
             || access_flags.contains(method::AccessFlags::ABSTRACT))
-            && name_value != Method::CLASS_INITIALIZER_NAME
+            && !is_initializer
         {
             // then its method_info structure must not have a Code attribute in its attributes table
             if body.is_some() {
@@ -116,11 +116,9 @@ impl Resolve for MethodInfo<'_> {
             }
         }
 
-        if ctx.class_version.major() >= 51 && name_value == Method::CLASS_INITIALIZER_NAME {
+        if ctx.class_version.major() >= 51 && is_initializer {
             // In a class file whose version number is 51.0 or above, the method has its ACC_STATIC flag set and takes no arguments (§4.6).
-            if !access_flags.contains(method::AccessFlags::STATIC)
-                || !descriptor_value.parameters_types.is_empty()
-            {
+            if !access_flags.contains(method::AccessFlags::STATIC) || has_parameters {
                 Err(ParseError::malform(
                     "Class initializer in class version 51 or above\
                     must be static and takes no arguments",
@@ -134,15 +132,15 @@ impl Resolve for MethodInfo<'_> {
             descriptor,
             body,
             exceptions,
-            annotations: Annotations {
+            annotations: crate::jvm::annotation::AnnotationsData {
                 runtime_visible: runtime_visible_annotations,
                 runtime_invisible: runtime_invisible_annotations,
             },
-            type_annotations: Annotations {
+            type_annotations: crate::jvm::annotation::AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },
-            parameter_annotations: Annotations {
+            parameter_annotations: crate::jvm::annotation::AnnotationsData {
                 runtime_visible: runtime_visible_parameter_annotations,
                 runtime_invisible: runtime_invisible_parameter_annotations,
             },
@@ -180,10 +178,9 @@ mod tests {
         let attribute_name_index = 3_u16;
         let mut constant_pool = ConstantPool::from_raw(pool).unwrap();
         constant_pool.intern_method_descriptor(descriptor_index)?;
-        let ctx = ResolutionContext {
+        let mut ctx = ResolutionContext {
             constant_pool,
             class_version: Version::from_versions(major, 0).unwrap(),
-            current_class_name: "Test".parse().unwrap(),
         };
         let mut attribute = Vec::new();
         attribute.extend(attribute_name_index.to_be_bytes());
@@ -200,7 +197,7 @@ mod tests {
             descriptor_index,
             attributes: Box::new([attribute]),
         }
-        .resolve(&ctx)
+        .resolve(&mut ctx)
     }
 
     #[test]

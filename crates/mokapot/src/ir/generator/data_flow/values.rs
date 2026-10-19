@@ -30,8 +30,8 @@ impl ValueContext {
             .collect();
         let initial_frame = Frame::for_method_entry(
             method.descriptor(),
-            body.max_locals,
-            body.max_stack,
+            body.max_locals(),
+            body.max_stack(),
             receiver_value,
             &parameter_values,
         )?;

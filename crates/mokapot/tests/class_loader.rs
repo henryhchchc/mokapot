@@ -15,7 +15,7 @@ fn load_class() {
     let loader = ClassLoader::new([DirectoryClassPath::new(support::classes_dir())]);
     let name = "org/mokapot/test/MyClass".parse().unwrap();
     let class = loader.load_class(&name).unwrap();
-    assert_eq!(class.name, "org/mokapot/test/MyClass");
+    assert_eq!(class.name().as_java_str(), "org/mokapot/test/MyClass");
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn jar_class_path() {
     let loader = ClassLoader::new([JarClassPath::new(support::jar_path())]);
     let name = "org/mokapot/test/MyClass".parse().unwrap();
     let class = loader.load_class(&name).unwrap();
-    assert_eq!(class.name, "org/mokapot/test/MyClass");
+    assert_eq!(class.name().as_java_str(), "org/mokapot/test/MyClass");
 }
 
 #[test]
