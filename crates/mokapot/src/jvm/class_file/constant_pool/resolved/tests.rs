@@ -1,6 +1,6 @@
 use super::*;
 use crate::jvm::{
-    ConstantValue,
+    ConstantValue, JavaString,
     class::MethodHandle,
     class_file::constant_pool::RawEntry,
     errors::ParseErrorKind,
@@ -510,6 +510,54 @@ fn resolution_rejects_invalid_dependencies_and_descriptors() {
             ParseErrorKind::Malformed
         );
     }
+}
+
+#[test]
+fn miri_utf8_ranges_preserve_boundaries() {
+    let values = [
+        b"".as_slice(),
+        b"a\xc0\x80\xed\xa0\xbd\xed\xb8\x80\xed\xa0\x80",
+        b"",
+        b"tail",
+        b"",
+    ];
+    let raw = RawConstantPool::from_entries(values.map(RawEntry::Utf8));
+    let pool = ConstantPool::from_raw(raw).unwrap();
+    let mut start = 0;
+    for (index, bytes) in (1..).zip(values) {
+        let end = start + bytes.len();
+        assert_eq!(pool.get_entry(index), Some(&Entry::Utf8(start..end)));
+        let value = pool.utf8(pool.utf8_id(index).unwrap());
+        assert_eq!(value.as_bytes(), bytes);
+        assert_eq!(
+            value.as_bytes().as_ptr(),
+            pool.utf8_bytes[start..end].as_ptr()
+        );
+        start = end;
+    }
+    assert_eq!(pool.utf8_bytes.len(), start);
+}
+
+#[test]
+fn miri_utf8_ranges_survive_growth_and_clone() {
+    let bytes = b"\xc0\x80\xed\xa0\x80";
+    let raw = RawConstantPool::from_entries([RawEntry::Utf8(bytes), RawEntry::Utf8(b"")]);
+    let mut pool = ConstantPool::from_raw(raw).unwrap();
+    let original = pool.clone();
+    let capacity = pool.utf8_bytes.capacity();
+    let value = JavaString::from("x".repeat(capacity + 1));
+    let inserted = pool.insert_utf8(value.clone());
+    assert!(pool.utf8_bytes.capacity() > capacity);
+    let mut cloned = pool.clone();
+    cloned.insert_utf8(JavaString::from("another"));
+    drop(pool);
+    for pool in [&original, &cloned] {
+        assert_eq!(pool.get_utf8(1).unwrap().as_bytes(), bytes);
+        assert_eq!(pool.get_utf8(2).unwrap().as_bytes(), []);
+    }
+    assert_eq!(cloned.utf8(inserted), &*value);
+    assert_eq!(original.count(), 3);
+    assert_eq!(cloned.count(), 5);
 }
 
 #[test]
