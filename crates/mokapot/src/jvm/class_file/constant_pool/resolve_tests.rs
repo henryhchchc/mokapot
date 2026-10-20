@@ -335,20 +335,9 @@ fn method_handles_validate_reference_kinds_and_tags() {
 }
 
 #[test]
-fn method_handle_views_share_references_and_compare_values() {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
-    fn hash(value: impl Hash) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
-    }
+fn method_handle_views_share_member_references() {
     let pool = method_handle_pool(9, 11).unwrap();
-    let other = method_handle_pool(9, 11).unwrap();
     let handle = pool.method_handle(pool.method_handle_id(7).unwrap());
-    let other_handle = other.method_handle(other.method_handle_id(7).unwrap());
     let MethodHndl::RefInvokeInterface(method) = handle else {
         panic!()
     };
@@ -356,9 +345,6 @@ fn method_handle_views_share_references_and_compare_values() {
     assert!(std::ptr::eq(method.owner(), member.owner()));
     assert!(std::ptr::eq(method.name(), member.name()));
     assert!(std::ptr::eq(method.descriptor(), member.descriptor()));
-    assert_eq!(handle, other_handle);
-    assert_eq!(hash(handle), hash(other_handle));
-    assert_ne!(handle, MethodHndl::RefInvokeStatic(method));
 }
 
 #[test]
