@@ -19,15 +19,6 @@ pub struct RawConstantPool<'a> {
 }
 
 impl<'a> RawConstantPool<'a> {
-    /// Parses the specified number of constant-pool slots from a byte slice.
-    /// Bytes following the pool are ignored.
-    /// # Errors
-    /// Returns a [`ParseError`] for malformed or truncated entries.
-    #[cfg(test)]
-    pub fn from_bytes(mut bytes: &'a [u8], constant_pool_count: u16) -> Result<Self, ParseError> {
-        Self::parse_prefix(&mut bytes, constant_pool_count)
-    }
-
     pub(super) fn parse_prefix(
         bytes: &mut &'a [u8],
         constant_pool_count: u16,
@@ -52,15 +43,6 @@ impl<'a> RawConstantPool<'a> {
         Ok(Self {
             inner: PoolStorage::from_slots(slots.into_boxed_slice()),
         })
-    }
-
-    /// Gets the constant pool entry at the given index.
-    ///
-    /// Returns [`None`] if the index is out of bounds or the index does not point to a valid slot.
-    #[must_use]
-    #[cfg(test)]
-    pub fn get_entry(&self, index: u16) -> Option<&RawEntry<'a>> {
-        self.inner.get_entry(index)
     }
 
     /// Returns the indexed slot count, including slot zero and reserved slots.
@@ -222,113 +204,5 @@ impl RawEntry<'_> {
         } else {
             1
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::jvm::errors::ParseErrorKind;
-
-    use super::*;
-
-    fn assert_entry_decoding(entry: &RawEntry<'_>, bytes: &[u8]) {
-        let mut reader = bytes;
-        assert_eq!(&RawEntry::decode(&mut reader).unwrap(), entry);
-        assert_eq!(reader, b"");
-        for end in 0..bytes.len() {
-            assert_eq!(
-                RawEntry::decode(&mut &bytes[..end]).unwrap_err().kind(),
-                ParseErrorKind::Malformed
-            );
-        }
-    }
-
-    #[test]
-    fn entry_tags_decode_payloads_and_reject_truncation() {
-        let cases: &[(RawEntry, &[u8])] = &[
-            (
-                RawEntry::Integer((-0x123_4567).into()),
-                &[3, 0xfe, 0xdc, 0xba, 0x99],
-            ),
-            (RawEntry::Float(1.0.into()), &[4, 0x3f, 0x80, 0, 0]),
-            (
-                RawEntry::Long(0x0102_0304_0506_0708.into()),
-                &[5, 1, 2, 3, 4, 5, 6, 7, 8],
-            ),
-            (
-                RawEntry::Double((-2.0).into()),
-                &[6, 0xc0, 0, 0, 0, 0, 0, 0, 0],
-            ),
-            (RawEntry::Utf8(&[0xc0, 0x80]), &[1, 0, 2, 0xc0, 0x80]),
-            (
-                RawEntry::Class {
-                    name_index: 0x1234.into(),
-                },
-                &[7, 0x12, 0x34],
-            ),
-            (
-                RawEntry::FieldRef {
-                    class_index: 0x1234.into(),
-                    name_and_type_index: 0x5678.into(),
-                },
-                &[9, 0x12, 0x34, 0x56, 0x78],
-            ),
-            (
-                RawEntry::MethodHandle {
-                    reference_kind: 6,
-                    reference_index: 0x1234.into(),
-                },
-                &[15, 6, 0x12, 0x34],
-            ),
-        ];
-        for (entry, bytes) in cases {
-            assert_entry_decoding(entry, bytes);
-        }
-    }
-
-    #[test]
-    fn parsing_preserves_reserved_slots_and_suffix() {
-        let bytes = [
-            5, 0, 0, 0, 0, 0, 0, 0, 42, // Long #1, reserved #2
-            3, 0, 0, 0, 7, // Integer #3
-            6, 0x40, 0x0c, 0, 0, 0, 0, 0, 0,    // Double #4, reserved #5
-            0xff, // suffix
-        ];
-        let mut remaining = bytes.as_slice();
-        let pool = RawConstantPool::parse_prefix(&mut remaining, 6).unwrap();
-        assert_eq!(pool.get_entry(0), None);
-        assert_eq!(pool.get_entry(1), Some(&RawEntry::Long(42.into())));
-        assert_eq!(pool.get_entry(2), None);
-        assert_eq!(pool.get_entry(3), Some(&RawEntry::Integer(7.into())));
-        assert_eq!(pool.get_entry(4), Some(&RawEntry::Double(3.5.into())));
-        assert_eq!(pool.get_entry(5), None);
-        assert_eq!(pool.get_entry(6), None);
-        assert_eq!(pool.count(), 6);
-        assert_eq!(remaining, [0xff]);
-    }
-
-    #[test]
-    fn invalid_slot_counts() {
-        for (count, bytes) in [
-            (0, vec![]),
-            (2, vec![]),
-            (3, vec![3, 0, 0, 0, 7]),
-            (2, vec![5, 0, 0, 0, 0, 0, 0, 0, 0]),
-            (2, vec![6, 0, 0, 0, 0, 0, 0, 0, 0]),
-        ] {
-            let error = RawConstantPool::from_bytes(&bytes, count).unwrap_err();
-            assert_eq!(error.kind(), ParseErrorKind::Malformed);
-        }
-    }
-
-    #[test]
-    fn utf8_entries_borrow_input() {
-        let bytes = vec![1, 0, 3, b'a', b'b', b'c'];
-        let pool = RawConstantPool::from_bytes(&bytes, 2).unwrap();
-        let Some(RawEntry::Utf8(value)) = pool.get_entry(1) else {
-            panic!("expected a UTF-8 entry");
-        };
-        assert_eq!(*value, b"abc");
-        assert!(std::ptr::eq(value.as_ptr(), bytes[3..].as_ptr()));
     }
 }

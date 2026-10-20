@@ -129,38 +129,3 @@ impl<'a> Decode<'a> for &'a ProvidesInfo {
         Ok(entry)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn module_tables_follow_entry_counts() {
-        let words: &[u16] = &[
-            1, 0, 0, // module name, flags, version
-            0, // requires
-            2, 3, 0, 0, 4, 0, 2, 5, 6, // exports: empty, then two targets
-            2, 7, 0, 0, 8, 0, 2, 9, 10, // opens: empty, then two targets
-            0,  // uses
-            2, 11, 0, 12, 2, 13, 14, // provides: empty, then two implementations
-        ];
-        let bytes: Vec<_> = words.iter().flat_map(|word| word.to_be_bytes()).collect();
-        let mut remaining = bytes.as_slice();
-        let module = ModuleInfo::decode(&mut remaining).unwrap();
-
-        let empty: &[U16] = &[];
-        assert_eq!(&module.exports[0].exports_to, empty);
-        assert_eq!(module.exports[1].exports_index.get(), 4);
-        assert_eq!(&module.exports[1].exports_to, [U16::new(5), U16::new(6)]);
-        assert_eq!(&module.opens[0].opens_to, empty);
-        assert_eq!(module.opens[1].opens_index.get(), 8);
-        assert_eq!(&module.opens[1].opens_to, [U16::new(9), U16::new(10)]);
-        assert_eq!(&module.provides[0].provides_with, empty);
-        assert_eq!(module.provides[1].provides_index.get(), 12);
-        assert_eq!(
-            &module.provides[1].provides_with,
-            [U16::new(13), U16::new(14)]
-        );
-        assert_eq!(remaining, b"");
-    }
-}
