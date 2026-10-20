@@ -1,7 +1,7 @@
 use derive_more::Display;
 
 use super::ValueId;
-use crate::jvm::references::FieldRef;
+use crate::jvm::references::FieldReference;
 
 /// An operation on a field.
 #[derive(Debug, Clone, PartialEq, Eq, Display)]
@@ -10,13 +10,13 @@ pub enum Access {
     #[display("read {field}")]
     ReadStatic {
         /// The field to read.
-        field: FieldRef,
+        field: FieldReference,
     },
     /// Writes to a static field.
     #[display("write {field}, {value}")]
     WriteStatic {
         /// The field to write to.
-        field: FieldRef,
+        field: FieldReference,
         /// The value to be written.
         value: ValueId,
     },
@@ -26,7 +26,7 @@ pub enum Access {
         /// The object to read from.
         object_ref: ValueId,
         /// The field to read.
-        field: FieldRef,
+        field: FieldReference,
     },
     /// Writes to an instance field.
     #[display("write {object_ref}.{}, {value}", field.name)]
@@ -34,7 +34,7 @@ pub enum Access {
         /// The object to write to.
         object_ref: ValueId,
         /// The field to write to.
-        field: FieldRef,
+        field: FieldReference,
         /// The value to be written.
         value: ValueId,
     },

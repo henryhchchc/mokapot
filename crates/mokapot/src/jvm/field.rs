@@ -5,7 +5,7 @@ use std::fmt;
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Class, ConstantValueView, DebugList, JavaStr, JavaString,
+        Class, ConstantVal, DebugList, JavaStr, JavaString,
         annotation::{
             AnnotationData, Annotations, AnnotationsData, TypeAnnotationData, TypeAnnotations,
         },
@@ -13,7 +13,7 @@ use crate::{
         constant_pool::{ConstantValueId, FieldTypeId, Utf8Id},
         references::FieldRef,
     },
-    types::{field_type::FieldType, reference_type::ReferenceType},
+    types::field_type::FieldType,
 };
 
 /// A generic type signature for a field, a formal parameter, a local variable, or a record component.
@@ -68,7 +68,7 @@ impl<'class> Field<'class> {
 
     /// The constant value, if present.
     #[must_use]
-    pub fn constant_value(&self) -> Option<ConstantValueView<'class>> {
+    pub fn constant_value(&self) -> Option<ConstantVal<'class>> {
         self.data
             .constant_value
             .map(|id| self.class.constant_pool.constant_value(id))
@@ -122,14 +122,10 @@ impl<'class> Field<'class> {
             .map(|data| Attribute::new(self.class, data))
     }
 
-    /// Creates an owned [`FieldRef`] referring to this field.
+    /// Returns a borrowed reference to this field.
     #[must_use]
-    pub fn to_owned_ref(&self) -> FieldRef {
-        FieldRef {
-            owner: ReferenceType::Class(self.owner().name().clone()),
-            name: self.name().to_owned(),
-            field_type: self.field_type().clone(),
-        }
+    pub fn as_ref(&self) -> FieldRef<'class> {
+        FieldRef::new(self.class.reference_type(), self.name(), self.field_type())
     }
 }
 

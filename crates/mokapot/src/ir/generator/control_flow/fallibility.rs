@@ -2,7 +2,7 @@
 
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{ConstantValueView, code::Instruction},
+    jvm::{ConstantVal, code::Instruction},
 };
 
 /// Returns whether a continuing instruction can synchronously transfer
@@ -42,7 +42,7 @@ pub(super) const fn fallthrough_may_throw(instruction: &Instruction) -> bool {
 /// may require resolution or materialization.
 #[doc = see_jvm_spec!(6, 5)]
 #[doc = see_jvm_spec!(5, 4, 3)]
-const fn can_const_resolution_fall(value: &ConstantValueView<'_>) -> bool {
-    use ConstantValueView::{Double, Float, Integer, Long, Null};
+const fn can_const_resolution_fall(value: &ConstantVal<'_>) -> bool {
+    use ConstantVal::{Double, Float, Integer, Long, Null};
     !matches!(value, Null | Integer(_) | Float(_) | Long(_) | Double(_))
 }

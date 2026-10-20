@@ -3,8 +3,8 @@
 use std::fmt;
 
 use crate::jvm::{
-    Class, ConstantValueView, DebugList,
-    class::MethodHandleView,
+    Class, ConstantVal, DebugList,
+    class::MethodHndl,
     constant_pool::{ConstantValueId, MethodHandleId},
 };
 
@@ -30,14 +30,14 @@ impl<'class> BootstrapMethod<'class> {
 
     /// The method handle invoked as the bootstrap method.
     #[must_use]
-    pub fn method(&self) -> MethodHandleView<'class> {
+    pub fn method(&self) -> MethodHndl<'class> {
         self.class.constant_pool.method_handle(self.data.method)
     }
 
     /// The constants passed to the bootstrap method.
     pub fn arguments(
         self,
-    ) -> impl ExactSizeIterator<Item = ConstantValueView<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = ConstantVal<'class>> + DoubleEndedIterator {
         self.data
             .arguments
             .iter()

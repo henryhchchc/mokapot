@@ -2,7 +2,7 @@ use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
         constant_pool::{ConstantPool, FieldRefId, MethodRefId},
-        references::{FieldRef, FieldRefView, MethodRef, MethodRefView},
+        references::{FieldRef, FieldReference, MethodRef, MethodReference},
     },
 };
 
@@ -12,23 +12,23 @@ use crate::{
 #[repr(u8)]
 pub enum MethodHandle {
     /// Get an instance field.
-    RefGetField(FieldRef) = 1,
+    RefGetField(FieldReference) = 1,
     /// Get a static field.
-    RefGetStatic(FieldRef) = 2,
+    RefGetStatic(FieldReference) = 2,
     /// Writes to an instance field.
-    RefPutField(FieldRef) = 3,
+    RefPutField(FieldReference) = 3,
     /// Writes to a static field.
-    RefPutStatic(FieldRef) = 4,
+    RefPutStatic(FieldReference) = 4,
     /// Invoke an instance method.
-    RefInvokeVirtual(MethodRef) = 5,
+    RefInvokeVirtual(MethodReference) = 5,
     /// Invoke a static method.
-    RefInvokeStatic(MethodRef) = 6,
+    RefInvokeStatic(MethodReference) = 6,
     /// Invoke a special method (e.g., a constructor).
-    RefInvokeSpecial(MethodRef) = 7,
+    RefInvokeSpecial(MethodReference) = 7,
     /// The new version a special method (e.g., a constructor).
-    RefNewInvokeSpecial(MethodRef) = 8,
+    RefNewInvokeSpecial(MethodReference) = 8,
     /// Invoke an interface method.
-    RefInvokeInterface(MethodRef) = 9,
+    RefInvokeInterface(MethodReference) = 9,
 }
 
 impl MethodHandle {
@@ -52,28 +52,28 @@ impl MethodHandle {
 /// A borrowed method handle.
 #[doc = see_jvm_spec!(4, 4, 8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MethodHandleView<'pool> {
+pub enum MethodHndl<'pool> {
     /// Get an instance field.
-    RefGetField(FieldRefView<'pool>),
+    RefGetField(FieldRef<'pool>),
     /// Get a static field.
-    RefGetStatic(FieldRefView<'pool>),
+    RefGetStatic(FieldRef<'pool>),
     /// Write to an instance field.
-    RefPutField(FieldRefView<'pool>),
+    RefPutField(FieldRef<'pool>),
     /// Write to a static field.
-    RefPutStatic(FieldRefView<'pool>),
+    RefPutStatic(FieldRef<'pool>),
     /// Invoke an instance method.
-    RefInvokeVirtual(MethodRefView<'pool>),
+    RefInvokeVirtual(MethodRef<'pool>),
     /// Invoke a static method.
-    RefInvokeStatic(MethodRefView<'pool>),
+    RefInvokeStatic(MethodRef<'pool>),
     /// Invoke a special method.
-    RefInvokeSpecial(MethodRefView<'pool>),
+    RefInvokeSpecial(MethodRef<'pool>),
     /// Invoke a constructor.
-    RefNewInvokeSpecial(MethodRefView<'pool>),
+    RefNewInvokeSpecial(MethodRef<'pool>),
     /// Invoke an interface method.
-    RefInvokeInterface(MethodRefView<'pool>),
+    RefInvokeInterface(MethodRef<'pool>),
 }
 
-impl MethodHandleView<'_> {
+impl MethodHndl<'_> {
     /// Converts this borrowed method handle into an owned value.
     #[must_use]
     pub fn into_owned(self) -> MethodHandle {
@@ -123,19 +123,17 @@ pub(crate) enum MethodHandleData {
 }
 
 impl MethodHandleData {
-    pub fn view(self, pool: &ConstantPool) -> MethodHandleView<'_> {
+    pub fn view(self, pool: &ConstantPool) -> MethodHndl<'_> {
         match self {
-            Self::GetField(id) => MethodHandleView::RefGetField(pool.field_ref(id)),
-            Self::GetStatic(id) => MethodHandleView::RefGetStatic(pool.field_ref(id)),
-            Self::PutField(id) => MethodHandleView::RefPutField(pool.field_ref(id)),
-            Self::PutStatic(id) => MethodHandleView::RefPutStatic(pool.field_ref(id)),
-            Self::InvokeVirtual(id) => MethodHandleView::RefInvokeVirtual(pool.method_ref(id)),
-            Self::InvokeStatic(id) => MethodHandleView::RefInvokeStatic(pool.method_ref(id)),
-            Self::InvokeSpecial(id) => MethodHandleView::RefInvokeSpecial(pool.method_ref(id)),
-            Self::NewInvokeSpecial(id) => {
-                MethodHandleView::RefNewInvokeSpecial(pool.method_ref(id))
-            }
-            Self::InvokeInterface(id) => MethodHandleView::RefInvokeInterface(pool.method_ref(id)),
+            Self::GetField(id) => MethodHndl::RefGetField(pool.field_ref(id)),
+            Self::GetStatic(id) => MethodHndl::RefGetStatic(pool.field_ref(id)),
+            Self::PutField(id) => MethodHndl::RefPutField(pool.field_ref(id)),
+            Self::PutStatic(id) => MethodHndl::RefPutStatic(pool.field_ref(id)),
+            Self::InvokeVirtual(id) => MethodHndl::RefInvokeVirtual(pool.method_ref(id)),
+            Self::InvokeStatic(id) => MethodHndl::RefInvokeStatic(pool.method_ref(id)),
+            Self::InvokeSpecial(id) => MethodHndl::RefInvokeSpecial(pool.method_ref(id)),
+            Self::NewInvokeSpecial(id) => MethodHndl::RefNewInvokeSpecial(pool.method_ref(id)),
+            Self::InvokeInterface(id) => MethodHndl::RefInvokeInterface(pool.method_ref(id)),
         }
     }
 }

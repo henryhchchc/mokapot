@@ -13,8 +13,8 @@ use super::ProgramCounter;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        ConstantValueView, JavaStr,
-        references::{FieldRefView, MethodRefView},
+        ConstantVal, JavaStr,
+        references::{FieldRef, MethodRef},
     },
     types::{
         field_type::PrimitiveType, method_descriptor::MethodDescriptor,
@@ -50,9 +50,9 @@ pub enum Instruction<'class> {
     DConst1 = 0x0f,
     BiPush(i8) = 0x10,
     SiPush(i16) = 0x11,
-    Ldc(ConstantValueView<'class>) = 0x12,
-    LdcW(ConstantValueView<'class>) = 0x13,
-    Ldc2W(ConstantValueView<'class>) = 0x14,
+    Ldc(ConstantVal<'class>) = 0x12,
+    LdcW(ConstantVal<'class>) = 0x13,
+    Ldc2W(ConstantVal<'class>) = 0x14,
 
     // Loads
     ILoad(u8) = 0x15,
@@ -233,14 +233,14 @@ pub enum Instruction<'class> {
     Return = 0xb1,
 
     // References
-    GetStatic(FieldRefView<'class>) = 0xb2,
-    PutStatic(FieldRefView<'class>) = 0xb3,
-    GetField(FieldRefView<'class>) = 0xb4,
-    PutField(FieldRefView<'class>) = 0xb5,
-    InvokeVirtual(MethodRefView<'class>) = 0xb6,
-    InvokeSpecial(MethodRefView<'class>) = 0xb7,
-    InvokeStatic(MethodRefView<'class>) = 0xb8,
-    InvokeInterface(MethodRefView<'class>, u8) = 0xb9,
+    GetStatic(FieldRef<'class>) = 0xb2,
+    PutStatic(FieldRef<'class>) = 0xb3,
+    GetField(FieldRef<'class>) = 0xb4,
+    PutField(FieldRef<'class>) = 0xb5,
+    InvokeVirtual(MethodRef<'class>) = 0xb6,
+    InvokeSpecial(MethodRef<'class>) = 0xb7,
+    InvokeStatic(MethodRef<'class>) = 0xb8,
+    InvokeInterface(MethodRef<'class>, u8) = 0xb9,
     InvokeDynamic {
         bootstrap_method_index: u16,
         name: &'class JavaStr,

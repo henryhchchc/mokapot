@@ -3,15 +3,12 @@ use ValueCategory::Category1;
 use super::{FrameError, LiftContext};
 use crate::{
     ir::{Operation, ValueId, expression::FieldAccess},
-    jvm::references::FieldRefView,
+    jvm::references::FieldRef,
     types::field_type::ValueCategory,
 };
 
 impl LiftContext<'_, '_> {
-    pub fn read_static(
-        &mut self,
-        field: FieldRefView<'_>,
-    ) -> Result<Option<Operation>, FrameError> {
+    pub fn read_static(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         self.frame
             .stack
@@ -23,10 +20,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn read_instance(
-        &mut self,
-        field: FieldRefView<'_>,
-    ) -> Result<Option<Operation>, FrameError> {
+    pub fn read_instance(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
         let value = self.definition_id();
         let object_ref = self.frame.stack.pop(Category1)?;
         self.frame
@@ -40,10 +34,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn write_static(
-        &mut self,
-        field: FieldRefView<'_>,
-    ) -> Result<Option<Operation>, FrameError> {
+    pub fn write_static(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
         let field = field.into_owned();
         Ok(Some(Operation::Effect {
@@ -51,10 +42,7 @@ impl LiftContext<'_, '_> {
         }))
     }
 
-    pub fn write_instance(
-        &mut self,
-        field: FieldRefView<'_>,
-    ) -> Result<Option<Operation>, FrameError> {
+    pub fn write_instance(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
         Ok(Some(Operation::Effect {
@@ -67,7 +55,7 @@ impl LiftContext<'_, '_> {
         }))
     }
 
-    fn pop_field_value(&mut self, field: FieldRefView<'_>) -> Result<ValueId, FrameError> {
+    fn pop_field_value(&mut self, field: FieldRef<'_>) -> Result<ValueId, FrameError> {
         self.frame.stack.pop(field.field_type().value_category())
     }
 }

@@ -4,7 +4,7 @@ pub(crate) mod bootstrap;
 mod metadata;
 mod method_handle;
 pub(crate) use method_handle::MethodHandleData;
-pub use method_handle::{MethodHandle, MethodHandleView};
+pub use method_handle::{MethodHandle, MethodHndl};
 pub(crate) mod nesting;
 pub(crate) mod record_component;
 pub use bootstrap::BootstrapMethod;
@@ -86,6 +86,10 @@ pub struct Class {
 }
 
 impl Class {
+    pub(crate) fn reference_type(&self) -> &crate::types::reference_type::ReferenceType {
+        self.constant_pool.class_reference_type(self.name)
+    }
+
     /// Iterates over the methods declared by this class.
     pub fn methods(&self) -> impl ExactSizeIterator<Item = Method<'_>> + DoubleEndedIterator {
         self.methods.iter().map(|data| Method { class: self, data })

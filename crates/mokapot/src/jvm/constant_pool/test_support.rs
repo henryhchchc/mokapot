@@ -1,5 +1,5 @@
 use super::*;
-use crate::jvm::{JavaString, references::MethodRef};
+use crate::jvm::{JavaString, references::MethodReference};
 
 impl ConstantPool {
     pub(crate) fn new() -> Self {
@@ -46,7 +46,7 @@ impl ConstantPool {
         MethodDescriptorId(index)
     }
 
-    pub(crate) fn insert_method_ref(&mut self, value: MethodRef) -> MethodRefId {
+    pub(crate) fn insert_method_ref(&mut self, value: MethodReference) -> MethodRefId {
         let owner = self.insert_reference_type(value.owner);
         let name = self.insert_utf8(value.name);
         let descriptor = self.insert_method_descriptor(value.descriptor);
