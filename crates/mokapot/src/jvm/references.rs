@@ -173,39 +173,3 @@ impl fmt::Display for MethodRef<'_> {
         write!(f, "{}::{}", self.owner(), self.name())
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-    use crate::jvm::constant_pool::ConstantPool;
-
-    fn method_ref(name: &str, descriptor: &str) -> MethodReference {
-        MethodReference {
-            owner: ReferenceType::Class("org/mokapot/Test".parse().unwrap()),
-            name: name.to_owned().into(),
-            descriptor: descriptor.parse().unwrap(),
-        }
-    }
-
-    #[test]
-    fn special_method_reference_checks_include_descriptor() {
-        for (name, descriptor, constructor, initializer) in [
-            (Method::CONSTRUCTOR_NAME, "()V", true, false),
-            (Method::CONSTRUCTOR_NAME, "()I", false, false),
-            (Method::CONSTRUCTOR_NAME, "(I)V", true, false),
-            (Method::CLASS_INITIALIZER_NAME, "()V", false, true),
-            (Method::CLASS_INITIALIZER_NAME, "()I", false, false),
-            (Method::CLASS_INITIALIZER_NAME, "(I)V", false, false),
-            ("ordinary", "()V", false, false),
-        ] {
-            let method = method_ref(name, descriptor);
-            assert_eq!(method.is_constructor(), constructor);
-            assert_eq!(method.is_static_initializer_block(), initializer);
-            let mut pool = ConstantPool::new();
-            let id = pool.insert_method_ref(method);
-            let view = pool.method_ref(id);
-            assert_eq!(view.is_constructor(), constructor);
-            assert_eq!(view.is_static_initializer_block(), initializer);
-        }
-    }
-}

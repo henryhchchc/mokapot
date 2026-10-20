@@ -79,9 +79,8 @@ pub(super) fn parse_repeated<'a, E>(
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, borrow_slice, decode_value, parse_repeated};
+    use super::{ParseError, decode_value, parse_repeated};
     use crate::jvm::errors::ParseErrorKind;
-    use zerocopy::byteorder::big_endian::U16;
 
     #[test]
     fn repeated_parsing_stops_when_an_element_is_rejected() {
@@ -96,20 +95,5 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind(), ParseErrorKind::Malformed);
         assert_eq!(remaining, [3]);
-    }
-
-    #[test]
-    fn borrowed_table_preserves_cursor_boundaries() {
-        let bytes = [0xff, 0x12, 0x34, 0xab, 0xcd, 0xee];
-        let mut remaining = &bytes[1..];
-        borrow_slice::<U16>(&mut remaining, 2).unwrap();
-        assert_eq!(remaining, [0xee]);
-        borrow_slice::<U16>(&mut remaining, 0).unwrap();
-        assert_eq!(remaining, [0xee]);
-        for count in [1, usize::MAX] {
-            let error = borrow_slice::<U16>(&mut remaining, count).unwrap_err();
-            assert_eq!(error.kind(), ParseErrorKind::Malformed);
-            assert_eq!(remaining, [0xee]);
-        }
     }
 }

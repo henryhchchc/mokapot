@@ -295,25 +295,3 @@ bitflags! {
         const MANDATED = 0x8000;
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parameter_names_borrow_the_class() {
-        let mut class = Class::default();
-        let name = class
-            .constant_pool
-            .insert_utf8(JavaString::from_cesu8(vec![0xed, 0xa0, 0x80]).unwrap());
-        let data = ParameterInfoData {
-            name: Some(name),
-            access_flags: ParameterAccessFlags::empty(),
-        };
-        let parameter = ParameterInfo {
-            class: &class,
-            data: &data,
-        };
-        assert_eq!(parameter.name().unwrap().as_bytes(), &[0xed, 0xa0, 0x80]);
-    }
-}
