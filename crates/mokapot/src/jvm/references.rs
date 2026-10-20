@@ -1,14 +1,11 @@
 //! References to JVM elements.
 
 use derive_more::Display;
-use std::{
-    fmt,
-    hash::{Hash, Hasher},
-};
+use std::fmt;
 
 use super::{
     JavaStr, JavaString, Method,
-    constant_pool::{ConstantPool, FieldNameAndTypeId, MethodNameAndTypeId, ReferenceTypeId},
+    constant_pool::{FieldNameAndTypeId, MethodNameAndTypeId, ReferenceTypeId},
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -23,7 +20,7 @@ use crate::{
 #[doc = see_jvm_spec!(4, 4, 2)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{owner}.{name}")]
-pub struct FieldRef {
+pub struct FieldReference {
     /// A reference to the class or array type that contains the field.
     pub owner: ReferenceType,
     /// The name of the field.
@@ -36,7 +33,7 @@ pub struct FieldRef {
 #[doc = see_jvm_spec!(4, 4, 2)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{owner}::{name}")]
-pub struct MethodRef {
+pub struct MethodReference {
     /// The reference to the class or array type containing the method.
     pub owner: ReferenceType,
     /// The name of the method.
@@ -45,7 +42,7 @@ pub struct MethodRef {
     pub descriptor: MethodDescriptor,
 }
 
-impl MethodRef {
+impl MethodReference {
     /// Checks if the method reference refers to a constructor.
     #[must_use]
     pub fn is_constructor(&self) -> bool {
@@ -75,39 +72,48 @@ pub(crate) struct MethodRefData {
 }
 
 /// A borrowed symbolic field reference.
-#[derive(Clone, Copy)]
-pub struct FieldRefView<'pool> {
-    pool: &'pool ConstantPool,
-    data: &'pool FieldRefData,
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct FieldRef<'pool> {
+    owner: &'pool ReferenceType,
+    name: &'pool JavaStr,
+    field_type: &'pool FieldType,
 }
 
-impl<'pool> FieldRefView<'pool> {
-    pub(crate) const fn new(pool: &'pool ConstantPool, data: &'pool FieldRefData) -> Self {
-        Self { pool, data }
+impl<'pool> FieldRef<'pool> {
+    pub(crate) const fn new(
+        owner: &'pool ReferenceType,
+        name: &'pool JavaStr,
+        field_type: &'pool FieldType,
+    ) -> Self {
+        Self {
+            owner,
+            name,
+            field_type,
+        }
     }
 
     /// Returns the symbolic owner, which may be an array type.
     #[must_use]
-    pub fn owner(self) -> &'pool ReferenceType {
-        self.pool.reference_type(self.data.owner)
+    pub const fn owner(self) -> &'pool ReferenceType {
+        self.owner
     }
 
     /// Returns the field name.
     #[must_use]
-    pub fn name(self) -> &'pool JavaStr {
-        self.pool.field_name_and_type(self.data.name_and_type).0
+    pub const fn name(self) -> &'pool JavaStr {
+        self.name
     }
 
     /// Returns the field type.
     #[must_use]
-    pub fn field_type(self) -> &'pool FieldType {
-        self.pool.field_name_and_type(self.data.name_and_type).1
+    pub const fn field_type(self) -> &'pool FieldType {
+        self.field_type
     }
 
     /// Converts this borrowed field reference into an owned value.
     #[must_use]
-    pub fn into_owned(self) -> FieldRef {
-        FieldRef {
+    pub fn into_owned(self) -> FieldReference {
+        FieldReference {
             owner: self.owner().clone(),
             name: self.name().to_owned(),
             field_type: self.field_type().clone(),
@@ -115,61 +121,49 @@ impl<'pool> FieldRefView<'pool> {
     }
 }
 
-impl PartialEq for FieldRefView<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        (self.owner(), self.name(), self.field_type())
-            == (other.owner(), other.name(), other.field_type())
-    }
-}
-impl Eq for FieldRefView<'_> {}
-impl Hash for FieldRefView<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.owner(), self.name(), self.field_type()).hash(state);
-    }
-}
-impl fmt::Debug for FieldRefView<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FieldRefView")
-            .field("owner", self.owner())
-            .field("name", &self.name())
-            .field("field_type", self.field_type())
-            .finish()
-    }
-}
-impl fmt::Display for FieldRefView<'_> {
+impl fmt::Display for FieldRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}", self.owner(), self.name())
     }
 }
 
 /// A borrowed symbolic method reference.
-#[derive(Clone, Copy)]
-pub struct MethodRefView<'pool> {
-    pool: &'pool ConstantPool,
-    data: &'pool MethodRefData,
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct MethodRef<'pool> {
+    owner: &'pool ReferenceType,
+    name: &'pool JavaStr,
+    descriptor: &'pool MethodDescriptor,
 }
 
-impl<'pool> MethodRefView<'pool> {
-    pub(crate) const fn new(pool: &'pool ConstantPool, data: &'pool MethodRefData) -> Self {
-        Self { pool, data }
+impl<'pool> MethodRef<'pool> {
+    pub(crate) const fn new(
+        owner: &'pool ReferenceType,
+        name: &'pool JavaStr,
+        descriptor: &'pool MethodDescriptor,
+    ) -> Self {
+        Self {
+            owner,
+            name,
+            descriptor,
+        }
     }
 
     /// Returns the symbolic owner, which may be an array type.
     #[must_use]
-    pub fn owner(self) -> &'pool ReferenceType {
-        self.pool.reference_type(self.data.owner)
+    pub const fn owner(self) -> &'pool ReferenceType {
+        self.owner
     }
 
     /// Returns the method name.
     #[must_use]
-    pub fn name(self) -> &'pool JavaStr {
-        self.pool.method_name_and_type(self.data.name_and_type).0
+    pub const fn name(self) -> &'pool JavaStr {
+        self.name
     }
 
     /// Returns the method descriptor.
     #[must_use]
-    pub fn descriptor(self) -> &'pool MethodDescriptor {
-        self.pool.method_name_and_type(self.data.name_and_type).1
+    pub const fn descriptor(self) -> &'pool MethodDescriptor {
+        self.descriptor
     }
 
     /// Checks whether this references a constructor.
@@ -189,8 +183,8 @@ impl<'pool> MethodRefView<'pool> {
 
     /// Converts this borrowed method reference into an owned value.
     #[must_use]
-    pub fn into_owned(self) -> MethodRef {
-        MethodRef {
+    pub fn into_owned(self) -> MethodReference {
+        MethodReference {
             owner: self.owner().clone(),
             name: self.name().to_owned(),
             descriptor: self.descriptor().clone(),
@@ -198,28 +192,7 @@ impl<'pool> MethodRefView<'pool> {
     }
 }
 
-impl PartialEq for MethodRefView<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        (self.owner(), self.name(), self.descriptor())
-            == (other.owner(), other.name(), other.descriptor())
-    }
-}
-impl Eq for MethodRefView<'_> {}
-impl Hash for MethodRefView<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.owner(), self.name(), self.descriptor()).hash(state);
-    }
-}
-impl fmt::Debug for MethodRefView<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MethodRefView")
-            .field("owner", self.owner())
-            .field("name", &self.name())
-            .field("descriptor", self.descriptor())
-            .finish()
-    }
-}
-impl fmt::Display for MethodRefView<'_> {
+impl fmt::Display for MethodRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}::{}", self.owner(), self.name())
     }
@@ -229,7 +202,7 @@ impl fmt::Display for MethodRefView<'_> {
 #[doc = see_jvm_spec!(4, 4, 11)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
 #[display("{name}")]
-pub struct ModuleRef {
+pub struct ModuleReference {
     /// The name of the module.
     pub name: JavaString,
 }
@@ -237,9 +210,10 @@ pub struct ModuleRef {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::jvm::constant_pool::ConstantPool;
 
-    fn method_ref(name: &str, descriptor: &str) -> MethodRef {
-        MethodRef {
+    fn method_ref(name: &str, descriptor: &str) -> MethodReference {
+        MethodReference {
             owner: ReferenceType::Class("org/mokapot/Test".parse().unwrap()),
             name: name.to_owned().into(),
             descriptor: descriptor.parse().unwrap(),

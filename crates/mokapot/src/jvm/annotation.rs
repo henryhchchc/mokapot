@@ -2,7 +2,7 @@
 use std::fmt;
 
 use super::{
-    Class, ConstantValueView, DebugList, JavaStr,
+    Class, ConstantVal, DebugList, JavaStr,
     code::{LocalVariableId, ProgramCounter},
     constant_pool::{ConstantValueId, FieldTypeId, ReturnTypeId, Utf8Id},
 };
@@ -19,7 +19,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ElementValue<'class> {
     /// A constant value in primitive type.
-    Primitive(PrimitiveType, ConstantValueView<'class>),
+    Primitive(PrimitiveType, ConstantVal<'class>),
     /// A constant value in String type.
     String(&'class JavaStr),
     /// An enum constant.

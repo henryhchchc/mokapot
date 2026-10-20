@@ -15,7 +15,7 @@ pub(crate) use crate::ir::{
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
     ir::NumericalId,
-    jvm::{code::ProgramCounter, method::AccessFlags, references::MethodRef},
+    jvm::{code::ProgramCounter, method::AccessFlags, references::MethodReference},
     tests::{TestExceptionHandler, TestMethod},
     types::reference_type::ReferenceType,
 };
@@ -126,8 +126,8 @@ pub(crate) fn ref_t(name: &str) -> ReferenceType {
 }
 
 /// A symbolic method on `java/lang/Object` with the given name and descriptor.
-pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodRef {
-    MethodRef {
+pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodReference {
+    MethodReference {
         owner: ref_t("java/lang/Object"),
         name: name.to_owned().into(),
         descriptor: descriptor.parse().expect("a valid method descriptor"),
@@ -137,7 +137,7 @@ pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodRef {
 /// A call with the given dispatch kind, symbolic method, and arguments.
 pub(crate) fn call(
     kind: InvocationKind,
-    method: MethodRef,
+    method: MethodReference,
     args: impl IntoIterator<Item = ValueId>,
 ) -> Expression {
     Expression::Call {

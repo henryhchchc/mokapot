@@ -6,7 +6,7 @@ use crate::{
         class::MethodHandleData,
         constant_pool::{Entry, FieldTypeId, MethodDescriptorId, NameAndType, ReturnTypeId},
         errors::{ParseError, ParsingErrorContext},
-        references::{FieldRefData, MethodRefData, ModuleRef},
+        references::{FieldRefData, MethodRefData, ModuleReference},
     },
     types::{
         field_type::FieldType,
@@ -173,7 +173,7 @@ fn resolve_entry(
         RawEntry::MethodType { descriptor_index } => {
             Entry::MethodType(pool.intern_method_descriptor(descriptor_index.into())?)
         }
-        RawEntry::Module { name_index } => Entry::Module(ModuleRef {
+        RawEntry::Module { name_index } => Entry::Module(ModuleReference {
             name: pool.get_utf8(name_index.into())?.to_owned(),
         }),
         RawEntry::Package { name_index } => Entry::Package(

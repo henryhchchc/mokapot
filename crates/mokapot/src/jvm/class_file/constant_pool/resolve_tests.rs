@@ -1,7 +1,7 @@
 use super::*;
 use crate::jvm::{
-    ConstantValue, ConstantValueView, JavaString,
-    class::{MethodHandle, MethodHandleView},
+    ConstantVal, ConstantValue, JavaString,
+    class::{MethodHandle, MethodHndl},
     class_file::constant_pool::RawEntry,
     errors::ParseErrorKind,
 };
@@ -100,7 +100,7 @@ fn member_views_share_owners_names_and_descriptors() {
     assert_eq!(field.name().as_bytes(), &[0xed, 0xa0, 0x80]);
     assert_eq!(field.into_owned().name.as_bytes(), name.as_bytes());
     assert_eq!(method.into_owned().name.as_bytes(), name.as_bytes());
-    let ConstantValueView::Dynamic(bootstrap, dynamic_name, ty) =
+    let ConstantVal::Dynamic(bootstrap, dynamic_name, ty) =
         pool.constant_value(pool.constant_value_id(17).unwrap())
     else {
         panic!("expected dynamic constant");
@@ -193,7 +193,7 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
     assert_eq!(pool.method_descriptor(descriptor).descriptor(), "()V");
     assert_eq!(pool.field_type(field_type).descriptor(), "I");
     assert_eq!(pool.return_type(return_type), &ReturnType::Void);
-    assert_eq!(pool.constant_value(constant), ConstantValueView::Long(0));
+    assert_eq!(pool.constant_value(constant), ConstantVal::Long(0));
 }
 
 #[test]
@@ -329,7 +329,7 @@ fn method_handle_views_share_references_and_compare_values() {
     let other = method_handle_pool(9, 11).unwrap();
     let handle = pool.method_handle(pool.method_handle_id(7).unwrap());
     let other_handle = other.method_handle(other.method_handle_id(7).unwrap());
-    let MethodHandleView::RefInvokeInterface(method) = handle else {
+    let MethodHndl::RefInvokeInterface(method) = handle else {
         panic!()
     };
     let member = pool.method_ref(pool.interface_method_ref_id(6).unwrap());
@@ -338,7 +338,7 @@ fn method_handle_views_share_references_and_compare_values() {
     assert!(std::ptr::eq(method.descriptor(), member.descriptor()));
     assert_eq!(handle, other_handle);
     assert_eq!(hash(handle), hash(other_handle));
-    assert_ne!(handle, MethodHandleView::RefInvokeStatic(method));
+    assert_ne!(handle, MethodHndl::RefInvokeStatic(method));
 }
 
 #[test]
@@ -392,7 +392,7 @@ fn forward_references_resolve_typed_values_and_keep_indices() {
     );
     assert!(matches!(
         pool.constant_value(pool.constant_value_id(10).unwrap()),
-        ConstantValueView::Dynamic(3, _, _)
+        ConstantVal::Dynamic(3, _, _)
     ));
     assert_eq!(
         pool.invoke_dynamic(pool.invoke_dynamic_id(11).unwrap()).0,
@@ -445,7 +445,7 @@ fn string_entries_preserve_jvm_bytes() {
     let pool = resolve(raw).unwrap().finish();
     assert_eq!(pool.get_utf8(1).unwrap().as_bytes(), bytes);
     let constant = pool.constant_value(pool.constant_value_id(2).unwrap());
-    let ConstantValueView::String(value) = constant else {
+    let ConstantVal::String(value) = constant else {
         panic!("expected string constant");
     };
     assert!(std::ptr::eq(value, pool.utf8(pool.utf8_id(1).unwrap())));

@@ -28,7 +28,7 @@ pub use annotation::{
 pub use attribute::Attribute;
 pub use class::Class;
 pub use class_loader::ClassLoader;
-pub use constant_value::{ConstantValue, ConstantValueView};
+pub use constant_value::{ConstantVal, ConstantValue};
 pub use field::Field;
 pub use method::Method;
 pub use module::Module;

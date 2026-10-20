@@ -2,7 +2,7 @@ use super::*;
 use crate::jvm::class_file::constant_pool::{
     ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
 };
-use crate::jvm::{Class, code::Instruction, references::MethodRef};
+use crate::jvm::{Class, code::Instruction, references::MethodReference};
 
 #[test]
 fn tableswitch_resolves_backward_default_and_inclusive_range() {
@@ -77,7 +77,7 @@ fn invokeinterface_parses_interface_method_refs() {
     assert_eq!(count, 1);
     assert_eq!(
         method.into_owned(),
-        MethodRef {
+        MethodReference {
             owner: "a/b/I".parse().unwrap(),
             name: "m".to_owned().into(),
             descriptor: "()V".parse().unwrap(),
