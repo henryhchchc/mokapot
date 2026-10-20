@@ -125,7 +125,11 @@ impl<'class> Field<'class> {
     /// Returns a borrowed reference to this field.
     #[must_use]
     pub fn as_ref(&self) -> FieldRef<'class> {
-        FieldRef::new(self.class.reference_type(), self.name(), self.field_type())
+        FieldRef {
+            owner: self.class.reference_type(),
+            name: self.name(),
+            field_type: self.field_type(),
+        }
     }
 }
 
