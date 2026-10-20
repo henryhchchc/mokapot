@@ -94,8 +94,8 @@ impl FromStr for ReferenceType {
     /// Accepts `java/lang/String`, `Ljava/lang/String;`, and `[I`.
     #[doc = see_jvm_spec!(4, 4, 1)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = JavaString::from(s.to_owned());
-        Self::try_from(s.as_java_str())
+        let name = JavaStr::from_str(s);
+        Self::try_from(name.as_ref())
     }
 }
 

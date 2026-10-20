@@ -153,8 +153,7 @@ impl FromStr for PrimitiveType {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor.to_owned());
-        let mut bytes = descriptor.as_java_str().as_bytes();
+        let mut bytes = descriptor.as_bytes();
         let pt = Self::parse_prefix(&mut bytes)?;
         if bytes.is_empty() {
             Ok(pt)
@@ -337,8 +336,8 @@ impl FromStr for FieldType {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor.to_owned());
-        Self::try_from(descriptor.as_java_str())
+        let desc_jstr = JavaStr::from_str(descriptor);
+        Self::try_from(desc_jstr.as_ref())
     }
 }
 

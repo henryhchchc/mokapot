@@ -52,6 +52,17 @@ impl JavaStr {
         mutf8::decode_strict(&self.bytes).map_err(|_| JavaStrDecodeError)
     }
 
+    /// Encodes Rust text as a JVM modified UTF-8 string.
+    #[must_use]
+    #[expect(clippy::should_implement_trait, reason = "Different return type")]
+    pub fn from_str(s: &str) -> Cow<'_, JavaStr> {
+        match mutf8::encode(s) {
+            // SAFETY: `mutf8::encode` returns a borrowed slice if `s` is valid modified UTF-8.
+            Cow::Borrowed(bytes) => Cow::Borrowed(unsafe { Self::from_cesu8_unchecked(bytes) }),
+            Cow::Owned(bytes) => Cow::Owned(JavaString { bytes }),
+        }
+    }
+
     pub(crate) fn split_first_ascii(&self) -> Option<(u8, &Self)> {
         let (&first, rest) = self.bytes.split_first()?;
         if !first.is_ascii() {

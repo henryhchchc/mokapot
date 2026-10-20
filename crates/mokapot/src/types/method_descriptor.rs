@@ -126,8 +126,8 @@ impl FromStr for MethodDescriptor {
     type Err = InvalidDescriptor;
 
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor.to_owned());
-        Self::try_from(descriptor.as_java_str())
+        let jstr = JavaStr::from_str(descriptor);
+        Self::try_from(jstr.as_ref())
     }
 }
 
@@ -176,8 +176,8 @@ pub struct InvalidDescriptor;
 impl FromStr for ReturnType {
     type Err = InvalidDescriptor;
     fn from_str(descriptor: &str) -> Result<Self, Self::Err> {
-        let descriptor = JavaString::from(descriptor.to_owned());
-        Self::try_from(descriptor.as_java_str())
+        let jstr = JavaStr::from_str(descriptor);
+        Self::try_from(jstr.as_ref())
     }
 }
 
