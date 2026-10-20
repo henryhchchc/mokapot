@@ -3,6 +3,8 @@
 
 use std::str::FromStr;
 
+use derive_more::Display;
+
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{JavaStr, JavaString},
@@ -17,7 +19,8 @@ use crate::{
 /// assert_eq!(name.as_java_str(), "java.base");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 3)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
+#[display("{}", self.as_java_str())]
 pub struct ModuleName(JavaString);
 
 /// An invalid module name.
@@ -46,12 +49,6 @@ impl ModuleName {
 impl AsRef<JavaStr> for ModuleName {
     fn as_ref(&self) -> &JavaStr {
         self.as_java_str()
-    }
-}
-
-impl std::fmt::Display for ModuleName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.as_java_str(), f)
     }
 }
 

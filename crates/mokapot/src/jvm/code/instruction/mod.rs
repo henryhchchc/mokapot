@@ -1,5 +1,7 @@
 //! Resolved JVM instruction model and presentation.
 
+use derive_more::Display;
+
 mod data;
 pub(crate) use data::InstructionData;
 mod display;
@@ -280,19 +282,31 @@ pub enum Instruction<'class> {
     clippy::module_name_repetitions,
     reason = "For consistent type names with the JVM spec."
 )]
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Display)]
 pub enum WideInstruction {
+    #[display("iload {_0}")]
     ILoad(u16),
+    #[display("lload {_0}")]
     LLoad(u16),
+    #[display("fload {_0}")]
     FLoad(u16),
+    #[display("dload {_0}")]
     DLoad(u16),
+    #[display("aload {_0}")]
     ALoad(u16),
+    #[display("istore {_0}")]
     IStore(u16),
+    #[display("lstore {_0}")]
     LStore(u16),
+    #[display("fstore {_0}")]
     FStore(u16),
+    #[display("dstore {_0}")]
     DStore(u16),
+    #[display("astore {_0}")]
     AStore(u16),
+    #[display("iinc {_0} {_1}")]
     IInc(u16, i32),
+    #[display("ret {_0}")]
     Ret(u16),
 }
 

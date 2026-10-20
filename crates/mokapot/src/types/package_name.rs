@@ -3,6 +3,8 @@
 
 use std::str::FromStr;
 
+use derive_more::Display;
+
 use super::{class_name::ClassName, name_validation::validate_internal_name};
 use crate::{
     intrinsics::see_jvm_spec,
@@ -19,7 +21,8 @@ use crate::{
 /// assert_eq!(package.jls_name(), "java.lang");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 3)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
+#[display("{}", self.as_java_str())]
 pub struct PackageName(JavaString);
 
 /// An invalid package name.
@@ -62,12 +65,6 @@ impl PackageName {
 impl AsRef<JavaStr> for PackageName {
     fn as_ref(&self) -> &JavaStr {
         self.as_java_str()
-    }
-}
-
-impl std::fmt::Display for PackageName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.as_java_str(), f)
     }
 }
 
