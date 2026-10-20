@@ -74,24 +74,12 @@ pub(crate) struct MethodRefData {
 /// A borrowed symbolic field reference.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct FieldRef<'pool> {
-    owner: &'pool ReferenceType,
-    name: &'pool JavaStr,
-    field_type: &'pool FieldType,
+    pub(super) owner: &'pool ReferenceType,
+    pub(super) name: &'pool JavaStr,
+    pub(super) field_type: &'pool FieldType,
 }
 
 impl<'pool> FieldRef<'pool> {
-    pub(crate) const fn new(
-        owner: &'pool ReferenceType,
-        name: &'pool JavaStr,
-        field_type: &'pool FieldType,
-    ) -> Self {
-        Self {
-            owner,
-            name,
-            field_type,
-        }
-    }
-
     /// Returns the symbolic owner, which may be an array type.
     #[must_use]
     pub const fn owner(self) -> &'pool ReferenceType {
@@ -130,24 +118,12 @@ impl fmt::Display for FieldRef<'_> {
 /// A borrowed symbolic method reference.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct MethodRef<'pool> {
-    owner: &'pool ReferenceType,
-    name: &'pool JavaStr,
-    descriptor: &'pool MethodDescriptor,
+    pub(super) owner: &'pool ReferenceType,
+    pub(super) name: &'pool JavaStr,
+    pub(super) descriptor: &'pool MethodDescriptor,
 }
 
 impl<'pool> MethodRef<'pool> {
-    pub(crate) const fn new(
-        owner: &'pool ReferenceType,
-        name: &'pool JavaStr,
-        descriptor: &'pool MethodDescriptor,
-    ) -> Self {
-        Self {
-            owner,
-            name,
-            descriptor,
-        }
-    }
-
     /// Returns the symbolic owner, which may be an array type.
     #[must_use]
     pub const fn owner(self) -> &'pool ReferenceType {

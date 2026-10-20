@@ -163,7 +163,11 @@ impl<'class> Method<'class> {
     /// Returns a borrowed reference to this method.
     #[must_use]
     pub fn as_ref(&self) -> MethodRef<'class> {
-        MethodRef::new(self.class.reference_type(), self.name(), self.descriptor())
+        MethodRef {
+            owner: self.class.reference_type(),
+            name: self.name(),
+            descriptor: self.descriptor(),
+        }
     }
 
     /// The method of a static initializer block.
