@@ -207,7 +207,11 @@ impl ConstantPool {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::FieldRef(value) => {
                 let (name, field_type) = self.field_name_and_type(value.name_and_type);
-                FieldRef::new(self.reference_type(value.owner), name, field_type)
+                FieldRef {
+                    owner: self.reference_type(value.owner),
+                    name,
+                    field_type,
+                }
             }
             _ => unreachable!("validated entry kind"),
         }
@@ -216,7 +220,11 @@ impl ConstantPool {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => {
                 let (name, descriptor) = self.method_name_and_type(value.name_and_type);
-                MethodRef::new(self.reference_type(value.owner), name, descriptor)
+                MethodRef {
+                    owner: self.reference_type(value.owner),
+                    name,
+                    descriptor,
+                }
             }
             _ => unreachable!("validated entry kind"),
         }
