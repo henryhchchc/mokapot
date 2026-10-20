@@ -8,12 +8,13 @@ use crate::{
         class::{MethodHandleData, MethodHndl},
         constant_pool::storage::{PoolStorage, Slot},
         errors::{ParseError, ParsingErrorContext},
-        references::{FieldRef, FieldRefData, MethodRef, MethodRefData, ModuleReference},
+        references::{FieldRef, FieldRefData, MethodRef, MethodRefData},
     },
     types::{
         class_name::ClassName,
         field_type::FieldType,
         method_descriptor::{MethodDescriptor, ReturnType},
+        module_name::ModuleName,
         package_name::PackageName,
         reference_type::ReferenceType,
     },
@@ -115,7 +116,7 @@ pub(crate) enum Entry {
         name_and_type: MethodNameAndTypeId,
     },
     /// A module reference.
-    Module(ModuleReference),
+    Module(ModuleName),
     /// A package name.
     Package(PackageName),
 }
@@ -297,10 +298,10 @@ impl ConstantPool {
             Entry::Module(_) => Ok(ModuleId(
                 NonZeroU16::new(index).expect("validated nonzero index"),
             )),
-            entry => Err(entry.type_mismatch("ModuleRef")),
+            entry => Err(entry.type_mismatch("ModuleName")),
         }
     }
-    pub(crate) fn module_ref(&self, id: ModuleId) -> &ModuleReference {
+    pub(crate) fn module_name(&self, id: ModuleId) -> &ModuleName {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::Module(value) => value,
             _ => unreachable!("validated entry kind"),
