@@ -1,7 +1,7 @@
 use super::*;
 use crate::jvm::{
     JavaString,
-    references::{FieldRefData, MethodRef},
+    references::{FieldRefData, MethodReference},
 };
 use crate::types::Descriptor;
 
@@ -36,7 +36,7 @@ fn member_views_compare_and_hash_values_across_pools() {
             name_and_type,
         }));
         let field = FieldRefId(NonZeroU16::new(index).unwrap());
-        let method = pool.insert_method_ref(MethodRef {
+        let method = pool.insert_method_ref(MethodReference {
             owner: "pkg/Owner".parse().unwrap(),
             name: "method".to_owned().into(),
             descriptor: descriptor.parse().unwrap(),
@@ -118,7 +118,7 @@ fn miri_utf8_ranges_survive_growth_and_clone() {
 fn miri_owned_method_ref_preserves_pool_name_after_drop() {
     let name = [0xed, 0xa0, 0x80];
     let mut pool = ConstantPool::new();
-    let id = pool.insert_method_ref(MethodRef {
+    let id = pool.insert_method_ref(MethodReference {
         owner: "pkg/Owner".parse().unwrap(),
         name: JavaString::from_cesu8(name.to_vec()).unwrap(),
         descriptor: "()V".parse().unwrap(),

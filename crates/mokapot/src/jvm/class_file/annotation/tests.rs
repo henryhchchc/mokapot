@@ -77,7 +77,7 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
         values.get(0),
         Some(ElementValue::Primitive(
             PrimitiveType::Int,
-            ConstantValueView::Integer(42)
+            ConstantVal::Integer(42)
         ))
     );
     let ElementValue::String(string) = values.get(1).unwrap() else {
@@ -144,7 +144,7 @@ fn decodes_type_annotation_target_path_and_values() {
     assert_eq!(name, "value");
     assert_eq!(
         value,
-        ElementValue::Primitive(PrimitiveType::Int, ConstantValueView::Integer(42))
+        ElementValue::Primitive(PrimitiveType::Int, ConstantVal::Integer(42))
     );
 }
 

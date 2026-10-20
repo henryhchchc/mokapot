@@ -16,7 +16,6 @@ use super::{
     references::MethodRef,
 };
 use crate::intrinsics::see_jvm_spec;
-use crate::types::reference_type::ReferenceType;
 use crate::types::{class_name::ClassName, method_descriptor::MethodDescriptor};
 
 /// A generic type signature for a method.
@@ -161,6 +160,12 @@ impl<'class> Method<'class> {
             .map(|data| Attribute::new(self.class, data))
     }
 
+    /// Returns a borrowed reference to this method.
+    #[must_use]
+    pub fn as_ref(&self) -> MethodRef<'class> {
+        MethodRef::new(self.class.reference_type(), self.name(), self.descriptor())
+    }
+
     /// The method of a static initializer block.
     pub const CLASS_INITIALIZER_NAME: &'static str = "<clinit>";
     /// The method of a constructor.
@@ -176,16 +181,6 @@ impl<'class> Method<'class> {
     #[must_use]
     pub fn is_static_initializer_block(&self) -> bool {
         self.name() == Self::CLASS_INITIALIZER_NAME
-    }
-
-    /// Creates an owned [`MethodRef`] referring to this method.
-    #[must_use]
-    pub fn to_owned_ref(&self) -> MethodRef {
-        MethodRef {
-            owner: ReferenceType::Class(self.owner().name().clone()),
-            name: self.name().to_owned(),
-            descriptor: self.descriptor().clone(),
-        }
     }
 }
 

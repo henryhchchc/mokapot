@@ -7,7 +7,7 @@ use crate::intrinsics::ExactSizeIteratorExt;
 use super::{ParseError, ResolutionContext, resolve::Resolve};
 use crate::{
     jvm::{
-        ConstantValueView,
+        ConstantVal,
         annotation::{
             AnnotationData, ElementValueData, OffsetOf, TargetInfo, TypeAnnotationData,
             TypeArgumentLocation, TypeParameterLocation, TypePathElement, VariableKind,
@@ -248,7 +248,7 @@ impl Resolve for raw::ElementValueInfo {
                 tag @ (b'B' | b'C' | b'I' | b'S' | b'Z' | b'F' | b'D' | b'J'),
                 idx,
             ) => {
-                use ConstantValueView::{Double, Float, Integer, Long};
+                use ConstantVal::{Double, Float, Integer, Long};
                 let id = cp.constant_value_id(idx)?;
                 let kind = match (tag, cp.constant_value(id)) {
                     (b'B', Integer(_)) => PrimitiveType::Byte,

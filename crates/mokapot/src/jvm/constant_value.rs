@@ -6,7 +6,7 @@ use derive_more::Display;
 
 use super::{
     JavaStr, JavaString,
-    class::{MethodHandle, MethodHandleView},
+    class::{MethodHandle, MethodHndl},
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -56,7 +56,7 @@ pub enum ConstantValue {
 /// A borrowed compile-time constant value.
 #[doc = see_jvm_spec!(4, 4)]
 #[derive(Debug, Clone, Copy, Display)]
-pub enum ConstantValueView<'pool> {
+pub enum ConstantVal<'pool> {
     /// The `null` value.
     #[display("null")]
     Null,
@@ -80,7 +80,7 @@ pub enum ConstantValueView<'pool> {
     Class(&'pool ReferenceType),
     /// A method handle.
     #[display("{_0:?}")]
-    Handle(MethodHandleView<'pool>),
+    Handle(MethodHndl<'pool>),
     /// A method type.
     #[display("{_0:?}")]
     MethodType(&'pool MethodDescriptor),
@@ -89,21 +89,21 @@ pub enum ConstantValueView<'pool> {
     Dynamic(u16, &'pool JavaStr, &'pool FieldType),
 }
 
-impl ConstantValueView<'_> {
+impl ConstantVal<'_> {
     /// Converts this borrowed constant value into an owned value.
     #[must_use]
     pub fn into_owned(self) -> ConstantValue {
         match self {
-            ConstantValueView::Null => ConstantValue::Null,
-            ConstantValueView::Integer(value) => ConstantValue::Integer(value),
-            ConstantValueView::Float(value) => ConstantValue::Float(value),
-            ConstantValueView::Long(value) => ConstantValue::Long(value),
-            ConstantValueView::Double(value) => ConstantValue::Double(value),
-            ConstantValueView::String(value) => ConstantValue::String(value.to_owned()),
-            ConstantValueView::Class(value) => ConstantValue::Class(value.clone()),
-            ConstantValueView::Handle(value) => ConstantValue::Handle(value.into_owned()),
-            ConstantValueView::MethodType(value) => ConstantValue::MethodType(value.clone()),
-            ConstantValueView::Dynamic(bootstrap, name, ty) => {
+            ConstantVal::Null => ConstantValue::Null,
+            ConstantVal::Integer(value) => ConstantValue::Integer(value),
+            ConstantVal::Float(value) => ConstantValue::Float(value),
+            ConstantVal::Long(value) => ConstantValue::Long(value),
+            ConstantVal::Double(value) => ConstantValue::Double(value),
+            ConstantVal::String(value) => ConstantValue::String(value.to_owned()),
+            ConstantVal::Class(value) => ConstantValue::Class(value.clone()),
+            ConstantVal::Handle(value) => ConstantValue::Handle(value.into_owned()),
+            ConstantVal::MethodType(value) => ConstantValue::MethodType(value.clone()),
+            ConstantVal::Dynamic(bootstrap, name, ty) => {
                 ConstantValue::Dynamic(bootstrap, name.to_owned(), ty.clone())
             }
         }
@@ -195,7 +195,7 @@ macro_rules! impl_value_semantics {
 }
 
 impl_value_semantics!(ConstantValue);
-impl_value_semantics!(ConstantValueView<'_>);
+impl_value_semantics!(ConstantVal<'_>);
 
 #[cfg(test)]
 mod tests {
@@ -205,7 +205,7 @@ mod tests {
         hash::{Hash, Hasher},
     };
 
-    use super::{ConstantValueView, FieldType, JavaString};
+    use super::{ConstantVal, FieldType, JavaString};
 
     #[test]
     fn floating_point_identity() {
@@ -220,7 +220,7 @@ mod tests {
             f32::from_bits(0x7f80_0001),
             f32::from_bits(0xffc0_0042),
         ]
-        .map(ConstantValueView::Float);
+        .map(ConstantVal::Float);
         let doubles = [
             f64::NEG_INFINITY,
             -1.0,
@@ -232,12 +232,12 @@ mod tests {
             f64::from_bits(0x7ff0_0000_0000_0001),
             f64::from_bits(0xfff8_0000_0000_0042),
         ]
-        .map(ConstantValueView::Double);
+        .map(ConstantVal::Double);
 
         check_identity(&floats);
         check_identity(&doubles);
-        check_identity(&floats.map(ConstantValueView::into_owned));
-        check_identity(&doubles.map(ConstantValueView::into_owned));
+        check_identity(&floats.map(ConstantVal::into_owned));
+        check_identity(&doubles.map(ConstantVal::into_owned));
     }
 
     #[test]
@@ -247,20 +247,20 @@ mod tests {
         let class = "Ljava/lang/Object;".parse().unwrap();
         let descriptor = "()V".parse().unwrap();
         let views = [
-            ConstantValueView::Float(-0.0),
-            ConstantValueView::Float(0.0),
-            ConstantValueView::Float(f32::NAN),
-            ConstantValueView::Double(-0.0),
-            ConstantValueView::Double(0.0),
-            ConstantValueView::Double(f64::NAN),
-            ConstantValueView::Class(&class),
-            ConstantValueView::MethodType(&descriptor),
-            ConstantValueView::Dynamic(1, name.as_java_str(), &ty),
-            ConstantValueView::Dynamic(2, name.as_java_str(), &ty),
+            ConstantVal::Float(-0.0),
+            ConstantVal::Float(0.0),
+            ConstantVal::Float(f32::NAN),
+            ConstantVal::Double(-0.0),
+            ConstantVal::Double(0.0),
+            ConstantVal::Double(f64::NAN),
+            ConstantVal::Class(&class),
+            ConstantVal::MethodType(&descriptor),
+            ConstantVal::Dynamic(1, name.as_java_str(), &ty),
+            ConstantVal::Dynamic(2, name.as_java_str(), &ty),
         ];
 
         check_partial_order(&views);
-        check_partial_order(&views.map(ConstantValueView::into_owned));
+        check_partial_order(&views.map(ConstantVal::into_owned));
         assert_eq!(views[0].partial_cmp(&views[1]), Some(Ordering::Less));
         assert_eq!(views[3].partial_cmp(&views[4]), Some(Ordering::Less));
         assert_eq!(views[0].partial_cmp(&views[2]), None);

@@ -6,7 +6,7 @@ use crate::{
         Operation, ValueId,
         expression::{Expression, InvocationKind},
     },
-    jvm::{JavaStr, references::MethodRefView},
+    jvm::{JavaStr, references::MethodRef},
     types::{
         field_type::ValueCategory,
         method_descriptor::{MethodDescriptor, ReturnType},
@@ -22,7 +22,7 @@ enum CallResult {
 impl LiftContext<'_, '_> {
     pub fn invoke_static(
         &mut self,
-        method: MethodRefView<'_>,
+        method: MethodRef<'_>,
     ) -> Result<Option<Operation>, FrameError> {
         let result = self.call_result(&method.descriptor().return_type);
         let expr = Expression::Call {
@@ -35,7 +35,7 @@ impl LiftContext<'_, '_> {
 
     pub fn invoke_instance(
         &mut self,
-        method: MethodRefView<'_>,
+        method: MethodRef<'_>,
         kind: impl FnOnce(ValueId) -> InvocationKind,
     ) -> Result<Option<Operation>, FrameError> {
         let result = self.call_result(&method.descriptor().return_type);

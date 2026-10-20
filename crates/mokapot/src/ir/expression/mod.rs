@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use super::ValueId;
 use crate::{
-    jvm::{ConstantValue, JavaString, references::MethodRef},
+    jvm::{ConstantValue, JavaString, references::MethodReference},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -40,7 +40,7 @@ pub enum Expression {
         /// The invocation opcode's dispatch semantics and receiver.
         kind: InvocationKind,
         /// The unresolved symbolic method reference.
-        method: MethodRef,
+        method: MethodReference,
         /// The arguments.
         args: Vec<ValueId>,
     },

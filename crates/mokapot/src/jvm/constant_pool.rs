@@ -4,11 +4,11 @@ pub(crate) mod storage;
 
 use crate::{
     jvm::{
-        ConstantValueView, JavaStr,
-        class::{MethodHandleData, MethodHandleView},
+        ConstantVal, JavaStr,
+        class::{MethodHandleData, MethodHndl},
         constant_pool::storage::{PoolStorage, Slot},
         errors::{ParseError, ParsingErrorContext},
-        references::{FieldRefData, FieldRefView, MethodRefData, MethodRefView, ModuleRef},
+        references::{FieldRef, FieldRefData, MethodRef, MethodRefData, ModuleReference},
     },
     types::{
         class_name::ClassName,
@@ -115,7 +115,7 @@ pub(crate) enum Entry {
         name_and_type: MethodNameAndTypeId,
     },
     /// A module reference.
-    Module(ModuleRef),
+    Module(ModuleReference),
     /// A package name.
     Package(PackageName),
 }
@@ -203,16 +203,20 @@ impl ConstantPool {
             entry => Err(entry.type_mismatch("InvokeDynamic")),
         }
     }
-    pub(crate) fn field_ref(&self, id: FieldRefId) -> FieldRefView<'_> {
+    pub(crate) fn field_ref(&self, id: FieldRefId) -> FieldRef<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
-            Entry::FieldRef(value) => FieldRefView::new(self, value),
+            Entry::FieldRef(value) => {
+                let (name, field_type) = self.field_name_and_type(value.name_and_type);
+                FieldRef::new(self.reference_type(value.owner), name, field_type)
+            }
             _ => unreachable!("validated entry kind"),
         }
     }
-    pub(crate) fn method_ref(&self, id: MethodRefId) -> MethodRefView<'_> {
+    pub(crate) fn method_ref(&self, id: MethodRefId) -> MethodRef<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::MethodRef(value) | Entry::InterfaceMethodRef(value) => {
-                MethodRefView::new(self, value)
+                let (name, descriptor) = self.method_name_and_type(value.name_and_type);
+                MethodRef::new(self.reference_type(value.owner), name, descriptor)
             }
             _ => unreachable!("validated entry kind"),
         }
@@ -242,6 +246,9 @@ impl ConstantPool {
             Entry::Class { reference_type, .. } => reference_type,
             _ => unreachable!("validated entry kind"),
         }
+    }
+    pub(crate) fn class_reference_type(&self, id: ClassId) -> &ReferenceType {
+        self.reference_type(ReferenceTypeId(id.0))
     }
     pub(crate) fn class_id(&self, index: u16) -> Result<ClassId, ParseError> {
         match self.entry(index)? {
@@ -285,7 +292,7 @@ impl ConstantPool {
             entry => Err(entry.type_mismatch("ModuleRef")),
         }
     }
-    pub(crate) fn module_ref(&self, id: ModuleId) -> &ModuleRef {
+    pub(crate) fn module_ref(&self, id: ModuleId) -> &ModuleReference {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::Module(value) => value,
             _ => unreachable!("validated entry kind"),
@@ -299,7 +306,7 @@ impl ConstantPool {
             entry => Err(entry.type_mismatch("MethodHandle")),
         }
     }
-    pub(crate) fn method_handle(&self, id: MethodHandleId) -> MethodHandleView<'_> {
+    pub(crate) fn method_handle(&self, id: MethodHandleId) -> MethodHndl<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
             Entry::MethodHandle(value) => value.view(self),
             _ => unreachable!("validated entry kind"),
@@ -339,7 +346,7 @@ impl ConstantPool {
             NonZeroU16::new(index).expect("validated nonzero pool index"),
         ))
     }
-    pub(crate) fn constant_value(&self, id: ConstantValueId) -> ConstantValueView<'_> {
+    pub(crate) fn constant_value(&self, id: ConstantValueId) -> ConstantVal<'_> {
         self.get_constant_value(id.0.get())
             .expect("validated constant pool ID")
     }
@@ -406,24 +413,22 @@ impl ConstantPool {
         }
     }
 
-    fn get_constant_value(&self, index: u16) -> Result<ConstantValueView<'_>, ParseError> {
+    fn get_constant_value(&self, index: u16) -> Result<ConstantVal<'_>, ParseError> {
         Ok(match self.entry(index)? {
-            Entry::Integer(value) => ConstantValueView::Integer(*value),
-            Entry::Float(value) => ConstantValueView::Float(*value),
-            Entry::Long(value) => ConstantValueView::Long(*value),
-            Entry::Double(value) => ConstantValueView::Double(*value),
-            Entry::String(value) => ConstantValueView::String(self.utf8(*value)),
-            Entry::Class { reference_type, .. } => ConstantValueView::Class(reference_type),
-            Entry::MethodType(value) => {
-                ConstantValueView::MethodType(self.method_descriptor(*value))
-            }
-            Entry::MethodHandle(value) => ConstantValueView::Handle(value.view(self)),
+            Entry::Integer(value) => ConstantVal::Integer(*value),
+            Entry::Float(value) => ConstantVal::Float(*value),
+            Entry::Long(value) => ConstantVal::Long(*value),
+            Entry::Double(value) => ConstantVal::Double(*value),
+            Entry::String(value) => ConstantVal::String(self.utf8(*value)),
+            Entry::Class { reference_type, .. } => ConstantVal::Class(reference_type),
+            Entry::MethodType(value) => ConstantVal::MethodType(self.method_descriptor(*value)),
+            Entry::MethodHandle(value) => ConstantVal::Handle(value.view(self)),
             Entry::Dynamic {
                 bootstrap_method_attr_index,
                 name_and_type,
             } => {
                 let (name, ty) = self.field_name_and_type(*name_and_type);
-                ConstantValueView::Dynamic(*bootstrap_method_attr_index, name, ty)
+                ConstantVal::Dynamic(*bootstrap_method_attr_index, name, ty)
             }
             entry => return Err(entry.type_mismatch("Loadable constant")),
         })
