@@ -9,9 +9,8 @@ use crate::{
     jvm::{
         Class, DebugList, JavaStr,
         constant_pool::{ClassId, ModuleId, PackageId, Utf8Id},
-        references::ModuleReference,
     },
-    types::{class_name::ClassName, package_name::PackageName},
+    types::{class_name::ClassName, module_name::ModuleName, package_name::PackageName},
 };
 
 /// A module declared by a class.
@@ -96,12 +95,8 @@ pub struct Provide<'class> {
 impl<'class> Module<'class> {
     /// Returns the module name.
     #[must_use]
-    pub fn name(&self) -> &'class JavaStr {
-        self.class
-            .constant_pool
-            .module_ref(self.data.name)
-            .name
-            .as_java_str()
+    pub fn name(&self) -> &'class ModuleName {
+        self.class.constant_pool.module_name(self.data.name)
     }
 
     /// Returns the module flags.
@@ -162,8 +157,8 @@ impl<'class> Module<'class> {
 impl<'class> Require<'class> {
     /// Returns the required module.
     #[must_use]
-    pub fn module(&self) -> &'class ModuleReference {
-        self.class.constant_pool.module_ref(self.data.module)
+    pub fn module(&self) -> &'class ModuleName {
+        self.class.constant_pool.module_name(self.data.module)
     }
 
     /// Returns the require flags.
@@ -195,13 +190,11 @@ impl<'class> Export<'class> {
     }
 
     /// Returns the modules to which this package is exported.
-    pub fn to(
-        self,
-    ) -> impl ExactSizeIterator<Item = &'class ModuleReference> + DoubleEndedIterator {
+    pub fn to(self) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator {
         self.data
             .to
             .iter()
-            .map(|id| self.class.constant_pool.module_ref(*id))
+            .map(|id| self.class.constant_pool.module_name(*id))
     }
 }
 
@@ -219,13 +212,11 @@ impl<'class> Open<'class> {
     }
 
     /// Returns the modules to which this package is opened.
-    pub fn to(
-        self,
-    ) -> impl ExactSizeIterator<Item = &'class ModuleReference> + DoubleEndedIterator {
+    pub fn to(self) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator {
         self.data
             .to
             .iter()
-            .map(|id| self.class.constant_pool.module_ref(*id))
+            .map(|id| self.class.constant_pool.module_name(*id))
     }
 }
 
