@@ -200,12 +200,32 @@ fn main() {
 }
 
 mod primitive_type {
-    use super::{Bencher, BytesCount, PrimitiveType, black_box};
+    use super::{Bencher, BytesCount, Case, LazyLock, PrimitiveType, black_box};
 
-    #[divan::bench(args = ["I", "D", "", "V", "II", "日本語", "\0", "😀"])]
-    fn from_str(bencher: Bencher, descriptor: &str) {
-        let valid = matches!(descriptor, "I" | "D");
-        assert_eq!(descriptor.parse::<PrimitiveType>().is_ok(), valid);
+    static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
+        [
+            ("int", "I", true),
+            ("double", "D", true),
+            ("empty", "", false),
+            ("void", "V", false),
+            ("trailing_input", "II", false),
+            ("unicode", "日本語", false),
+            ("nul", "\0", false),
+            ("supplementary", "😀", false),
+        ]
+        .into_iter()
+        .map(|(name, descriptor, valid)| Case {
+            name,
+            descriptor: descriptor.to_owned(),
+            valid,
+        })
+        .collect()
+    });
+
+    #[divan::bench(args = CASES.iter())]
+    fn from_str(bencher: Bencher, case: &Case) {
+        let descriptor = case.descriptor.as_str();
+        assert_eq!(descriptor.parse::<PrimitiveType>().is_ok(), case.valid);
         bencher
             .counter(BytesCount::of_str(descriptor))
             .bench(|| black_box(descriptor).parse::<PrimitiveType>());
