@@ -1,11 +1,16 @@
-//! Field and method descriptor parsing without an external corpus.
+//! JVM type and name parsing without an external corpus.
 
 use std::{fmt, hint::black_box, sync::LazyLock};
 
 use divan::{Bencher, counter::BytesCount};
 use mokapot::{
     jvm::JavaString,
-    types::{field_type::FieldType, method_descriptor::MethodDescriptor},
+    types::{
+        class_name::ClassName,
+        field_type::{FieldType, PrimitiveType},
+        method_descriptor::MethodDescriptor,
+        reference_type::ReferenceType,
+    },
 };
 
 #[global_allocator]
@@ -192,4 +197,93 @@ mod method_descriptor {
 
 fn main() {
     divan::main();
+}
+
+mod primitive_type {
+    use super::{Bencher, BytesCount, PrimitiveType, black_box};
+
+    #[divan::bench(args = ["I", "D", "", "V", "II", "日本語", "\0", "😀"])]
+    fn from_str(bencher: Bencher, descriptor: &str) {
+        let valid = matches!(descriptor, "I" | "D");
+        assert_eq!(descriptor.parse::<PrimitiveType>().is_ok(), valid);
+        bencher
+            .counter(BytesCount::of_str(descriptor))
+            .bench(|| black_box(descriptor).parse::<PrimitiveType>());
+    }
+}
+
+mod class_name {
+    use super::{Bencher, BytesCount, Case, ClassName, LazyLock, black_box};
+
+    static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
+        [
+            ("ascii", "java/lang/String".to_owned(), true),
+            ("unicode", "example/日本語".to_owned(), true),
+            ("supplementary", "example/😀".to_owned(), true),
+            (
+                "long",
+                format!("{}Type", "example/package/".repeat(64)),
+                true,
+            ),
+            ("empty", String::new(), false),
+            ("invalid_separator", "java.lang.String".to_owned(), false),
+            (
+                "invalid_at_end",
+                format!("{}Type;", "example/package/".repeat(64)),
+                false,
+            ),
+        ]
+        .into_iter()
+        .map(|(name, descriptor, valid)| Case {
+            name,
+            descriptor,
+            valid,
+        })
+        .collect()
+    });
+
+    #[divan::bench(args = CASES.iter())]
+    fn from_str(bencher: Bencher, case: &Case) {
+        assert_eq!(case.descriptor.parse::<ClassName>().is_ok(), case.valid);
+        bencher
+            .counter(BytesCount::of_str(&case.descriptor))
+            .bench(|| black_box(case.descriptor.as_str()).parse::<ClassName>());
+    }
+}
+
+mod reference_type {
+    use super::{Bencher, BytesCount, Case, LazyLock, ReferenceType, black_box};
+
+    static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
+        [
+            ("internal_name", "java/lang/String".to_owned(), true),
+            ("object_descriptor", "Ljava/lang/String;".to_owned(), true),
+            ("unicode", "Lexample/日本語;".to_owned(), true),
+            ("supplementary", "Lexample/😀;".to_owned(), true),
+            ("primitive_array", "[I".to_owned(), true),
+            (
+                "deep_array",
+                format!("{}Ljava/lang/String;", "[".repeat(255)),
+                true,
+            ),
+            ("empty", String::new(), false),
+            ("invalid_array", "[V".to_owned(), false),
+            ("invalid_name", "java.lang.String".to_owned(), false),
+        ]
+        .into_iter()
+        .map(|(name, descriptor, valid)| Case {
+            name,
+            descriptor,
+            valid,
+        })
+        .collect()
+    });
+
+    #[divan::bench(args = CASES.iter())]
+    fn from_str(bencher: Bencher, case: &Case) {
+        assert_eq!(case.descriptor.parse::<ReferenceType>().is_ok(), case.valid);
+        bencher
+            .counter(BytesCount::of_str(&case.descriptor))
+            .bench(|| black_box(case.descriptor.as_str()).parse::<ReferenceType>());
+    }
 }
