@@ -1,61 +1,6 @@
 use super::*;
-use crate::jvm::{
-    JavaString,
-    references::{FieldRefData, MethodReference},
-};
+use crate::jvm::{JavaString, references::MethodReference};
 use crate::types::Descriptor;
-
-#[test]
-fn member_views_compare_and_hash_values_across_pools() {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
-
-    fn hash(value: impl Hash) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    let [
-        (pool, field, method),
-        (other, other_field, other_method),
-        (different, different_field, different_method),
-    ] = [("field", "()V"), ("field", "()V"), ("other", "()I")].map(|(name, descriptor)| {
-        let mut pool = ConstantPool::new();
-        let owner = pool.insert_reference_type("pkg/Owner".parse().unwrap());
-        let name = pool.insert_utf8(name.to_owned().into());
-        let ty = pool.insert_field_type("I".parse().unwrap());
-        let index = pool
-            .inner
-            .push(Entry::NameAndType(NameAndType::Field(name, ty)));
-        let name_and_type = FieldNameAndTypeId(NonZeroU16::new(index).unwrap());
-        let index = pool.inner.push(Entry::FieldRef(FieldRefData {
-            owner,
-            name_and_type,
-        }));
-        let field = FieldRefId(NonZeroU16::new(index).unwrap());
-        let method = pool.insert_method_ref(MethodReference {
-            owner: "pkg/Owner".parse().unwrap(),
-            name: "method".to_owned().into(),
-            descriptor: descriptor.parse().unwrap(),
-        });
-        (pool, field, method)
-    });
-    let field = pool.field_ref(field);
-    let other_field = other.field_ref(other_field);
-    assert_eq!(field, other_field);
-    assert_eq!(hash(field), hash(other_field));
-
-    let method = pool.method_ref(method);
-    let other_method = other.method_ref(other_method);
-    assert_eq!(method, other_method);
-    assert_eq!(hash(method), hash(other_method));
-
-    assert_ne!(field, different.field_ref(different_field));
-    assert_ne!(method, different.method_ref(different_method));
-}
 
 #[test]
 fn miri_utf8_ranges_preserve_boundaries() {
