@@ -8,6 +8,26 @@ use crate::jvm::{
 use crate::types::Descriptor;
 use crate::types::class_name::ClassName;
 
+#[test]
+fn resolves_and_validates_module_names() {
+    for name in [b"java.base".as_slice(), br"a\:b", b"a:b", b"a\xc0\x80b"] {
+        let raw = RawConstantPool::from_entries([
+            RawEntry::Utf8(name),
+            RawEntry::Module {
+                name_index: 1.into(),
+            },
+        ]);
+        let result = resolve(raw);
+        if matches!(name, b"a:b" | b"a\xc0\x80b") {
+            assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
+        } else {
+            let pool = result.unwrap();
+            let id = pool.module_id(2).unwrap();
+            assert_eq!(pool.module_name(id).as_java_str().as_bytes(), name);
+        }
+    }
+}
+
 fn member_pool() -> ConstantPool {
     let raw = RawConstantPool::from_entries([
         RawEntry::Utf8(b"[I"),

@@ -174,15 +174,6 @@ impl fmt::Display for MethodRef<'_> {
     }
 }
 
-/// A reference to a [`Module`](crate::jvm::Module).
-#[doc = see_jvm_spec!(4, 4, 11)]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
-#[display("{name}")]
-pub struct ModuleReference {
-    /// The name of the module.
-    pub name: JavaString,
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
