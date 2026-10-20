@@ -16,7 +16,7 @@ pub(crate) trait Decode<'a>: Sized {
 }
 
 /// Copies a fixed wire value. Leaves the input unchanged on failure.
-pub(super) fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
+fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
     let (value, remaining) = T::read_from_prefix(bytes)
         .map_err(|_| ParseError::malform("Truncated class-file value"))?;
     *bytes = remaining;
@@ -49,6 +49,12 @@ impl<'a> Decode<'a> for u32 {
 impl<'a> Decode<'a> for i32 {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         Ok(read_wire::<I32>(bytes)?.get())
+    }
+}
+
+impl<'a, T: FixedLayout> Decode<'a> for T {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        read_wire::<Self>(bytes)
     }
 }
 
