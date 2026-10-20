@@ -43,7 +43,7 @@ impl ClassName {
     pub fn new(name: impl Into<JavaString>) -> Result<Self, InvalidClassName> {
         let name = name.into();
         validate_internal_name(name.as_java_str()).map_err(InvalidClassName)?;
-        Ok(Self(Arc::from(name)))
+        Ok(Self(Arc::from(name.into_boxed_java_str())))
     }
 
     /// Returns the name in JVM internal form.
