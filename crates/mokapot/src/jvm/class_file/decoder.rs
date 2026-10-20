@@ -27,30 +27,20 @@ fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
 pub(super) fn decode_value<'a, T: Decode<'a>>(bytes: &mut &'a [u8]) -> Result<T, ParseError> {
     T::decode(bytes)
 }
-
-impl<'a> Decode<'a> for u16 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<U16>(bytes)?.get())
-    }
+macro_rules! impl_decode_integer {
+    ($type:ty, $wire_type:ty) => {
+        impl<'a> Decode<'a> for $type {
+            fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+                Ok(read_wire::<$wire_type>(bytes)?.get())
+            }
+        }
+    };
 }
 
-impl<'a> Decode<'a> for i16 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<I16>(bytes)?.get())
-    }
-}
-
-impl<'a> Decode<'a> for u32 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<U32>(bytes)?.get())
-    }
-}
-
-impl<'a> Decode<'a> for i32 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<I32>(bytes)?.get())
-    }
-}
+impl_decode_integer!(u16, U16);
+impl_decode_integer!(i16, I16);
+impl_decode_integer!(u32, U32);
+impl_decode_integer!(i32, I32);
 
 impl<'a, T: FixedLayout> Decode<'a> for T {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
