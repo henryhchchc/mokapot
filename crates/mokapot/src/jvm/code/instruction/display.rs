@@ -1,25 +1,6 @@
 use std::fmt;
 
-use super::{Instruction, WideInstruction};
-
-impl fmt::Display for WideInstruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ILoad(index) => write!(f, "iload {index}"),
-            Self::LLoad(index) => write!(f, "lload {index}"),
-            Self::FLoad(index) => write!(f, "fload {index}"),
-            Self::DLoad(index) => write!(f, "dload {index}"),
-            Self::ALoad(index) => write!(f, "aload {index}"),
-            Self::IStore(index) => write!(f, "istore {index}"),
-            Self::LStore(index) => write!(f, "lstore {index}"),
-            Self::FStore(index) => write!(f, "fstore {index}"),
-            Self::DStore(index) => write!(f, "dstore {index}"),
-            Self::AStore(index) => write!(f, "astore {index}"),
-            Self::IInc(index, value) => write!(f, "iinc {index} {value}"),
-            Self::Ret(index) => write!(f, "ret {index}"),
-        }
-    }
-}
+use super::Instruction;
 
 impl fmt::Display for Instruction<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1,7 +1,6 @@
 //! References to JVM elements.
 
 use derive_more::Display;
-use std::fmt;
 
 use super::{
     JavaStr, JavaString, Method,
@@ -72,7 +71,8 @@ pub(crate) struct MethodRefData {
 }
 
 /// A borrowed symbolic field reference.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Display)]
+#[display("{owner}.{name}")]
 pub struct FieldRef<'pool> {
     pub(super) owner: &'pool ReferenceType,
     pub(super) name: &'pool JavaStr,
@@ -109,14 +109,9 @@ impl<'pool> FieldRef<'pool> {
     }
 }
 
-impl fmt::Display for FieldRef<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.owner(), self.name())
-    }
-}
-
 /// A borrowed symbolic method reference.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Display)]
+#[display("{owner}::{name}")]
 pub struct MethodRef<'pool> {
     pub(super) owner: &'pool ReferenceType,
     pub(super) name: &'pool JavaStr,
@@ -165,11 +160,5 @@ impl<'pool> MethodRef<'pool> {
             name: self.name().to_owned(),
             descriptor: self.descriptor().clone(),
         }
-    }
-}
-
-impl fmt::Display for MethodRef<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}::{}", self.owner(), self.name())
     }
 }
