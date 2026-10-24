@@ -39,7 +39,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-codspeed
-        uses: taiki-e/install-action@v2.87.28
+        uses: taiki-e/install-action@v2.87.30
         with:
           tool: cargo-codspeed
       - name: Setup JDK
