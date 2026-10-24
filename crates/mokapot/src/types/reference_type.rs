@@ -21,6 +21,7 @@ use derive_more::{Display, From};
 
 use crate::{
     intrinsics::see_jvm_spec,
+    jvm::{JavaStr, JavaString},
     types::class_name::ClassName,
     types::{Descriptor, field_type::FieldType, method_descriptor::InvalidDescriptor},
 };
@@ -40,19 +41,38 @@ pub enum ReferenceType {
 impl ReferenceType {
     /// Returns a JLS-style name, such as `java.lang.String[]` or `java.util.Map$Entry`.
     #[must_use]
-    pub fn jls_name(&self) -> String {
+    pub fn jls_name(&self) -> JavaString {
         match self {
             Self::Class(class_name) => class_name.jls_name(),
-            Self::Array(inner) => format!("{}[]", inner.jls_name()),
+            Self::Array(inner) => {
+                let mut name = inner.jls_name();
+                name.push_str("[]");
+                name
+            }
         }
     }
 }
 
 impl Descriptor for ReferenceType {
-    fn descriptor(&self) -> String {
+    fn descriptor(&self) -> JavaString {
+        let mut bytes = Vec::new();
+        self.push_descriptor(&mut bytes);
+        JavaString::from_cesu8(bytes).expect("reference descriptors contain valid modified UTF-8")
+    }
+}
+
+impl ReferenceType {
+    fn push_descriptor(&self, bytes: &mut Vec<u8>) {
         match self {
-            Self::Class(class_name) => format!("L{class_name};"),
-            Self::Array(inner) => format!("[{}", inner.descriptor()),
+            Self::Class(class_name) => {
+                bytes.push(b'L');
+                bytes.extend_from_slice(class_name.as_java_str().as_bytes());
+                bytes.push(b';');
+            }
+            Self::Array(inner) => {
+                bytes.push(b'[');
+                inner.push_descriptor(bytes);
+            }
         }
     }
 }
@@ -74,21 +94,36 @@ impl FromStr for ReferenceType {
     /// Accepts `java/lang/String`, `Ljava/lang/String;`, and `[I`.
     #[doc = see_jvm_spec!(4, 4, 1)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with('[') {
-            let ft = FieldType::from_str(s)?;
+        let name = JavaStr::from_str(s);
+        Self::try_from(name.as_ref())
+    }
+}
+
+impl TryFrom<&JavaStr> for ReferenceType {
+    type Error = InvalidDescriptor;
+
+    /// Parses an internal class name or a class or array descriptor.
+    ///
+    /// Accepts `java/lang/String`, `Ljava/lang/String;`, and `[I`.
+    #[doc = see_jvm_spec!(4, 4, 1)]
+    fn try_from(s: &JavaStr) -> Result<Self, Self::Error> {
+        let bytes = s.as_bytes();
+        if bytes.starts_with(b"[") {
+            let ft = FieldType::try_from(s)?;
             match ft {
                 FieldType::Array(inner) => Ok(Self::Array(inner)),
                 _ => Err(InvalidDescriptor),
             }
-        } else if s.starts_with('L') && s.ends_with(';') && s.len() > 2 {
+        } else if bytes.starts_with(b"L") && bytes.ends_with(b";") && bytes.len() > 2 {
             // Lenient: strip L and ; to recover the binary name.
             // Real-world class files (e.g. from javac) sometimes
             // emit field descriptors here despite JVMS §4.4.1.
-            let inner = &s[1..s.len() - 1];
-            let class_name = ClassName::from_str(inner).map_err(|_| InvalidDescriptor)?;
+            let inner =
+                JavaStr::from_cesu8(&bytes[1..bytes.len() - 1]).map_err(|_| InvalidDescriptor)?;
+            let class_name = ClassName::try_from(inner).map_err(|_| InvalidDescriptor)?;
             Ok(Self::Class(class_name))
         } else {
-            let class_name = ClassName::from_str(s).map_err(|_| InvalidDescriptor)?;
+            let class_name = ClassName::try_from(s).map_err(|_| InvalidDescriptor)?;
             Ok(Self::Class(class_name))
         }
     }
@@ -111,51 +146,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_reference_forms_and_preserves_binary_names() {
-        for (input, descriptor, jls_name) in [
-            ("java/lang/String", "Ljava/lang/String;", "java.lang.String"),
+    fn distinguishes_class_and_array_reference_forms() {
+        let class: ReferenceType = "java/lang/String".parse().unwrap();
+        assert!(matches!(class, ReferenceType::Class(_)));
+        assert_eq!(class.descriptor(), "Ljava/lang/String;");
+
+        let descriptor_class: ReferenceType = "Ljava/lang/String;".parse().unwrap();
+        assert_eq!(descriptor_class, class);
+
+        let array: ReferenceType = "[I".parse().unwrap();
+        assert!(matches!(array, ReferenceType::Array(_)));
+        assert_eq!(array.jls_name(), "int[]");
+
+        // A single letter is a class name here, even if it is a primitive descriptor.
+        let single_letter: ReferenceType = "I".parse().unwrap();
+        assert_eq!(
+            single_letter,
+            ReferenceType::Class(ClassName::new("I".to_owned()).unwrap())
+        );
+    }
+
+    #[test]
+    fn parses_modified_utf8_class_names_and_arrays() {
+        for (bytes, expected) in [
             (
-                "Ljava/lang/String;",
-                "Ljava/lang/String;",
-                "java.lang.String",
+                &[b'p', b'/', 0xed, 0xa0, 0x80][..],
+                &[b'L', b'p', b'/', 0xed, 0xa0, 0x80, b';'][..],
             ),
             (
-                "java/util/Map$Entry",
-                "Ljava/util/Map$Entry;",
-                "java.util.Map$Entry",
+                &[b'[', b'L', b'p', b'/', 0xed, 0xa0, 0x80, b';'][..],
+                &[b'[', b'L', b'p', b'/', 0xed, 0xa0, 0x80, b';'][..],
             ),
-            (
-                "Ljava/util/Map$Entry;",
-                "Ljava/util/Map$Entry;",
-                "java.util.Map$Entry",
-            ),
-            ("[I", "[I", "int[]"),
-            (
-                "[Ljava/util/Map$Entry;",
-                "[Ljava/util/Map$Entry;",
-                "java.util.Map$Entry[]",
-            ),
-            (
-                "[[Ljava/util/Map$Entry;",
-                "[[Ljava/util/Map$Entry;",
-                "java.util.Map$Entry[][]",
-            ),
-            // A single letter is a class name here, even if it is a primitive descriptor.
-            ("I", "LI;", "I"),
         ] {
-            let reference_type: ReferenceType = input.parse().unwrap();
-            assert_eq!(reference_type.descriptor(), descriptor);
-            assert_eq!(reference_type.jls_name(), jls_name);
-            match &reference_type {
-                ReferenceType::Class(name) => {
-                    assert!(!input.starts_with('['));
-                    assert_eq!(name.as_str(), &descriptor[1..descriptor.len() - 1]);
-                }
-                ReferenceType::Array(_) => assert!(input.starts_with('[')),
-            }
-            let field_type = FieldType::from(reference_type);
-            assert_eq!(field_type.descriptor(), descriptor);
-            assert_eq!(field_type.jls_name(), jls_name);
+            let encoded = JavaStr::from_cesu8(bytes).unwrap();
+            let reference = ReferenceType::try_from(encoded).unwrap();
+            assert_eq!(reference.descriptor().as_java_str().as_bytes(), expected);
         }
     }
 }

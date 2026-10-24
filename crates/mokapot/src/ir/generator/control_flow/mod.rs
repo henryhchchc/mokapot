@@ -22,25 +22,25 @@ use crate::{
 };
 
 /// Builds the reachable control-flow graph used by the later dataflow stage.
-pub(super) fn analyze(method: &Method) -> Result<Cfg<'_>, Error> {
+pub(super) fn analyze(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     builder::build(method)
 }
 
 /// A control-flow graph whose block identities are fixed before dataflow
 /// propagation begins.
 pub(crate) struct Cfg<'method> {
-    method: &'method Method,
-    body: &'method MethodBody,
+    method: Method<'method>,
+    body: MethodBody<'method>,
     entry: BlockId,
     blocks: HashMap<BlockId, CfgNode>,
 }
 
 impl<'method> Cfg<'method> {
-    pub const fn method(&self) -> &'method Method {
+    pub const fn method(&self) -> Method<'method> {
         self.method
     }
 
-    pub const fn body(&self) -> &'method MethodBody {
+    pub const fn body(&self) -> MethodBody<'method> {
         self.body
     }
 
@@ -61,8 +61,8 @@ impl<'method> Cfg<'method> {
         &self,
         start: ProgramCounter,
         end: ProgramCounter,
-    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, &Instruction)> {
-        self.body().instructions.range(start..=end)
+    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, Instruction<'method>)> {
+        self.body().instructions().range(start..=end)
     }
 }
 

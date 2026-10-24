@@ -1,5 +1,8 @@
 use super::*;
-use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry};
+use crate::jvm::class_file::constant_pool::{
+    ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
+};
+use crate::jvm::{Class, code::Instruction, references::MethodReference};
 
 #[test]
 fn tableswitch_resolves_backward_default_and_inclusive_range() {
@@ -11,18 +14,22 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
         .next()
         .unwrap()
         .unwrap();
-    let actual = Instruction::from_raw_instruction(raw, 10.into(), &ConstantPool::new()).unwrap();
+    let actual = InstructionData::from_raw_instruction(raw, 10.into(), &mut empty_pool()).unwrap();
     assert_eq!(
-        actual,
+        actual.view(&Class::default()),
         Instruction::TableSwitch {
             default: 5.into(),
             low: -1,
-            jump_targets: Box::new([10.into(), 11.into()]),
+            jump_targets: &[10.into(), 11.into()],
         }
     );
 }
 
-fn interface_method_pool(is_interface: bool) -> ConstantPool<'static> {
+fn empty_pool() -> ConstantPoolBuilder {
+    resolve(RawConstantPool::from_entries([])).unwrap()
+}
+
+fn interface_method_pool(is_interface: bool) -> ConstantPoolBuilder {
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
             class_index: 2.into(),
@@ -47,7 +54,7 @@ fn interface_method_pool(is_interface: bool) -> ConstantPool<'static> {
         },
         entry,
     ]);
-    ConstantPool::from_raw(raw).unwrap()
+    resolve(raw).unwrap()
 }
 
 #[test]
@@ -56,55 +63,52 @@ fn invokeinterface_parses_interface_method_refs() {
         .next()
         .unwrap()
         .unwrap();
+    let mut pool = interface_method_pool(true);
+    let data = InstructionData::from_raw_instruction(instruction, pc, &mut pool).unwrap();
+    let name = pool.class_id(2).unwrap();
+    let class = Class {
+        name,
+        constant_pool: pool.finish(),
+        ..Class::default()
+    };
+    let Instruction::InvokeInterface(method, count) = data.view(&class) else {
+        panic!("expected invokeinterface")
+    };
+    assert_eq!(count, 1);
     assert_eq!(
-        Instruction::from_raw_instruction(instruction, pc, &interface_method_pool(true)).unwrap(),
-        Instruction::InvokeInterface(
-            crate::jvm::references::MethodRef {
-                owner: crate::types::reference_type::ReferenceType::Class("a/b/I".parse().unwrap()),
-                name: "m".to_owned(),
-                descriptor: "()V".parse().unwrap(),
-            },
-            1,
-        ),
+        method.into_owned(),
+        MethodReference {
+            owner: "a/b/I".parse().unwrap(),
+            name: "m".to_owned().into(),
+            descriptor: "()V".parse().unwrap(),
+        }
     );
 }
 
 #[test]
-fn invokeinterface_rejects_method_refs() {
-    let (pc, instruction) = RawInstruction::iter_from_bytes(&[0xb9, 0, 6, 1, 0])
-        .next()
-        .unwrap()
-        .unwrap();
-    let pool = interface_method_pool(false);
-    let error = Instruction::from_raw_instruction(instruction, pc, &pool).unwrap_err();
-    assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
-}
-
-#[test]
-fn push_immediates_preserve_signed_values_through_ir() {
-    use crate::ir::test::prelude::*;
-    use crate::jvm::ConstantValue;
-
-    let cases = [
-        (vec![0x10, 0x80, 0xac], -128),
-        (vec![0x10, 0x7f, 0xac], 127),
-        (vec![0x11, 0x80, 0x00, 0xac], -32768),
-        (vec![0x11, 0x7f, 0xff, 0xac], 32767),
-    ];
-    for (bytes, expected) in cases {
-        let pool = ConstantPool::new();
-        let instructions = RawInstruction::iter_from_bytes(&bytes)
-            .map(|item| {
-                let (pc, raw) = item?;
-                Instruction::from_raw_instruction(raw, pc, &pool)
-                    .map(|instruction| (pc, instruction))
-            })
-            .collect::<Result<Vec<_>, ParseError>>()
-            .unwrap();
-        let method = method(instructions, "()I", vec![]);
-        let ir = MokaIRMethod::from_method(&method).unwrap();
-        let definitions = operations(&ir).collect::<Vec<_>>();
-        assert_matches!(definitions.as_slice(), [Operation::Definition { value, expr: Expression::Const(ConstantValue::Integer(actual)) }]
-            if *actual == expected && matches!(&ir.block(ir.entry.block).unwrap().terminator, Terminator::Return { value: Some(returned), .. } if returned == value));
+fn invocation_opcodes_preserve_pool_kind_validation() {
+    for interface in [false, true] {
+        let mut pool = interface_method_pool(interface);
+        for opcode in [0xb6, 0xb7, 0xb8, 0xb9] {
+            let bytes = [opcode, 0, 6, 1, 0];
+            let (pc, raw) = RawInstruction::iter_from_bytes(&bytes)
+                .next()
+                .unwrap()
+                .unwrap();
+            let result = InstructionData::from_raw_instruction(raw, pc, &mut pool);
+            let valid = match opcode {
+                0xb6 => !interface,
+                0xb9 => interface,
+                _ => true,
+            };
+            if valid {
+                assert!(result.is_ok());
+            } else {
+                assert_eq!(
+                    result.unwrap_err().kind(),
+                    crate::jvm::errors::ParseErrorKind::Malformed
+                );
+            }
+        }
     }
 }

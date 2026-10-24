@@ -4,12 +4,9 @@ use zerocopy::{
 };
 
 mod extract;
-mod raw;
+pub(super) mod raw;
 mod resolve;
 pub(super) use extract::extract_attributes;
-
-use crate::types::class_name::ClassName;
-use crate::types::package_name::PackageName;
 
 use super::{
     Decode, ParseError, ResolutionContext,
@@ -24,11 +21,17 @@ use super::{
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
-        Annotation, ConstantValue, Module, TypeAnnotation,
-        annotation::ElementValue,
-        class::{BootstrapMethod, EnclosingMethod, InnerClassInfo, RecordComponent},
-        code::{LineNumberTableEntry, MethodBody, StackMapFrame},
-        method::ParameterInfo,
+        annotation::{AnnotationData, ElementValueData, TypeAnnotationData},
+        attribute::AttributeData,
+        class::{
+            bootstrap::BootstrapMethodData,
+            nesting::{EnclosingMethodData, InnerClassData},
+            record_component::RecordComponentData,
+        },
+        code::{LineNumberTableEntry, MethodBodyData, StackMapFrameData},
+        constant_pool::{ClassId, ConstantValueId, PackageId, Utf8Id},
+        method::ParameterInfoData,
+        module::ModuleData,
     },
 };
 
@@ -60,41 +63,41 @@ impl<'a> Decode<'a> for &'a AttributeInfo {
 
 #[derive(Debug)]
 pub(crate) enum Attribute {
-    ConstantValue(ConstantValue),
-    Code(MethodBody),
-    StackMapTable(Box<[StackMapFrame]>),
-    Exceptions(Box<[ClassName]>),
-    SourceFile(String),
+    ConstantValue(ConstantValueId),
+    Code(MethodBodyData),
+    StackMapTable(Box<[StackMapFrameData]>),
+    Exceptions(Box<[ClassId]>),
+    SourceFile(Utf8Id),
     LineNumberTable(Box<[LineNumberTableEntry]>),
-    InnerClasses(Box<[InnerClassInfo]>),
+    InnerClasses(Box<[InnerClassData]>),
     Synthetic,
     Deprecated,
-    EnclosingMethod(EnclosingMethod),
-    Signature(String),
+    EnclosingMethod(EnclosingMethodData),
+    Signature(Utf8Id),
     SourceDebugExtension(Box<[u8]>),
     LocalVariableTable(Box<[LocalVariableDescriptorEntry]>),
     LocalVariableTypeTable(Box<[LocalVariableSignatureEntry]>),
-    RuntimeVisibleAnnotations(Box<[Annotation]>),
-    RuntimeInvisibleAnnotations(Box<[Annotation]>),
-    RuntimeVisibleParameterAnnotations(Box<[Box<[Annotation]>]>),
-    RuntimeInvisibleParameterAnnotations(Box<[Box<[Annotation]>]>),
-    RuntimeVisibleTypeAnnotations(Box<[TypeAnnotation]>),
-    RuntimeInvisibleTypeAnnotations(Box<[TypeAnnotation]>),
-    AnnotationDefault(ElementValue),
-    BootstrapMethods(Box<[BootstrapMethod]>),
-    MethodParameters(Box<[ParameterInfo]>),
-    Module(Module),
-    ModulePackages(Box<[PackageName]>),
-    ModuleMainClass(ClassName),
-    NestHost(ClassName),
-    NestMembers(Box<[ClassName]>),
-    Record(Box<[RecordComponent]>),
-    PermittedSubclasses(Box<[ClassName]>),
-    Unrecognized(String, Box<[u8]>),
+    RuntimeVisibleAnnotations(Box<[AnnotationData]>),
+    RuntimeInvisibleAnnotations(Box<[AnnotationData]>),
+    RuntimeVisibleParameterAnnotations(Box<[Box<[AnnotationData]>]>),
+    RuntimeInvisibleParameterAnnotations(Box<[Box<[AnnotationData]>]>),
+    RuntimeVisibleTypeAnnotations(Box<[TypeAnnotationData]>),
+    RuntimeInvisibleTypeAnnotations(Box<[TypeAnnotationData]>),
+    AnnotationDefault(ElementValueData),
+    BootstrapMethods(Box<[BootstrapMethodData]>),
+    MethodParameters(Box<[ParameterInfoData]>),
+    Module(ModuleData),
+    ModulePackages(Box<[PackageId]>),
+    ModuleMainClass(ClassId),
+    NestHost(ClassId),
+    NestMembers(Box<[ClassId]>),
+    Record(Box<[RecordComponentData]>),
+    PermittedSubclasses(Box<[ClassId]>),
+    Unrecognized(AttributeData),
 }
 
 impl Attribute {
-    pub fn name(&self) -> &str {
+    pub const fn name(&self) -> &str {
         match self {
             Self::ConstantValue(_) => "ConstantValue",
             Self::Code(_) => "Code",
@@ -126,7 +129,7 @@ impl Attribute {
             Self::NestMembers(_) => "NestMembers",
             Self::Record(_) => "Record",
             Self::PermittedSubclasses(_) => "PermittedSubclasses",
-            Self::Unrecognized(name, _) => name,
+            Self::Unrecognized(_) => "unrecognized",
         }
     }
 }
@@ -138,60 +141,64 @@ impl Resolve for &AttributeInfo {
         clippy::too_many_lines,
         reason = "Dispatches JVM attributes with explicit wire counts"
     )]
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let name = ctx.constant_pool.get_str(self.attribute_name_index.get())?;
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
+        let name_id = ctx.constant_pool.utf8_id(self.attribute_name_index.get())?;
         let mut info = &self.info;
         let bytes = &mut info;
 
-        let result = match name.as_ref() {
-            "ConstantValue" => {
+        let result = match ctx.constant_pool.utf8(name_id).as_bytes() {
+            b"ConstantValue" => {
                 decode_resolved::<raw::ConstantValue>(bytes, ctx).map(Attribute::ConstantValue)
             }
-            "Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
-            "StackMapTable" => {
+            b"Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
+            b"StackMapTable" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<code_raw::StackMapFrameInfo>(bytes, ctx)
                 })
                 .map(Attribute::StackMapTable)
             }
-            "Exceptions" => {
+            b"Exceptions" => {
                 decode_resolved::<&raw::Exceptions>(bytes, ctx).map(Attribute::Exceptions)
             }
-            "InnerClasses" => {
+            b"InnerClasses" => {
                 decode_resolved::<&raw::InnerClasses>(bytes, ctx).map(Attribute::InnerClasses)
             }
-            "EnclosingMethod" => decode_resolved::<class_raw::EnclosingMethod>(bytes, ctx)
+            b"EnclosingMethod" => decode_resolved::<class_raw::EnclosingMethod>(bytes, ctx)
                 .map(Attribute::EnclosingMethod),
-            "Synthetic" => Ok(Attribute::Synthetic),
-            "Deprecated" => Ok(Attribute::Deprecated),
-            "Signature" => decode_resolved::<raw::Signature>(bytes, ctx).map(Attribute::Signature),
-            "SourceFile" => {
+            b"Synthetic" => Ok(Attribute::Synthetic),
+            b"Deprecated" => Ok(Attribute::Deprecated),
+            b"Signature" => decode_resolved::<raw::Signature>(bytes, ctx).map(Attribute::Signature),
+            b"SourceFile" => {
                 decode_resolved::<raw::SourceFile>(bytes, ctx).map(Attribute::SourceFile)
             }
-            "SourceDebugExtension" => return Ok(Attribute::SourceDebugExtension(info.into())),
-            "LineNumberTable" => {
+            b"SourceDebugExtension" => {
+                return Ok(Attribute::SourceDebugExtension(info.into()));
+            }
+            b"LineNumberTable" => {
                 decode_resolved::<&raw::LineNumberTable>(bytes, ctx).map(Attribute::LineNumberTable)
             }
-            "LocalVariableTable" => decode_resolved::<&raw::LocalVariableTable>(bytes, ctx)
+            b"LocalVariableTable" => decode_resolved::<&raw::LocalVariableTable>(bytes, ctx)
                 .map(Attribute::LocalVariableTable),
-            "LocalVariableTypeTable" => decode_resolved::<&raw::LocalVariableTypeTable>(bytes, ctx)
-                .map(Attribute::LocalVariableTypeTable),
-            "RuntimeVisibleAnnotations" => {
+            b"LocalVariableTypeTable" => {
+                decode_resolved::<&raw::LocalVariableTypeTable>(bytes, ctx)
+                    .map(Attribute::LocalVariableTypeTable)
+            }
+            b"RuntimeVisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleAnnotations)
             }
-            "RuntimeInvisibleAnnotations" => {
+            b"RuntimeInvisibleAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleAnnotations)
             }
-            "RuntimeVisibleParameterAnnotations" => {
+            b"RuntimeVisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
@@ -201,7 +208,7 @@ impl Resolve for &AttributeInfo {
                 })
                 .map(Attribute::RuntimeVisibleParameterAnnotations)
             }
-            "RuntimeInvisibleParameterAnnotations" => {
+            b"RuntimeInvisibleParameterAnnotations" => {
                 let count: u8 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     let count: u16 = decode_value(bytes)?;
@@ -211,54 +218,59 @@ impl Resolve for &AttributeInfo {
                 })
                 .map(Attribute::RuntimeInvisibleParameterAnnotations)
             }
-            "RuntimeVisibleTypeAnnotations" => {
+            b"RuntimeVisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
-            "RuntimeInvisibleTypeAnnotations" => {
+            b"RuntimeInvisibleTypeAnnotations" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleTypeAnnotations)
             }
-            "AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
+            b"AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
                 .map(Attribute::AnnotationDefault),
-            "BootstrapMethods" => {
+            b"BootstrapMethods" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<&class_raw::BootstrapMethod>(bytes, ctx)
                 })
                 .map(Attribute::BootstrapMethods)
             }
-            "MethodParameters" => decode_resolved::<&raw::MethodParameters>(bytes, ctx)
+            b"MethodParameters" => decode_resolved::<&raw::MethodParameters>(bytes, ctx)
                 .map(Attribute::MethodParameters),
-            "Module" => {
+            b"Module" => {
                 decode_resolved::<module_raw::ModuleInfo>(bytes, ctx).map(Attribute::Module)
             }
-            "ModulePackages" => {
+            b"ModulePackages" => {
                 decode_resolved::<&raw::ModulePackages>(bytes, ctx).map(Attribute::ModulePackages)
             }
-            "ModuleMainClass" => {
+            b"ModuleMainClass" => {
                 decode_resolved::<raw::ModuleMainClass>(bytes, ctx).map(Attribute::ModuleMainClass)
             }
-            "NestHost" => decode_resolved::<raw::NestHost>(bytes, ctx).map(Attribute::NestHost),
-            "NestMembers" => {
+            b"NestHost" => decode_resolved::<raw::NestHost>(bytes, ctx).map(Attribute::NestHost),
+            b"NestMembers" => {
                 decode_resolved::<&raw::NestMembers>(bytes, ctx).map(Attribute::NestMembers)
             }
-            "Record" => {
+            b"Record" => {
                 let count: u16 = decode_value(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<class_raw::RecordComponentInfo>(bytes, ctx)
                 })
                 .map(Attribute::Record)
             }
-            "PermittedSubclasses" => decode_resolved::<&raw::PermittedSubclasses>(bytes, ctx)
+            b"PermittedSubclasses" => decode_resolved::<&raw::PermittedSubclasses>(bytes, ctx)
                 .map(Attribute::PermittedSubclasses),
-            name => return Ok(Attribute::Unrecognized(name.to_owned(), info.into())),
+            _ => {
+                return Ok(Attribute::Unrecognized(AttributeData {
+                    name: name_id,
+                    bytes: self.info.into(),
+                }));
+            }
         }?;
         if !bytes.is_empty() {
             return Err(ParseError::malform(
@@ -274,7 +286,8 @@ mod tests {
     use super::*;
     use crate::jvm::{
         class::Version,
-        class_file::constant_pool::{RawConstantPool, RawEntry},
+        class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
+        errors::ParseErrorKind,
     };
 
     fn attribute_bytes(name_index: u16, info: &[u8]) -> Vec<u8> {
@@ -304,23 +317,19 @@ mod tests {
         for name in ["SourceDebugExtension", "VendorData"] {
             let raw_pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
             let index = 1;
-            let ctx = ResolutionContext {
-                constant_pool: crate::jvm::class_file::constant_pool::ConstantPool::from_raw(
-                    raw_pool,
-                )
-                .unwrap(),
+            let mut ctx = ResolutionContext {
+                constant_pool: resolve(raw_pool).unwrap(),
                 class_version: Version::LATEST,
-                current_class_name: "Test".parse().unwrap(),
             };
             let payload = [0xaa, 0xbb];
             let bytes = attribute_bytes(index, &payload);
             let raw = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
-            let attribute = raw.resolve(&ctx).unwrap();
+            let attribute = raw.resolve(&mut ctx).unwrap();
             match attribute {
                 Attribute::SourceDebugExtension(bytes) => assert_eq!(&*bytes, [0xaa, 0xbb]),
-                Attribute::Unrecognized(name, bytes) => {
-                    assert_eq!(name, "VendorData");
-                    assert_eq!(&*bytes, [0xaa, 0xbb]);
+                Attribute::Unrecognized(data) => {
+                    assert_eq!(ctx.constant_pool.utf8(data.name), "VendorData");
+                    assert_eq!(&*data.bytes, [0xaa, 0xbb]);
                 }
                 _ => panic!("expected a retained byte payload"),
             }
@@ -343,10 +352,9 @@ mod tests {
         ] {
             let pool = RawConstantPool::from_entries([RawEntry::Utf8(name.as_bytes())]);
             let index = 1;
-            let ctx = ResolutionContext {
-                constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
+            let mut ctx = ResolutionContext {
+                constant_pool: resolve(pool).unwrap(),
                 class_version: Version::LATEST,
-                current_class_name: "Test".parse().unwrap(),
             };
             let count_width = match name {
                 "Synthetic" => 0,
@@ -357,8 +365,8 @@ mod tests {
             payload.push(0xff);
             let bytes = attribute_bytes(index, &payload);
             let raw = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
-            let error = raw.resolve(&ctx).unwrap_err();
-            assert_eq!(error.kind(), crate::jvm::errors::ParseErrorKind::Malformed);
+            let error = raw.resolve(&mut ctx).unwrap_err();
+            assert_eq!(error.kind(), ParseErrorKind::Malformed);
         }
     }
 
@@ -376,49 +384,51 @@ mod tests {
             },
         ]);
         let attribute_name_index = 1;
-        let constant_pool =
-            crate::jvm::class_file::constant_pool::ConstantPool::from_raw(raw_pool).unwrap();
-        let ctx = ResolutionContext {
+        let constant_pool = resolve(raw_pool).unwrap();
+        let mut ctx = ResolutionContext {
             constant_pool,
             class_version: Version::LATEST,
-            current_class_name: "module-info".parse().unwrap(),
         };
         let bytes = attribute_bytes(attribute_name_index, &[0, 2, 0, 3, 0, 5]);
         let attribute_info = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
 
-        let attribute = attribute_info.resolve(&ctx).unwrap();
+        let attribute = attribute_info.resolve(&mut ctx).unwrap();
 
         let Attribute::ModulePackages(packages) = attribute else {
             panic!("expected ModulePackages attribute");
         };
         assert_eq!(packages.len(), 2);
-        assert_eq!(packages[0].as_str(), "example/api");
-        assert_eq!(packages[1].as_str(), "example/internal");
+        assert_eq!(
+            ctx.constant_pool.package_name(packages[0]).as_java_str(),
+            "example/api"
+        );
+        assert_eq!(
+            ctx.constant_pool.package_name(packages[1]).as_java_str(),
+            "example/internal"
+        );
     }
 
     #[test]
     fn method_parameters_resolve_borrowed_records() {
-        use crate::jvm::{errors::ParseErrorKind, method::ParameterAccessFlags};
+        use crate::jvm::method::ParameterAccessFlags;
         let pool = RawConstantPool::from_entries([
             RawEntry::Utf8(b"MethodParameters"),
-            RawEntry::Utf8(b"value"),
+            RawEntry::Utf8(&[0xed, 0xa0, 0x80]),
         ]);
         let attribute_name_index = 1;
-        let ctx = ResolutionContext {
-            constant_pool: super::super::constant_pool::ConstantPool::from_raw(pool).unwrap(),
+        let mut ctx = ResolutionContext {
+            constant_pool: resolve(pool).unwrap(),
             class_version: Version::LATEST,
-            current_class_name: "Test".parse().unwrap(),
         };
         let bytes = [0xff, 1, 0, 2, 0, 0x10];
-        let resolve = |info| {
+        let mut resolve = |info| {
             let bytes = attribute_bytes(attribute_name_index, info);
-            <&AttributeInfo>::decode(&mut bytes.as_slice())?.resolve(&ctx)
+            <&AttributeInfo>::decode(&mut bytes.as_slice())?.resolve(&mut ctx)
         };
         let Attribute::MethodParameters(parameters) = resolve(&bytes[1..]).unwrap() else {
             panic!("expected method parameters");
         };
         assert_eq!(parameters.len(), 1);
-        assert_eq!(parameters[0].name.as_deref(), Some("value"));
         assert_eq!(parameters[0].access_flags, ParameterAccessFlags::FINAL);
         assert!(
             matches!(resolve(&[0]).unwrap(), Attribute::MethodParameters(parameters) if parameters.is_empty())
@@ -427,5 +437,7 @@ mod tests {
             resolve(&bytes[1..bytes.len() - 1]).unwrap_err().kind(),
             ParseErrorKind::Malformed
         );
+        let name = ctx.constant_pool.utf8(parameters[0].name.unwrap());
+        assert_eq!(name.as_bytes(), &[0xed, 0xa0, 0x80]);
     }
 }

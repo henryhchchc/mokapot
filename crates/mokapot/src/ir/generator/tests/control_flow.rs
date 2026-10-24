@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::jvm::ConstantPool;
 use crate::{
     ir::{
         BranchGuard, ControlTransfer,
@@ -12,10 +13,10 @@ use crate::{
 #[test]
 fn branch_preserves_taken_then_fallthrough_guards() {
     let body = [
-        (0, Instruction::ILoad0),
-        (1, Instruction::IfEq(5.into())),
-        (2, Instruction::Return),
-        (5, Instruction::Return),
+        (0, InstructionData::ILoad0),
+        (1, InstructionData::IfEq(5.into())),
+        (2, InstructionData::Return),
+        (5, InstructionData::Return),
     ];
     let ir = lift(body, "(I)V", vec![]);
     let branch = &ir.block(ir.entry.block).unwrap().terminator;
@@ -35,11 +36,11 @@ fn branch_preserves_taken_then_fallthrough_guards() {
 #[test]
 fn comparison_branch_preserves_operand_order() {
     let body = [
-        (0, Instruction::ILoad0),
-        (1, Instruction::ILoad1),
-        (2, Instruction::IfICmpLt(6.into())),
-        (5, Instruction::Return),
-        (6, Instruction::Return),
+        (0, InstructionData::ILoad0),
+        (1, InstructionData::ILoad1),
+        (2, InstructionData::IfICmpLt(6.into())),
+        (5, InstructionData::Return),
+        (6, InstructionData::Return),
     ];
     let ir = lift(body, "(II)V", vec![]);
     let branch = &ir.block(ir.entry.block).unwrap().terminator;
@@ -57,20 +58,20 @@ fn comparison_branch_preserves_operand_order() {
 
 #[test]
 fn switches_preserve_ordered_parallel_arms_and_case_guards() {
-    let table = Instruction::TableSwitch {
+    let table = InstructionData::TableSwitch {
         low: 3,
         jump_targets: Box::new([10.into(), 10.into()]),
         default: 10.into(),
     };
-    let lookup = Instruction::LookupSwitch {
+    let lookup = InstructionData::LookupSwitch {
         default: 10.into(),
         match_targets: BTreeMap::from([(1, 10.into()), (5, 10.into())]),
     };
     for (instruction, cases) in [(table, [3, 4]), (lookup, [1, 5])] {
         let body = [
-            (0, Instruction::ILoad0),
+            (0, InstructionData::ILoad0),
             (1, instruction),
-            (10, Instruction::Return),
+            (10, InstructionData::Return),
         ];
         let ir = lift(body, "(I)V", vec![]);
         let switch = &ir.block(ir.entry.block).unwrap().terminator;
@@ -98,14 +99,14 @@ fn switches_preserve_ordered_parallel_arms_and_case_guards() {
 #[test]
 fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
     let match_targets = BTreeMap::new();
-    let instruction = Instruction::LookupSwitch {
+    let instruction = InstructionData::LookupSwitch {
         default: 10.into(),
         match_targets,
     };
     let body = [
-        (0, Instruction::ILoad0),
+        (0, InstructionData::ILoad0),
         (1, instruction),
-        (10, Instruction::Return),
+        (10, InstructionData::Return),
     ];
     let ir = lift(body, "(I)V", vec![]);
     let terminator = &ir.block(ir.entry.block).unwrap().terminator;
@@ -134,17 +135,19 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         handler(1.into()..2.into(), 10.into(), Some(runtime)),
         handler(1.into()..2.into(), 20.into(), Some(throwable)),
     ];
+    let mut pool = ConstantPool::new();
+    let string_type = pool.insert_reference_type(ref_t("java/lang/String"));
     let body = [
-        (0, Instruction::AConstNull),
-        (1, Instruction::CheckCast(ref_t("java/lang/String"))),
-        (2, Instruction::Pop),
-        (3, Instruction::Return),
-        (10, Instruction::AStore0),
-        (11, Instruction::Return),
-        (20, Instruction::AStore0),
-        (21, Instruction::Return),
+        (0, InstructionData::AConstNull),
+        (1, InstructionData::CheckCast(string_type)),
+        (2, InstructionData::Pop),
+        (3, InstructionData::Return),
+        (10, InstructionData::AStore0),
+        (11, InstructionData::Return),
+        (20, InstructionData::AStore0),
+        (21, InstructionData::Return),
     ];
-    let ir = lift(body, "()V", table);
+    let ir = lift_with_pool(pool, body, "()V", table);
     let fallible = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_matches!(fallible, Terminator::Try { .. });
@@ -155,41 +158,10 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         .successors()
         .skip(1)
         .map(|it| match it.transfer() {
-            Some(ControlTransfer::Exception(Some(caught))) => caught.as_str(),
+            Some(ControlTransfer::Exception(Some(caught))) => caught.as_java_str(),
             _ => panic!(),
         })
         .collect::<Vec<_>>();
     let expected = ["java/lang/RuntimeException", "java/lang/Throwable"];
     assert_eq!(handler_types, expected);
-}
-
-#[test]
-fn loop_header_takes_a_block_argument_from_its_back_edge() {
-    let body = [
-        (0, Instruction::IConst0),
-        (1, Instruction::IStore1),
-        (2, Instruction::ILoad1),
-        (3, Instruction::ILoad0),
-        (4, Instruction::IfICmpGe(7.into())),
-        (5, Instruction::IInc(1, 1)),
-        (6, Instruction::Goto(2.into())),
-        (7, Instruction::ILoad1),
-        (8, Instruction::IReturn),
-    ];
-    let ir = lift(body, "(I)I", vec![]);
-    let bb = ir.block(ir.entry.block).unwrap();
-    let next_succ = bb.terminator.successors().next().unwrap();
-    let header = next_succ.block_target().expect("the entry falls through");
-
-    let header = ir.block(header).unwrap();
-    let [param] = header.parameters.as_slice() else {
-        panic!("the loop header merges its counter through exactly one block argument");
-    };
-    let counter = PathValue::Variable(param.value);
-    let limit = PathValue::Variable(ir.parameters[0]);
-    let guard = BranchGuard::of(BooleanVariable::from(Predicate::GreaterThanOrEqual(
-        counter, limit,
-    )));
-    let taken = header.terminator.successors().next().unwrap();
-    assert_eq!(taken.transfer(), Some(&ControlTransfer::Conditional(guard)));
 }

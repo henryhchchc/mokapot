@@ -6,7 +6,7 @@ use crate::{
         Operation, ValueId,
         expression::{Expression, InvocationKind},
     },
-    jvm::references::MethodRef,
+    jvm::{JavaStr, references::MethodRef},
     types::{
         field_type::ValueCategory,
         method_descriptor::{MethodDescriptor, ReturnType},
@@ -20,27 +20,30 @@ enum CallResult {
 }
 
 impl LiftContext<'_, '_> {
-    pub fn invoke_static(&mut self, method: &MethodRef) -> Result<Option<Operation>, FrameError> {
-        let result = self.call_result(&method.descriptor.return_type);
+    pub fn invoke_static(
+        &mut self,
+        method: MethodRef<'_>,
+    ) -> Result<Option<Operation>, FrameError> {
+        let result = self.call_result(&method.descriptor().return_type);
         let expr = Expression::Call {
             kind: InvocationKind::Static,
-            method: method.clone(),
-            args: self.frame.stack.pop_arguments(&method.descriptor)?,
+            method: method.into_owned(),
+            args: self.frame.stack.pop_arguments(method.descriptor())?,
         };
         self.finish_call(result, expr)
     }
 
     pub fn invoke_instance(
         &mut self,
-        method: &MethodRef,
+        method: MethodRef<'_>,
         kind: impl FnOnce(ValueId) -> InvocationKind,
     ) -> Result<Option<Operation>, FrameError> {
-        let result = self.call_result(&method.descriptor.return_type);
-        let args = self.frame.stack.pop_arguments(&method.descriptor)?;
+        let result = self.call_result(&method.descriptor().return_type);
+        let args = self.frame.stack.pop_arguments(method.descriptor())?;
         let this = self.frame.stack.pop(Category1)?;
         let expr = Expression::Call {
             kind: kind(this),
-            method: method.clone(),
+            method: method.into_owned(),
             args,
         };
         self.finish_call(result, expr)
@@ -50,7 +53,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         descriptor: &MethodDescriptor,
         bootstrap_method_index: u16,
-        name: &str,
+        name: &JavaStr,
     ) -> Result<Option<Operation>, FrameError> {
         let result = self.call_result(&descriptor.return_type);
         let expr = Expression::Closure {

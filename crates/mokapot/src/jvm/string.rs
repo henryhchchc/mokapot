@@ -4,6 +4,7 @@ use std::{
     borrow::{Borrow, Cow},
     fmt,
     ops::Deref,
+    sync::Arc,
 };
 
 use derive_more::Display;
@@ -49,6 +50,60 @@ impl JavaStr {
     /// Returns an error if the string contains unpaired surrogates.
     pub fn to_str(&self) -> Result<Cow<'_, str>, JavaStrDecodeError> {
         mutf8::decode_strict(&self.bytes).map_err(|_| JavaStrDecodeError)
+    }
+
+    /// Encodes Rust text as a JVM modified UTF-8 string.
+    #[must_use]
+    #[expect(clippy::should_implement_trait, reason = "Different return type")]
+    pub fn from_str(s: &str) -> Cow<'_, JavaStr> {
+        match mutf8::encode(s) {
+            // SAFETY: `mutf8::encode` returns a borrowed slice if `s` is valid modified UTF-8.
+            Cow::Borrowed(bytes) => Cow::Borrowed(unsafe { Self::from_cesu8_unchecked(bytes) }),
+            Cow::Owned(bytes) => Cow::Owned(JavaString { bytes }),
+        }
+    }
+
+    pub(crate) fn split_first_ascii(&self) -> Option<(u8, &Self)> {
+        let (&first, rest) = self.bytes.split_first()?;
+        if !first.is_ascii() {
+            return None;
+        }
+        // SAFETY: Removing an ASCII byte preserves modified UTF-8 validity.
+        Some((first, unsafe { Self::from_cesu8_unchecked(rest) }))
+    }
+
+    pub(crate) fn split_once_ascii(&self, separator: u8) -> Option<(&Self, &Self)> {
+        assert!(separator.is_ascii());
+        let index = self.bytes.iter().position(|&byte| byte == separator)?;
+        let (before, after) = self.bytes.split_at(index);
+        // SAFETY: ASCII separators cannot occur inside a multibyte sequence.
+        Some(unsafe {
+            (
+                Self::from_cesu8_unchecked(before),
+                Self::from_cesu8_unchecked(&after[1..]),
+            )
+        })
+    }
+
+    pub(crate) fn split_ascii(&self, separator: u8) -> impl DoubleEndedIterator<Item = &Self> {
+        assert!(separator.is_ascii());
+        self.bytes
+            .split(move |&byte| byte == separator)
+            .map(|bytes| {
+                // SAFETY: ASCII separators cannot occur inside a multibyte sequence.
+                unsafe { Self::from_cesu8_unchecked(bytes) }
+            })
+    }
+
+    pub(crate) fn replace_ascii(&self, from: u8, to: u8) -> JavaString {
+        assert!(from.is_ascii() && to.is_ascii() && from != 0 && to != 0);
+        JavaString {
+            bytes: self
+                .bytes
+                .iter()
+                .map(|&byte| if byte == from { to } else { byte })
+                .collect(),
+        }
     }
 }
 
@@ -176,21 +231,33 @@ impl JavaString {
         unsafe { JavaStr::from_cesu8_unchecked(self.bytes.as_slice()) }
     }
 
+    /// Converts this [`JavaString`] into [`Box<JavaStr>`].
+    #[must_use]
+    pub fn into_boxed_java_str(self) -> Box<JavaStr> {
+        let bytes = self.bytes.into_boxed_slice();
+        // SAFETY: JavaStr is transparent over [u8], and the bytes are valid.
+        unsafe { Box::from_raw(Box::into_raw(bytes) as *mut JavaStr) }
+    }
+
     /// Returns the original JVM-encoded bytes, consuming the string.
     #[must_use]
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
+
+    /// Appends a Java string.
+    pub fn push_java_str(&mut self, value: &JavaStr) {
+        self.bytes.extend_from_slice(value.as_bytes());
+    }
+
+    /// Encodes and appends Rust text.
+    pub fn push_str(&mut self, value: &str) {
+        self.bytes.extend_from_slice(&mutf8::encode(value));
+    }
 }
 
 impl Borrow<JavaStr> for JavaString {
     fn borrow(&self) -> &JavaStr {
-        self.as_java_str()
-    }
-}
-
-impl AsRef<JavaStr> for JavaString {
-    fn as_ref(&self) -> &JavaStr {
         self.as_java_str()
     }
 }
@@ -214,17 +281,47 @@ impl From<String> for JavaString {
     }
 }
 
-impl From<&str> for JavaString {
-    fn from(value: &str) -> Self {
-        Self {
-            bytes: mutf8::encode(value).into_owned(),
-        }
+impl From<&JavaStr> for Arc<JavaStr> {
+    fn from(value: &JavaStr) -> Self {
+        let bytes: Arc<[u8]> = Arc::from(value.as_bytes());
+        // SAFETY: JavaStr is transparent over [u8], and the source guarantees
+        // valid encoding. The allocation layout and reference counts are unchanged.
+        unsafe { Self::from_raw(Arc::into_raw(bytes) as *const JavaStr) }
+    }
+}
+impl PartialEq<str> for JavaStr {
+    fn eq(&self, other: &str) -> bool {
+        self.as_bytes() == mutf8::encode(other).as_ref()
     }
 }
 
-impl From<&JavaStr> for JavaString {
-    fn from(value: &JavaStr) -> Self {
-        value.to_owned()
+impl PartialEq<&str> for JavaStr {
+    fn eq(&self, other: &&str) -> bool {
+        self == *other
+    }
+}
+
+impl PartialEq<str> for JavaString {
+    fn eq(&self, other: &str) -> bool {
+        self.as_java_str() == other
+    }
+}
+
+impl PartialEq<&str> for JavaString {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_java_str() == *other
+    }
+}
+
+impl PartialEq<String> for JavaStr {
+    fn eq(&self, other: &String) -> bool {
+        self == other.as_str()
+    }
+}
+
+impl PartialEq<String> for JavaString {
+    fn eq(&self, other: &String) -> bool {
+        self.as_java_str() == other.as_str()
     }
 }
 
@@ -270,19 +367,72 @@ fn validate_cesu8(bytes: &[u8]) -> Result<(), Cesu8Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const VALID_STRINGS: [&[u8]; 12] = [
+        b"",
+        b"text",
+        b"/x/",
+        b"a/\xed\xa0\x80/b",
+        b"\xed\xa0\x80/\xc0\x80/",
+        &[0xc0, 0x80],
+        &[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
+        &[0xed, 0xa0, 0x80],
+        &[0xed, 0xbf, 0xbf],
+        &[0xed, 0xb0, 0x80, 0xed, 0xa0, 0x80],
+        &[0xc2, 0x80, 0xdf, 0xbf],
+        &[0xe0, 0xa0, 0x80, 0xed, 0x9f, 0xbf, 0xef, 0xbf, 0xbf],
+    ];
+
     #[test]
-    fn miri_borrowed_and_owned_strings_preserve_bytes() {
-        for bytes in [
-            b"".as_slice(),
-            b"text",
-            &[0xc0, 0x80],
-            &[0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80],
-            &[0xed, 0xa0, 0x80],
-            &[0xed, 0xbf, 0xbf],
-            &[0xed, 0xb0, 0x80, 0xed, 0xa0, 0x80],
-            &[0xc2, 0x80, 0xdf, 0xbf],
-            &[0xe0, 0xa0, 0x80, 0xed, 0x9f, 0xbf, 0xef, 0xbf, 0xbf],
-        ] {
+    fn miri_split_first_ascii_preserves_encoding() {
+        for bytes in VALID_STRINGS {
+            let view = JavaStr::from_cesu8(bytes).unwrap();
+            if let Some((first, rest)) = view.split_first_ascii() {
+                assert!(first.is_ascii());
+                assert_eq!(bytes, [&[first], rest.as_bytes()].concat());
+                assert!(JavaStr::from_cesu8(rest.as_bytes()).is_ok());
+            } else {
+                assert!(bytes.first().is_none_or(|byte| !byte.is_ascii()));
+            }
+        }
+    }
+
+    #[test]
+    fn miri_split_once_ascii_preserves_encoding() {
+        for bytes in VALID_STRINGS {
+            let view = JavaStr::from_cesu8(bytes).unwrap();
+            if let Some((before, after)) = view.split_once_ascii(b'/') {
+                assert_eq!(bytes, [before.as_bytes(), b"/", after.as_bytes()].concat());
+                assert!(JavaStr::from_cesu8(before.as_bytes()).is_ok());
+                assert!(JavaStr::from_cesu8(after.as_bytes()).is_ok());
+            } else {
+                assert!(!bytes.contains(&b'/'));
+            }
+        }
+    }
+
+    #[test]
+    fn miri_split_ascii_preserves_encoding() {
+        for bytes in VALID_STRINGS {
+            let view = JavaStr::from_cesu8(bytes).unwrap();
+            for part in view.split_ascii(b'/') {
+                assert!(JavaStr::from_cesu8(part.as_bytes()).is_ok());
+            }
+        }
+    }
+
+    #[test]
+    fn replace_ascii_preserves_encoding() {
+        for bytes in VALID_STRINGS {
+            let view = JavaStr::from_cesu8(bytes).unwrap();
+            let replaced = view.replace_ascii(b'/', b'.');
+            assert!(JavaStr::from_cesu8(replaced.as_bytes()).is_ok());
+        }
+    }
+
+    #[test]
+    fn miri_owned_strings_preserve_bytes() {
+        for bytes in VALID_STRINGS {
             let view = JavaStr::from_cesu8(bytes).unwrap();
             let owned = view.to_owned();
             let borrowed: &JavaStr = owned.borrow();
@@ -290,6 +440,13 @@ mod tests {
             assert_eq!(borrowed, view);
             assert_eq!(&*owned, view);
             assert_eq!(owned.into_bytes(), bytes);
+        }
+    }
+
+    #[test]
+    fn miri_owned_constructor_retains_buffer() {
+        for bytes in VALID_STRINGS {
+            let view = JavaStr::from_cesu8(bytes).unwrap();
             let input = bytes.to_vec();
             let pointer = input.as_ptr();
             let checked = JavaString::from_cesu8(input).unwrap();
@@ -299,11 +456,21 @@ mod tests {
     }
 
     #[test]
-    fn rust_string_conversion_reuses_compatible_buffer() {
-        let text = String::from("java/lang/String");
-        let pointer = text.as_ptr();
-        let owned = JavaString::from(text);
-        assert_eq!(owned.as_bytes().as_ptr(), pointer);
+    fn miri_boxed_strings_preserve_bytes() {
+        for bytes in VALID_STRINGS {
+            let owned = JavaString::from_cesu8(bytes.to_vec()).unwrap();
+            let boxed = owned.into_boxed_java_str();
+            assert_eq!(boxed.as_bytes(), bytes);
+        }
+    }
+
+    #[test]
+    fn miri_shared_strings_preserve_bytes() {
+        for bytes in VALID_STRINGS {
+            let view = JavaStr::from_cesu8(bytes).unwrap();
+            let shared = Arc::<JavaStr>::from(view);
+            assert_eq!(shared.as_bytes(), bytes);
+        }
     }
 
     #[test]

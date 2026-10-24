@@ -24,7 +24,7 @@ pub use error::{Error as MokaIRBuildError, ErrorKind as MokaIRBuildErrorKind};
 use super::MokaIRMethod;
 use crate::jvm::Method;
 
-pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(super) fn generate(method: Method<'_>) -> Result<MokaIRMethod, MokaIRBuildError> {
     let cfg = control_flow::analyze(method)?;
     let data_flow::IrParts {
         mut entry,
@@ -35,10 +35,10 @@ pub(super) fn generate(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError
     } = data_flow::analyze(&cfg)?;
     canonicalize::canonicalize_values(&mut entry, &mut blocks);
     let ir = MokaIRMethod {
-        access_flags: method.access_flags,
-        name: method.name.clone(),
-        descriptor: method.descriptor.clone(),
-        owner: method.owner.clone(),
+        access_flags: method.access_flags(),
+        name: method.name().to_owned(),
+        descriptor: method.descriptor().clone(),
+        owner: method.owner().name().clone(),
         source_map,
         entry,
         this,

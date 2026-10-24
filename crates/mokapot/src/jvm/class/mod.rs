@@ -1,47 +1,192 @@
 //! JVM classes and interfaces
 
-use crate::types::class_name::ClassName;
+pub(crate) mod bootstrap;
+mod metadata;
+mod method_handle;
+pub(crate) use method_handle::MethodHandleData;
+pub use method_handle::{MethodHandle, MethodHndl};
+pub(crate) mod nesting;
+pub(crate) mod record_component;
+pub use bootstrap::BootstrapMethod;
+pub use nesting::{EnclosingMethod, InnerClassInfo};
+pub use record_component::RecordComponent;
 
 use std::borrow::Borrow;
 
 use bitflags::bitflags;
 
-use super::{
-    Annotation, Annotations, Class, ConstantValue, Field, Method,
-    annotation::ElementValue,
-    errors::ParseError,
-    field,
-    references::{FieldRef, MethodRef},
-};
+use super::{Field, Method};
 use crate::{
-    intrinsics::{enum_discriminant, see_jvm_spec},
+    intrinsics::see_jvm_spec,
     types::{field_type::FieldType, method_descriptor::MethodDescriptor},
 };
 
 /// A generic type signature for a class.
-pub type Signature = String;
+pub type Signature = super::JavaString;
+
+/// A JVM class.
+#[doc = see_jvm_spec!(4, 1)]
+#[derive(Debug, Clone)]
+pub struct Class {
+    pub(crate) constant_pool: super::ConstantPool,
+    /// The version of the class file.
+    pub version: Version,
+    /// The access modifiers of the class.
+    pub access_flags: AccessFlags,
+    /// The class or interface name in JVM internal form (e.g., `org/mokapot/jvm/Class`).
+    pub(crate) name: super::constant_pool::ClassId,
+    /// A reference to the superclass of the class.
+    /// The class `java/lang/Object` has no superclass, so this field is `None` for that class.
+    #[expect(clippy::struct_field_names, reason = "Uses the JVM superclass term")]
+    pub(crate) super_class: Option<super::constant_pool::ClassId>,
+    /// The interfaces implemented by the class.
+    pub(crate) interfaces: Box<[super::constant_pool::ClassId]>,
+    /// The fields declared the class.
+    pub(crate) fields: Box<[super::field::FieldData]>,
+    /// The methods declared by the class.
+    pub(crate) methods: Box<[super::method::MethodData]>,
+    /// The path to the source file.
+    pub(crate) source_file: Option<super::constant_pool::Utf8Id>,
+    /// The inner classes.
+    pub(crate) inner_classes: Box<[nesting::InnerClassData]>,
+    /// The outer class and method of the class.
+    pub(crate) enclosing_method: Option<nesting::EnclosingMethodData>,
+    /// The source debug extension.
+    pub source_debug_extension: Option<Box<[u8]>>,
+    /// The annotations of the class.
+    pub(crate) annotations: super::annotation::AnnotationsData<super::annotation::AnnotationData>,
+    /// The type annotations of the class.
+    pub(crate) type_annotations:
+        super::annotation::AnnotationsData<super::annotation::TypeAnnotationData>,
+    /// The bootstrap methods of the class, which are used to generate dynamic callsites.
+    pub(crate) bootstrap_methods: Box<[bootstrap::BootstrapMethodData]>,
+    /// The information of the module if the class is `module-info`.
+    pub(crate) module: Option<super::module::ModuleData>,
+    /// The packages of the module.
+    pub(crate) module_packages: Box<[super::constant_pool::PackageId]>,
+    /// The main class of the module.
+    #[expect(clippy::struct_field_names, reason = "Matches the JVM attribute name")]
+    pub(crate) module_main_class: Option<super::constant_pool::ClassId>,
+    /// The nearest outer class of the class.
+    pub(crate) nest_host: Option<super::constant_pool::ClassId>,
+    /// The nested classes of the class.
+    pub(crate) nest_members: Box<[super::constant_pool::ClassId]>,
+    /// The permitted subclasses of the class if the class is `sealed`.
+    pub(crate) permitted_subclasses: Box<[super::constant_pool::ClassId]>,
+    /// Indicates whether the class is synthesized by the compiler.
+    pub is_synthetic: bool,
+    /// Indicates whether the class is deprecated.
+    pub is_deprecated: bool,
+    /// The generic signature of the class.
+    pub(crate) signature: Option<super::constant_pool::Utf8Id>,
+    /// The record components of the class if the class is `record`.
+    pub(crate) record: Option<Box<[record_component::RecordComponentData]>>,
+    /// JVM attributes that are not specified by the JVM specification.
+    pub(crate) other_attributes: Box<[super::attribute::AttributeData]>,
+}
 
 impl Class {
+    pub(crate) fn reference_type(&self) -> &crate::types::reference_type::ReferenceType {
+        self.constant_pool.class_reference_type(self.name)
+    }
+
+    /// Iterates over the methods declared by this class.
+    pub fn methods(&self) -> impl ExactSizeIterator<Item = Method<'_>> + DoubleEndedIterator {
+        self.methods.iter().map(|data| Method { class: self, data })
+    }
+
     /// Gets a method of the class by its name and descriptor.
     #[must_use]
-    pub fn get_method<D>(&self, name: &str, descriptor: D) -> Option<&Method>
+    pub fn get_method<D>(&self, name: &super::JavaStr, descriptor: D) -> Option<Method<'_>>
     where
         D: Borrow<MethodDescriptor>,
     {
-        self.methods
-            .iter()
-            .find(|m| m.name == name && &m.descriptor == descriptor.borrow())
+        self.methods()
+            .find(|m| m.name() == name && m.descriptor() == descriptor.borrow())
     }
 
-    /// Gets a field of the class by its name and type.
+    /// Gets a method using a Rust string name.
     #[must_use]
-    pub fn get_field<T>(&self, name: &str, field_type: T) -> Option<&Field>
+    pub fn get_method_str<D>(&self, name: &str, descriptor: D) -> Option<Method<'_>>
     where
-        T: Borrow<FieldType>,
+        D: Borrow<MethodDescriptor>,
     {
-        self.fields
+        self.methods()
+            .find(|method| method.name() == name && method.descriptor() == descriptor.borrow())
+    }
+
+    /// Iterates over fields declared by this class.
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = Field<'_>> + DoubleEndedIterator {
+        self.fields.iter().map(|data| Field { class: self, data })
+    }
+    /// Gets a field by name and type.
+    pub fn get_field<T: Borrow<FieldType>>(
+        &self,
+        name: &super::JavaStr,
+        field_type: T,
+    ) -> Option<Field<'_>> {
+        self.fields()
+            .find(|field| field.name() == name && field.field_type() == field_type.borrow())
+    }
+    /// Gets a field using a Rust string name.
+    pub fn get_field_str<T: Borrow<FieldType>>(
+        &self,
+        name: &str,
+        field_type: T,
+    ) -> Option<Field<'_>> {
+        self.fields()
+            .find(|field| field.name() == name && field.field_type() == field_type.borrow())
+    }
+    /// Returns record components, if the class is a record.
+    #[must_use]
+    pub fn record(
+        &self,
+    ) -> Option<impl ExactSizeIterator<Item = RecordComponent<'_>> + DoubleEndedIterator> {
+        self.record.as_ref().map(|items| {
+            items
+                .iter()
+                .map(|data| RecordComponent { class: self, data })
+        })
+    }
+    /// Iterates over inner-class information.
+    pub fn inner_classes(
+        &self,
+    ) -> impl ExactSizeIterator<Item = InnerClassInfo<'_>> + DoubleEndedIterator {
+        self.inner_classes
             .iter()
-            .find(|f| f.name == name && &f.field_type == field_type.borrow())
+            .map(|data| InnerClassInfo { class: self, data })
+    }
+    /// Returns the enclosing method information, if present.
+    #[must_use]
+    pub fn enclosing_method(&self) -> Option<EnclosingMethod<'_>> {
+        self.enclosing_method
+            .as_ref()
+            .map(|data| EnclosingMethod { owner: self, data })
+    }
+    /// Iterates over bootstrap methods.
+    pub fn bootstrap_methods(
+        &self,
+    ) -> impl ExactSizeIterator<Item = BootstrapMethod<'_>> + DoubleEndedIterator {
+        self.bootstrap_methods
+            .iter()
+            .map(|data| BootstrapMethod { class: self, data })
+    }
+    /// Returns module information, if present.
+    #[must_use]
+    pub fn module(&self) -> Option<super::Module<'_>> {
+        self.module
+            .as_ref()
+            .map(|data| super::Module { class: self, data })
+    }
+    /// Returns annotations on this class.
+    #[must_use]
+    pub const fn annotations(&self) -> super::Annotations<'_> {
+        super::Annotations::new(self, &self.annotations)
+    }
+    /// Returns type annotations on this class.
+    #[must_use]
+    pub const fn type_annotations(&self) -> super::TypeAnnotations<'_> {
+        super::TypeAnnotations::new(self, &self.type_annotations)
     }
 
     /// Checks if the class is an interface.
@@ -56,28 +201,6 @@ impl Class {
         self.access_flags.contains(AccessFlags::ABSTRACT)
     }
 }
-
-impl Annotation {
-    /// The default name of the annotation element.
-    pub const DEFAULT_ELEMENT_NAME: &'static str = "value";
-
-    /// Gets the value of the annotation element.
-    #[must_use]
-    pub fn get_element_value(&self, name: &str) -> Option<&ElementValue> {
-        self.element_value_pairs
-            .iter()
-            .find(|(pair_name, _)| pair_name == name)
-            .map(|(_, value)| value)
-    }
-
-    /// Gets the value of the `value` element of the annotation.
-    #[must_use]
-    pub fn get_value(&self) -> Option<&ElementValue> {
-        self.get_element_value(Self::DEFAULT_ELEMENT_NAME)
-    }
-}
-
-const PREVIEW_FEATURES: u16 = 0xFFFF;
 
 /// The version of a class file.
 #[doc = see_jvm_spec!(4, 1)]
@@ -142,58 +265,6 @@ pub enum Version {
 impl Version {
     /// The latest supported JDK version (non-preview).
     pub const LATEST: Self = Self::Jdk27(false);
-
-    pub(crate) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
-        match (major, minor) {
-            (45, minor) => Ok(Self::Jdk1_1(minor)),
-            (46, 0x0000) => Ok(Self::Jdk1_2),
-            (47, 0x0000) => Ok(Self::Jdk1_3),
-            (48, 0x0000) => Ok(Self::Jdk1_4),
-            (49, 0x0000) => Ok(Self::Jdk5),
-            (50, 0x0000) => Ok(Self::Jdk6),
-            (51, 0x0000) => Ok(Self::Jdk7),
-            (52, 0x0000) => Ok(Self::Jdk8),
-            (53, 0x0000) => Ok(Self::Jdk9),
-            (54, 0x0000) => Ok(Self::Jdk10),
-            (55, 0x0000) => Ok(Self::Jdk11),
-            (56, 0x0000) => Ok(Self::Jdk12(false)),
-            (56, PREVIEW_FEATURES) => Ok(Self::Jdk12(true)),
-            (57, 0x0000) => Ok(Self::Jdk13(false)),
-            (57, PREVIEW_FEATURES) => Ok(Self::Jdk13(true)),
-            (58, 0x0000) => Ok(Self::Jdk14(false)),
-            (58, PREVIEW_FEATURES) => Ok(Self::Jdk14(true)),
-            (59, 0x0000) => Ok(Self::Jdk15(false)),
-            (59, PREVIEW_FEATURES) => Ok(Self::Jdk15(true)),
-            (60, 0x0000) => Ok(Self::Jdk16(false)),
-            (60, PREVIEW_FEATURES) => Ok(Self::Jdk16(true)),
-            (61, 0x0000) => Ok(Self::Jdk17(false)),
-            (61, PREVIEW_FEATURES) => Ok(Self::Jdk17(true)),
-            (62, 0x0000) => Ok(Self::Jdk18(false)),
-            (62, PREVIEW_FEATURES) => Ok(Self::Jdk18(true)),
-            (63, 0x0000) => Ok(Self::Jdk19(false)),
-            (63, PREVIEW_FEATURES) => Ok(Self::Jdk19(true)),
-            (64, 0x0000) => Ok(Self::Jdk20(false)),
-            (64, PREVIEW_FEATURES) => Ok(Self::Jdk20(true)),
-            (65, 0x0000) => Ok(Self::Jdk21(false)),
-            (65, PREVIEW_FEATURES) => Ok(Self::Jdk21(true)),
-            (66, 0x0000) => Ok(Self::Jdk22(false)),
-            (66, PREVIEW_FEATURES) => Ok(Self::Jdk22(true)),
-            (67, 0x0000) => Ok(Self::Jdk23(false)),
-            (67, PREVIEW_FEATURES) => Ok(Self::Jdk23(true)),
-            (68, 0x0000) => Ok(Self::Jdk24(false)),
-            (68, PREVIEW_FEATURES) => Ok(Self::Jdk24(true)),
-            (69, 0x0000) => Ok(Self::Jdk25(false)),
-            (69, PREVIEW_FEATURES) => Ok(Self::Jdk25(true)),
-            (70, 0x0000) => Ok(Self::Jdk26(false)),
-            (70, PREVIEW_FEATURES) => Ok(Self::Jdk26(true)),
-            (71, 0x0000) => Ok(Self::Jdk27(false)),
-            (71, PREVIEW_FEATURES) => Ok(Self::Jdk27(true)),
-            (major, _) if major > Self::LATEST.major() => {
-                Err(ParseError::malform("Unsupported class version"))
-            }
-            _ => Err(ParseError::malform("Invalid class version")),
-        }
-    }
 
     /// Returns `true` if this class file is compiled with `--enable-preview`.
     #[must_use]
@@ -287,92 +358,6 @@ impl Version {
     }
 }
 
-/// The information of an inner class.
-#[doc = see_jvm_spec!(4, 7, 6)]
-#[derive(Debug, Clone)]
-pub struct InnerClassInfo {
-    /// The inner class.
-    pub inner_class: ClassName,
-    /// The outer class.
-    pub outer_class: Option<ClassName>,
-    /// The name of the inner class.
-    pub inner_name: Option<String>,
-    /// The access flags of the inner class.
-    pub access_flags: NestedClassAccessFlags,
-}
-
-/// The information of an enclosing method of a [`Class`].
-#[doc = see_jvm_spec!(4, 7, 7)]
-#[derive(Debug, Clone)]
-pub struct EnclosingMethod {
-    /// The class being enclosed.
-    pub class: ClassName,
-    /// The name and descriptor of the enclosing method.
-    pub method_name_and_desc: Option<(String, MethodDescriptor)>,
-}
-
-/// The information of a bootstrap method.
-#[doc = see_jvm_spec!(4, 7, 23)]
-#[derive(Debug, Clone)]
-pub struct BootstrapMethod {
-    /// The method handle of the bootstrap method.
-    pub method: MethodHandle,
-    /// The argument that are passed to the bootstrap method.
-    pub arguments: Box<[ConstantValue]>,
-}
-
-/// A method handle.
-#[doc = see_jvm_spec!(4, 4, 8)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum MethodHandle {
-    /// Get an instance field.
-    RefGetField(FieldRef) = 1,
-    /// Get a static field.
-    RefGetStatic(FieldRef) = 2,
-    /// Writes to an instance field.
-    RefPutField(FieldRef) = 3,
-    /// Writes to a static field.
-    RefPutStatic(FieldRef) = 4,
-    /// Invoke an instance method.
-    RefInvokeVirtual(MethodRef) = 5,
-    /// Invoke a static method.
-    RefInvokeStatic(MethodRef) = 6,
-    /// Invoke a special method (e.g., a constructor).
-    RefInvokeSpecial(MethodRef) = 7,
-    /// The new version a special method (e.g., a constructor).
-    RefNewInvokeSpecial(MethodRef) = 8,
-    /// Invoke an interface method.
-    RefInvokeInterface(MethodRef) = 9,
-}
-
-impl MethodHandle {
-    /// Gets the reference kind of this method handle.
-    #[must_use]
-    pub const fn reference_kind(&self) -> u8 {
-        // SAFETY: Self is marked as repr(u8)
-        unsafe { enum_discriminant(self) }
-    }
-}
-
-/// The record components of a [`Class`] that represents a `record`.
-#[doc = see_jvm_spec!(4, 7, 30)]
-#[derive(Debug, Clone)]
-pub struct RecordComponent {
-    /// The name of the component.
-    pub name: String,
-    /// The type of the component.
-    pub component_type: FieldType,
-    /// The generic signature of the component.
-    pub signature: Option<field::Signature>,
-    /// The annotations.
-    pub annotations: Annotations<super::Annotation>,
-    /// The type annotations.
-    pub type_annotations: Annotations<super::TypeAnnotation>,
-    /// Unrecognized JVM attributes.
-    pub other_attributes: Box<[(String, Box<[u8]>)]>,
-}
-
 bitflags! {
     /// The access flags of a [`Class`].
     #[doc = see_jvm_spec!(4, 1)]
@@ -434,6 +419,3 @@ bitflags! {
         const ENUM = 0x4000;
     }
 }
-
-#[cfg(test)]
-mod tests;

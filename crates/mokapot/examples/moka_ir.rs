@@ -15,8 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bytes = fs::read(path)?;
     let class = Class::from_bytes(&bytes)?;
 
-    for method in &class.methods {
-        if method.body.is_none() {
+    for method in class.methods() {
+        if method.body().is_none() {
             continue;
         }
 

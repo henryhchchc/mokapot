@@ -16,7 +16,7 @@ pub(crate) trait Decode<'a>: Sized {
 }
 
 /// Copies a fixed wire value. Leaves the input unchanged on failure.
-pub(super) fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
+fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
     let (value, remaining) = T::read_from_prefix(bytes)
         .map_err(|_| ParseError::malform("Truncated class-file value"))?;
     *bytes = remaining;
@@ -27,28 +27,24 @@ pub(super) fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseErr
 pub(super) fn decode_value<'a, T: Decode<'a>>(bytes: &mut &'a [u8]) -> Result<T, ParseError> {
     T::decode(bytes)
 }
-
-impl<'a> Decode<'a> for u16 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<U16>(bytes)?.get())
-    }
+macro_rules! impl_decode_integer {
+    ($type:ty, $wire_type:ty) => {
+        impl<'a> Decode<'a> for $type {
+            fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+                Ok(read_wire::<$wire_type>(bytes)?.get())
+            }
+        }
+    };
 }
 
-impl<'a> Decode<'a> for i16 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<I16>(bytes)?.get())
-    }
-}
+impl_decode_integer!(u16, U16);
+impl_decode_integer!(i16, I16);
+impl_decode_integer!(u32, U32);
+impl_decode_integer!(i32, I32);
 
-impl<'a> Decode<'a> for u32 {
+impl<'a, T: FixedLayout> Decode<'a> for T {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<U32>(bytes)?.get())
-    }
-}
-
-impl<'a> Decode<'a> for i32 {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Ok(read_wire::<I32>(bytes)?.get())
+        read_wire::<Self>(bytes)
     }
 }
 
@@ -83,9 +79,8 @@ pub(super) fn parse_repeated<'a, E>(
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, borrow_slice, decode_value, parse_repeated};
+    use super::{ParseError, decode_value, parse_repeated};
     use crate::jvm::errors::ParseErrorKind;
-    use zerocopy::byteorder::big_endian::U16;
 
     #[test]
     fn repeated_parsing_stops_when_an_element_is_rejected() {
@@ -100,20 +95,5 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind(), ParseErrorKind::Malformed);
         assert_eq!(remaining, [3]);
-    }
-
-    #[test]
-    fn borrowed_table_preserves_cursor_boundaries() {
-        let bytes = [0xff, 0x12, 0x34, 0xab, 0xcd, 0xee];
-        let mut remaining = &bytes[1..];
-        borrow_slice::<U16>(&mut remaining, 2).unwrap();
-        assert_eq!(remaining, [0xee]);
-        borrow_slice::<U16>(&mut remaining, 0).unwrap();
-        assert_eq!(remaining, [0xee]);
-        for count in [1, usize::MAX] {
-            let error = borrow_slice::<U16>(&mut remaining, count).unwrap_err();
-            assert_eq!(error.kind(), ParseErrorKind::Malformed);
-            assert_eq!(remaining, [0xee]);
-        }
     }
 }

@@ -5,28 +5,45 @@ use std::ops::Range;
 pub(crate) use crate::ir::test::prelude::*;
 use crate::{
     ir::{InstructionRef, MokaIRBuildError, MokaIRBuildErrorKind, MokaIRMethod},
-    jvm::{
-        Method,
-        code::{ExceptionTableEntry, Instruction, ProgramCounter},
-    },
+    jvm::code::ProgramCounter,
+    tests::{TestExceptionHandler, TestMethod},
 };
 
 /// Builds `method` into [`MokaIRMethod`].
-pub(crate) fn build(method: &Method) -> Result<MokaIRMethod, MokaIRBuildError> {
-    MokaIRMethod::from_method(method)
+pub(crate) fn build(method: &TestMethod) -> Result<MokaIRMethod, MokaIRBuildError> {
+    MokaIRMethod::from_method(method.as_method())
 }
 
 /// Lifts `instructions` into IR, panicking on a build failure.
 pub(crate) fn lift<I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
+    exception_table: Vec<TestExceptionHandler>,
 ) -> MokaIRMethod
 where
-    I: IntoIterator<Item = (PC, Instruction)>,
+    I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
     build(&method(instructions, descriptor, exception_table)).unwrap()
+}
+
+pub(crate) fn lift_with_pool<I, PC>(
+    constant_pool: ConstantPool,
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<TestExceptionHandler>,
+) -> MokaIRMethod
+where
+    I: IntoIterator<Item = (PC, InstructionData)>,
+    PC: Into<ProgramCounter>,
+{
+    build(&method_with_pool(
+        constant_pool,
+        instructions,
+        descriptor,
+        exception_table,
+    ))
+    .unwrap()
 }
 
 /// The terminator whose source instruction is `pc`.
@@ -40,42 +57,13 @@ pub(crate) fn terminator_at(ir: &MokaIRMethod, pc: ProgramCounter) -> &Terminato
         .expect("the source PC must map to a terminator")
 }
 
-/// The block `id` in `ir`.
-pub(crate) fn block_of(ir: &MokaIRMethod, id: BlockId) -> &BasicBlock {
-    ir.block(id).expect("the block belongs to its method")
-}
-
-/// The target of the successor of `block` at `index`.
-pub(crate) fn successor_target(block: &BasicBlock, index: usize) -> BlockId {
-    block
-        .terminator
-        .successors()
-        .nth(index)
-        .expect("the successor exists")
-        .block_target()
-        .expect("the successor targets a block")
-}
-
-/// The block `location` belongs to.
-pub(crate) fn block_containing_instruction(
-    ir: &MokaIRMethod,
-    location: InstructionLocation,
-) -> &BasicBlock {
-    let id = match location {
-        InstructionLocation::BlockParameter { block, .. }
-        | InstructionLocation::Operation { block, .. }
-        | InstructionLocation::Terminator { block } => block,
-    };
-    block_of(ir, id)
-}
-
 /// Builds an exception-table entry covering `covered_pc` that jumps to `handler_pc`.
 pub(crate) fn handler(
     covered_pc: Range<ProgramCounter>,
     handler_pc: ProgramCounter,
     catch_type: Option<ClassName>,
-) -> ExceptionTableEntry {
-    ExceptionTableEntry {
+) -> TestExceptionHandler {
+    TestExceptionHandler {
         covered_pc,
         handler_pc,
         catch_type,
@@ -83,7 +71,7 @@ pub(crate) fn handler(
 }
 
 /// Returns the diagnostic location and kind reported for `method`.
-pub(crate) fn build_failure(method: &Method) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
+pub(crate) fn build_failure(method: &TestMethod) -> (Option<ProgramCounter>, MokaIRBuildErrorKind) {
     let error = build(method).expect_err("method should fail to build");
     (error.pc, error.kind)
 }

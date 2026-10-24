@@ -152,8 +152,9 @@ impl LocalVariables {
 mod tests {
     use super::*;
     use crate::{
-        ir::{IdAllocator, NumericalId, test::prelude::*},
-        types::{field_type::FieldType, method_descriptor::ReturnType},
+        ir::{IdAllocator, NumericalId},
+        types::field_type::{FieldType, PrimitiveType, ValueCategory},
+        types::method_descriptor::ReturnType,
     };
     use std::iter::repeat_n;
 
@@ -210,14 +211,22 @@ mod tests {
         #[doc = see_jvm_spec!(2, 6, 1)]
         #[test]
         fn lays_out_method_entry_values(
-            parameter_types in prop::collection::vec(any::<FieldType>(), 0..8),
+            categories in prop::collection::vec(any::<ValueCategory>(), 0..8),
             instance in any::<bool>(),
         ) {
+            let parameter_types = categories.into_iter().map(|category| match category {
+                ValueCategory::Category1 => FieldType::Base(PrimitiveType::Int),
+                ValueCategory::Category2 => FieldType::Base(PrimitiveType::Long),
+            }).collect::<Vec<_>>();
             let descriptor = MethodDescriptor {
                 parameters_types: parameter_types.into_boxed_slice(),
                 return_type: ReturnType::Void,
             };
-            let (receiver, parameters) = entry_values(instance, descriptor.parameters_types.len());
+            let mut allocator = IdAllocator::default();
+            let receiver = instance.then(|| allocator.new_id());
+            let parameters: Vec<ValueId> = (0..descriptor.parameters_types.len())
+                .map(|_| allocator.new_id())
+                .collect();
             let entries: Vec<&ValueId> = receiver.iter().chain(&parameters).collect();
 
             let mut layout: Vec<Option<usize>> = Vec::new();

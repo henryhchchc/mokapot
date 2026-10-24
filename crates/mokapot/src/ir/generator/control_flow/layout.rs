@@ -8,7 +8,7 @@ use std::{
 use super::BlockExit;
 use crate::{
     ir::generator::error::{Error, ErrorKind, ResultExt},
-    jvm::code::{MethodBody, ProgramCounter as PC},
+    jvm::code::{ExceptionTableEntry, MethodBody, ProgramCounter as PC},
 };
 
 pub(super) struct BlockLayout {
@@ -23,17 +23,17 @@ pub(super) struct BlockShape {
 
 impl BlockLayout {
     /// Partitions `body`, validating every decoded instruction and leader.
-    pub(super) fn of(body: &MethodBody) -> Result<Self, Error> {
+    pub(super) fn of(body: MethodBody<'_>) -> Result<Self, Error> {
         let entry = body
-            .instructions
+            .instructions()
             .entry_point()
             .map(|(pc, _)| pc)
             .ok_or(ErrorKind::MissingOrEmptyBody)?;
         let mut exits = body
-            .instructions
+            .instructions()
             .iter()
             .map(|(pc, instruction)| {
-                BlockExit::of(body, pc, instruction)
+                BlockExit::of(body, pc, &instruction)
                     .at_pc(pc)
                     .map(|exit| (pc, exit))
             })
@@ -80,14 +80,14 @@ impl BlockLayout {
 
 /// Collects every block leader, checking each names a decoded instruction.
 fn leaders(
-    body: &MethodBody,
+    body: MethodBody<'_>,
     entry: PC,
     exits: &BTreeMap<PC, BlockExit<PC>>,
 ) -> Result<BTreeSet<PC>, Error> {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
     let mut leaders = BTreeSet::from([entry]);
-    leaders.extend(body.exception_table.iter().map(|it| it.handler_pc));
+    leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
 
     for (&pc, exit) in exits {
         match exit {
@@ -105,7 +105,7 @@ fn leaders(
             }
         }
         if exit.forces_block_boundary() {
-            leaders.extend(body.instructions.next_pc_of(&pc));
+            leaders.extend(body.instructions().next_pc_of(&pc));
         }
     }
 
@@ -121,12 +121,12 @@ fn leaders(
 /// The final instruction of the block starting at `start_pc`.
 ///
 /// A block spans from its leader up to the instruction before the next leader.
-fn block_end(body: &MethodBody, leaders: &BTreeSet<PC>, last_pc: PC, start_pc: PC) -> PC {
+fn block_end(body: MethodBody<'_>, leaders: &BTreeSet<PC>, last_pc: PC, start_pc: PC) -> PC {
     leaders
         .range((Bound::Excluded(start_pc), Bound::Unbounded))
         .next()
         .map_or(last_pc, |&next| {
-            body.instructions
+            body.instructions()
                 .prev_pc_of(&next)
                 .expect("a later leader is preceded by the previous leader")
         })
@@ -135,33 +135,33 @@ fn block_end(body: &MethodBody, leaders: &BTreeSet<PC>, last_pc: PC, start_pc: P
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ir::test::prelude::*, jvm::code::Instruction};
+    use crate::ir::test::prelude::*;
 
     #[test]
     fn rejects_empty_bodies() {
-        let method = method(std::iter::empty::<(u16, Instruction)>(), "()V", vec![]);
-        let body = method.body.unwrap();
-        let error = BlockLayout::of(&body).err().unwrap();
+        let method = method(std::iter::empty::<(u16, InstructionData)>(), "()V", vec![]);
+        let body = method.as_method().body().unwrap();
+        let error = BlockLayout::of(body).err().unwrap();
         assert_eq!(error.kind, ErrorKind::MissingOrEmptyBody);
     }
 
     #[test]
     fn rejects_missing_jump_targets_in_reachable_and_unreachable_code() {
-        for entry in [Instruction::Nop, Instruction::Return] {
-            let instructions = [(0, entry), (1, Instruction::Goto(10.into()))];
+        for entry in [InstructionData::Nop, InstructionData::Return] {
+            let instructions = [(0, entry), (1, InstructionData::Goto(10.into()))];
             let method = method(instructions, "()V", vec![]);
-            let body = method.body.unwrap();
-            let error = BlockLayout::of(&body).err().unwrap();
+            let body = method.as_method().body().unwrap();
+            let error = BlockLayout::of(body).err().unwrap();
             assert_eq!(error.kind, ErrorKind::MissingInstruction);
         }
     }
 
     #[test]
     fn validates_unreachable_instructions() {
-        let instructions = [(0, Instruction::Return), (1, Instruction::Nop)];
+        let instructions = [(0, InstructionData::Return), (1, InstructionData::Nop)];
         let method = method(instructions, "()V", vec![]);
-        let body = method.body.unwrap();
-        let error = BlockLayout::of(&body).err().unwrap();
+        let body = method.as_method().body().unwrap();
+        let error = BlockLayout::of(body).err().unwrap();
         assert_eq!(error.kind, ErrorKind::MissingFallthrough);
     }
 }

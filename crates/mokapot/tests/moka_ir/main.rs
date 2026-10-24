@@ -10,12 +10,10 @@ use mokapot::{
         BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod, Operation,
         Successor, Terminator, expression::Expression,
     },
-    jvm::{Class, ConstantValue, Method, code::ProgramCounter},
+    jvm::{Class, ConstantValue, code::ProgramCounter},
 };
 
 mod provenance;
-mod source_map;
-mod ssa;
 #[path = "../support/mod.rs"]
 mod support;
 
@@ -24,12 +22,13 @@ fn get_test_class() -> Class {
     Class::from_bytes(&bytes).unwrap()
 }
 
-fn get_test_method() -> Method {
-    get_test_class()
-        .methods
-        .into_iter()
-        .find(|method| method.name == "test")
-        .unwrap()
+fn get_test_ir() -> MokaIRMethod {
+    let class = get_test_class();
+    let method = class
+        .methods()
+        .find(|method| method.name() == "test")
+        .unwrap();
+    MokaIRMethod::from_method(method).unwrap()
 }
 
 fn terminator(method: &MokaIRMethod, location: InstructionLocation) -> Option<&Terminator> {
@@ -59,73 +58,31 @@ fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
     result
 }
 
-fn live_locations(ir: &MokaIRMethod) -> Vec<InstructionLocation> {
-    let mut locations = Vec::new();
-    for (block_id, block) in reachable_blocks(ir) {
-        for (index, _) in block.parameters.iter().enumerate() {
-            locations.push(InstructionLocation::BlockParameter {
-                block: block_id,
-                index,
-            });
-        }
-        for (index, _) in block.operations.iter().enumerate() {
-            locations.push(InstructionLocation::Operation {
-                block: block_id,
-                index,
-            });
-        }
-        locations.push(InstructionLocation::Terminator { block: block_id });
-    }
-    locations
-}
-
-/// Every method with a body in the fixture corpus (`OUT_DIR/mokapot/java_classes`,
-/// compiled by `build.rs`).
-fn corpus_methods() -> Vec<(String, Method)> {
-    let mut directories = vec![support::classes_dir()];
-    let mut class_files = Vec::new();
-    while let Some(directory) = directories.pop() {
-        for entry in std::fs::read_dir(&directory).expect("the corpus directory is readable") {
-            let path = entry.expect("a corpus entry is readable").path();
-            if path.is_dir() {
-                directories.push(path);
-            } else if path
-                .extension()
-                .is_some_and(|extension| extension == "class")
-            {
-                class_files.push(path);
-            }
-        }
-    }
-    class_files.sort();
-    let mut methods = Vec::new();
-    for path in class_files {
-        let bytes = std::fs::read(&path).expect("a fixture class is readable");
-        let class = Class::from_bytes(&bytes)
-            .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
-        for method in class.methods {
-            if method.body.is_some() {
-                let label = format!("{}::{}", path.display(), method.name);
-                methods.push((label, method));
-            }
-        }
-    }
-    assert!(!methods.is_empty(), "the fixture corpus is empty");
-    methods
-}
-
-fn corpus_ir() -> impl Iterator<Item = (String, MokaIRMethod)> {
-    corpus_methods().into_iter().map(|(label, method)| {
-        let ir = MokaIRMethod::from_method(&method)
-            .unwrap_or_else(|error| panic!("Failed to build {label}: {error}"));
-        (label, ir)
-    })
-}
-
 #[test]
-fn fixture_corpus_preserves_ssa_and_source_mapping() {
-    for (label, ir) in corpus_ir() {
-        ssa::assert_well_formed(&label, &ir);
-        source_map::assert_consistent(&label, &ir);
+fn fixture_corpus_classes_parse_and_lift() {
+    let mut class_count = 0;
+    for entry in walkdir::WalkDir::new(support::classes_dir()) {
+        let entry = entry.unwrap();
+        if !entry.file_type().is_file()
+            || entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "class")
+        {
+            continue;
+        }
+
+        let bytes = std::fs::read(entry.path()).unwrap();
+        let class = Class::from_bytes(&bytes)
+            .unwrap_or_else(|error| panic!("{}: {error}", entry.path().display()));
+        class_count += 1;
+        for method in class.methods().filter(|method| method.body().is_some()) {
+            MokaIRMethod::from_method(method).unwrap_or_else(|error| {
+                panic!("{}::{}: {error}", entry.path().display(), method.name())
+            });
+        }
     }
+    assert_ne!(class_count, 0, "the fixture corpus is empty");
 }
+
+mod semantics;

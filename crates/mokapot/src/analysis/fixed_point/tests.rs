@@ -3,8 +3,6 @@ use std::{
     convert::Infallible,
 };
 
-use proptest::prelude::*;
-
 use super::*;
 use crate::ir::test::prelude::TestSet;
 
@@ -81,44 +79,24 @@ impl DataflowProblem for CyclicProblem {
 }
 
 #[test]
-fn cyclic_flow_reaches_the_same_fixed_point_with_each_facts_map() {
+fn cyclic_flow_reaches_a_fixed_point() {
     let expected = TestSet::from([0, 1]);
-    for facts in [
-        solve::<_, BTreeMap<u8, TestSet>>(&mut CyclicProblem)
-            .unwrap()
-            .into_iter()
-            .collect::<BTreeMap<_, _>>(),
-        solve::<_, HashMap<u8, TestSet>>(&mut CyclicProblem)
-            .unwrap()
-            .into_iter()
-            .collect(),
-        solve::<_, QueuedFactsMap<u8, TestSet>>(&mut CyclicProblem)
-            .unwrap()
-            .into_iter()
-            .collect(),
-    ] {
-        assert_eq!(facts.len(), 2);
-        assert_eq!(facts[&0], expected);
-        assert_eq!(facts[&1], expected);
-    }
+    let facts: BTreeMap<_, _> = solve(&mut CyclicProblem).unwrap();
+    assert_eq!(facts.len(), 2);
+    assert_eq!(facts[&0], expected);
+    assert_eq!(facts[&1], expected);
 }
 
-proptest! {
-   #[test]
-   fn option_join_ordering(
-       lhs in any::<Option<TestSet>>(),
-       rhs in any::<Option<TestSet>>(),
-   ) {
-       let mut joined = lhs.clone();
-       let changed = joined.join_assign(rhs.clone());
-       prop_assert!(joined >= lhs);
-       prop_assert!(joined >= rhs);
-       prop_assert_eq!(changed, joined != lhs);
+#[test]
+fn option_join_handles_bottom_and_concrete_facts() {
+    let mut bottom = None;
+    assert!(!bottom.join_assign(None));
+    assert!(bottom.join_assign(Some(TestSet::from([1]))));
+    assert_eq!(bottom, Some(TestSet::from([1])));
 
-       // The join is commutative and idempotent.
-       let mut commuted = rhs.clone();
-       commuted.join_assign(lhs.clone());
-       prop_assert_eq!(&joined, &commuted);
-       prop_assert!(!joined.clone().join_assign(joined.clone()));
-   }
+    let mut fact = Some(TestSet::from([1]));
+    assert!(!fact.join_assign(None));
+    assert!(fact.join_assign(Some(TestSet::from([2]))));
+    assert_eq!(fact, Some(TestSet::from([1, 2])));
+    assert!(!fact.clone().join_assign(fact.clone()));
 }

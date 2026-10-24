@@ -32,6 +32,15 @@ pub(crate) struct PoolStorage<T> {
 }
 
 impl<T> PoolStorage<T> {
+    #[cfg(test)]
+    pub fn push(&mut self, entry: T) -> u16 {
+        let mut slots = std::mem::take(&mut self.slots).into_vec();
+        let index = u16::try_from(slots.len()).expect("test pool fits in u16");
+        slots.push(Slot::Entry(entry));
+        self.slots = slots.into_boxed_slice();
+        index
+    }
+
     pub const fn from_slots(slots: Box<[Slot<T>]>) -> Self {
         Self { slots }
     }

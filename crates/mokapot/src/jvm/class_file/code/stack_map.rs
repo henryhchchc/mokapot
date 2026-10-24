@@ -5,23 +5,23 @@ use crate::intrinsics::ExactSizeIteratorExt;
 use super::raw;
 use crate::jvm::{
     class_file::{ParseError, ResolutionContext, resolve::Resolve},
-    code::{ProgramCounter, StackMapFrame, VerificationType},
+    code::{ProgramCounter, StackMapFrameData, VerificationTypeData},
 };
 
 impl Resolve for raw::StackMapFrameInfo {
-    type Output = StackMapFrame;
+    type Output = StackMapFrameData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         match raw {
-            raw::StackMapFrameInfo::SameFrame { frame_type } => Ok(StackMapFrame::SameFrame {
+            raw::StackMapFrameInfo::SameFrame { frame_type } => Ok(StackMapFrameData::Same {
                 offset_delta: u16::from(frame_type),
             }),
             raw::StackMapFrameInfo::SameFrameExtended { offset_delta } => {
-                Ok(StackMapFrame::SameFrame { offset_delta })
+                Ok(StackMapFrameData::Same { offset_delta })
             }
             raw::StackMapFrameInfo::SameLocals1StackItemFrame { frame_type, stack } => {
-                Ok(StackMapFrame::SameLocals1StackItemFrame {
+                Ok(StackMapFrameData::SameLocals1StackItem {
                     offset_delta: u16::from(frame_type) - 64,
                     stack: stack.resolve(ctx)?,
                 })
@@ -29,7 +29,7 @@ impl Resolve for raw::StackMapFrameInfo {
             raw::StackMapFrameInfo::SameLocals1StackItemFrameExtended {
                 offset_delta,
                 stack,
-            } => Ok(StackMapFrame::SameLocals1StackItemFrame {
+            } => Ok(StackMapFrameData::SameLocals1StackItem {
                 offset_delta,
                 stack: stack.resolve(ctx)?,
             }),
@@ -38,7 +38,7 @@ impl Resolve for raw::StackMapFrameInfo {
                 offset_delta,
             } => {
                 let chop_count = 251 - frame_type;
-                Ok(StackMapFrame::ChopFrame {
+                Ok(StackMapFrameData::Chop {
                     chop_count,
                     offset_delta,
                 })
@@ -46,7 +46,7 @@ impl Resolve for raw::StackMapFrameInfo {
             raw::StackMapFrameInfo::AppendFrame {
                 offset_delta,
                 locals,
-            } => Ok(StackMapFrame::AppendFrame {
+            } => Ok(StackMapFrameData::Append {
                 offset_delta,
                 locals: locals
                     .into_iter()
@@ -66,7 +66,7 @@ impl Resolve for raw::StackMapFrameInfo {
                     .into_iter()
                     .map(|it| it.resolve(ctx))
                     .try_collect_exact()?;
-                Ok(StackMapFrame::FullFrame {
+                Ok(StackMapFrameData::Full {
                     offset_delta,
                     locals,
                     stack,
@@ -77,24 +77,24 @@ impl Resolve for raw::StackMapFrameInfo {
 }
 
 impl Resolve for raw::VerificationTypeInfo {
-    type Output = VerificationType;
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    type Output = VerificationTypeData;
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         match raw {
-            raw::VerificationTypeInfo::Top => Ok(VerificationType::TopVariable),
-            raw::VerificationTypeInfo::Integer => Ok(VerificationType::IntegerVariable),
-            raw::VerificationTypeInfo::Float => Ok(VerificationType::FloatVariable),
-            raw::VerificationTypeInfo::Double => Ok(VerificationType::DoubleVariable),
-            raw::VerificationTypeInfo::Long => Ok(VerificationType::LongVariable),
-            raw::VerificationTypeInfo::Null => Ok(VerificationType::NullVariable),
+            raw::VerificationTypeInfo::Top => Ok(VerificationTypeData::Top),
+            raw::VerificationTypeInfo::Integer => Ok(VerificationTypeData::Integer),
+            raw::VerificationTypeInfo::Float => Ok(VerificationTypeData::Float),
+            raw::VerificationTypeInfo::Double => Ok(VerificationTypeData::Double),
+            raw::VerificationTypeInfo::Long => Ok(VerificationTypeData::Long),
+            raw::VerificationTypeInfo::Null => Ok(VerificationTypeData::Null),
             raw::VerificationTypeInfo::UninitializedThis => {
-                Ok(VerificationType::UninitializedThisVariable)
+                Ok(VerificationTypeData::UninitializedThis)
             }
-            raw::VerificationTypeInfo::Object { cpool_index } => Ok(
-                VerificationType::ObjectVariable(ctx.constant_pool.get_type_ref(cpool_index)?),
-            ),
+            raw::VerificationTypeInfo::Object { cpool_index } => Ok(VerificationTypeData::Object(
+                ctx.constant_pool.reference_type_id(cpool_index)?,
+            )),
             raw::VerificationTypeInfo::Uninitialized { offset } => {
-                Ok(VerificationType::UninitializedVariable {
+                Ok(VerificationTypeData::Uninitialized {
                     offset: ProgramCounter::from(offset),
                 })
             }

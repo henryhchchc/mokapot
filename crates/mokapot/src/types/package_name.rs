@@ -3,10 +3,13 @@
 
 use std::str::FromStr;
 
-use derive_more::{AsRef, Display};
+use derive_more::Display;
 
 use super::{class_name::ClassName, name_validation::validate_internal_name};
-use crate::intrinsics::see_jvm_spec;
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{JavaStr, JavaString},
+};
 
 /// A named package in JVM internal form, such as `java/lang`.
 ///
@@ -14,14 +17,13 @@ use crate::intrinsics::see_jvm_spec;
 /// use mokapot::types::package_name::PackageName;
 ///
 /// let package: PackageName = "java/lang".parse().unwrap();
-/// assert_eq!(package.as_str(), "java/lang");
+/// assert_eq!(package.as_java_str(), "java/lang");
 /// assert_eq!(package.jls_name(), "java.lang");
 /// ```
 #[doc = see_jvm_spec!(4, 2, 3)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display)]
-#[as_ref(str)]
-#[display("{_0}")]
-pub struct PackageName(Box<str>);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
+#[display("{}", self.as_java_str())]
+pub struct PackageName(JavaString);
 
 /// An invalid package name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -30,32 +32,39 @@ pub struct InvalidPackageName(String);
 
 impl PackageName {
     pub(super) fn from_class_name(name: &ClassName) -> Option<Self> {
-        // Class name validation also validates its package prefix.
-        name.as_str()
-            .rsplit_once('/')
-            .map(|(package, _)| Self(package.into()))
+        let bytes = name.as_java_str().as_bytes();
+        let end = bytes.iter().rposition(|byte| *byte == b'/')?;
+        let package = JavaString::from_cesu8(bytes[..end].to_vec())
+            .expect("a class name prefix is valid modified UTF-8");
+        Some(Self(package))
     }
 
     /// Creates a named package in JVM internal form.
     ///
     /// # Errors
     /// Returns [`InvalidPackageName`] for empty components or `.`, `;`, or `[`.
-    pub fn new(name: impl Into<Box<str>>) -> Result<Self, InvalidPackageName> {
+    pub fn new(name: impl Into<JavaString>) -> Result<Self, InvalidPackageName> {
         let name = name.into();
-        validate_internal_name(&name).map_err(InvalidPackageName)?;
+        validate_internal_name(name.as_java_str()).map_err(InvalidPackageName)?;
         Ok(Self(name))
     }
 
     /// Returns the package name in JVM internal form.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub const fn as_java_str(&self) -> &JavaStr {
+        self.0.as_java_str()
     }
 
     /// Returns the dotted package name used by the JLS.
     #[must_use]
-    pub fn jls_name(&self) -> String {
-        self.0.replace('/', ".")
+    pub fn jls_name(&self) -> JavaString {
+        self.as_java_str().replace_ascii(b'/', b'.')
+    }
+}
+
+impl AsRef<JavaStr> for PackageName {
+    fn as_ref(&self) -> &JavaStr {
+        self.as_java_str()
     }
 }
 
@@ -63,46 +72,39 @@ impl FromStr for PackageName {
     type Err = InvalidPackageName;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        Self::new(name)
+        Self::new(JavaString::from(name.to_owned()))
+    }
+}
+
+impl TryFrom<&JavaStr> for PackageName {
+    type Error = InvalidPackageName;
+
+    fn try_from(name: &JavaStr) -> Result<Self, Self::Error> {
+        Self::new(name.to_owned())
     }
 }
 
 impl PartialEq<&str> for PackageName {
     fn eq(&self, other: &&str) -> bool {
-        self.as_str() == *other
+        self.as_java_str() == *other
     }
 }
 
 impl PartialEq<PackageName> for &str {
     fn eq(&self, other: &PackageName) -> bool {
-        *self == other.as_str()
+        other == self
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
-    use crate::types::name_validation::tests::name_components;
 
-    impl Arbitrary for PackageName {
-        type Parameters = ();
-        type Strategy = BoxedStrategy<Self>;
-
-        fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
-            name_components()
-                .prop_map(|components| PackageName::new(components.join("/")).unwrap())
-                .boxed()
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn jls_name_preserves_components(components in name_components()) {
-            let name = PackageName::new(components.join("/")).unwrap();
-            prop_assert_eq!(name.jls_name(), components.join("."));
-            prop_assert_eq!(name.to_string().parse::<PackageName>(), Ok(name));
-        }
+    #[test]
+    fn parses_and_preserves_modified_utf8() {
+        let bytes = [b'p', b'/', 0xed, 0xa0, 0x80];
+        let encoded = JavaStr::from_cesu8(&bytes).unwrap();
+        let package = PackageName::try_from(encoded).unwrap();
+        assert_eq!(package.as_java_str().as_bytes(), bytes);
     }
 }

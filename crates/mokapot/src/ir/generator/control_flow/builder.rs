@@ -10,8 +10,8 @@ use crate::{
 };
 
 /// Builds the reachable control-flow graph of one method.
-pub(super) fn build(method: &Method) -> Result<Cfg<'_>, Error> {
-    let body = method.body.as_ref().ok_or(ErrorKind::MissingOrEmptyBody)?;
+pub(super) fn build(method: Method<'_>) -> Result<Cfg<'_>, Error> {
+    let body = method.body().ok_or(ErrorKind::MissingOrEmptyBody)?;
     let mut layout = BlockLayout::of(body)?;
     let reachable = ReachableNodes::discover(&layout);
     let ids = NodeIds::allocate(&reachable);
@@ -217,13 +217,13 @@ fn visit_exception_successors(
 
 #[cfg(test)]
 mod tests {
-    use crate::{ir::test::prelude::*, jvm::code::Instruction};
+    use crate::ir::test::prelude::*;
 
     #[test]
     fn rejects_methods_without_bodies() {
-        let mut method = method([(0, Instruction::Return)], "()V", vec![]);
-        method.body = None;
-        let error = super::build(&method).err().unwrap();
+        let mut method = method([(0, InstructionData::Return)], "()V", vec![]);
+        method.data_mut().body = None;
+        let error = super::build(method.as_method()).err().unwrap();
         assert_eq!(error.kind, super::ErrorKind::MissingOrEmptyBody);
     }
 }

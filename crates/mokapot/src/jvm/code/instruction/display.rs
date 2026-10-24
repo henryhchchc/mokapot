@@ -1,27 +1,8 @@
 use std::fmt;
 
-use super::{Instruction, WideInstruction};
+use super::Instruction;
 
-impl fmt::Display for WideInstruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ILoad(index) => write!(f, "iload {index}"),
-            Self::LLoad(index) => write!(f, "lload {index}"),
-            Self::FLoad(index) => write!(f, "fload {index}"),
-            Self::DLoad(index) => write!(f, "dload {index}"),
-            Self::ALoad(index) => write!(f, "aload {index}"),
-            Self::IStore(index) => write!(f, "istore {index}"),
-            Self::LStore(index) => write!(f, "lstore {index}"),
-            Self::FStore(index) => write!(f, "fstore {index}"),
-            Self::DStore(index) => write!(f, "dstore {index}"),
-            Self::AStore(index) => write!(f, "astore {index}"),
-            Self::IInc(index, value) => write!(f, "iinc {index} {value}"),
-            Self::Ret(index) => write!(f, "ret {index}"),
-        }
-    }
-}
-
-impl fmt::Display for Instruction {
+impl fmt::Display for Instruction<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         #[allow(clippy::enum_glob_use, reason = "all variants are used")]
         use Instruction::*;
@@ -99,7 +80,7 @@ impl fmt::Display for Instruction {
                 match_targets,
             } => {
                 writeln!(f, "{name} {{")?;
-                for (key, target) in match_targets {
+                for (key, target) in *match_targets {
                     writeln!(f, "  {key}: {target}")?;
                 }
                 writeln!(f, "  default: {default}")?;

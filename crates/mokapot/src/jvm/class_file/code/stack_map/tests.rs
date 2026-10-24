@@ -1,17 +1,37 @@
-use super::raw;
-use crate::jvm::class_file::Decode;
-
 #[test]
-fn raw_frames_preserve_extended_encoding_and_constant_pool_indices() {
-    let bytes = [247, 0, 9, 7, 0x12, 0x34];
-    let frame = raw::StackMapFrameInfo::decode(&mut bytes.as_slice()).unwrap();
-    assert!(matches!(
-        frame,
-        raw::StackMapFrameInfo::SameLocals1StackItemFrameExtended {
-            offset_delta: 9,
-            stack: raw::VerificationTypeInfo::Object {
-                cpool_index: 0x1234
-            },
-        }
-    ));
+fn object_verification_types_validate_indices_and_resolve_arrays() {
+    use super::*;
+    use crate::jvm::{
+        class::Version,
+        class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
+        errors::ParseErrorKind,
+    };
+    use crate::types::Descriptor;
+
+    let pool = RawConstantPool::from_entries([
+        RawEntry::Utf8(b"[I"),
+        RawEntry::Class {
+            name_index: 1.into(),
+        },
+        RawEntry::Long(0.into()),
+    ]);
+    let mut ctx = ResolutionContext {
+        constant_pool: resolve(pool).unwrap(),
+        class_version: Version::LATEST,
+    };
+    for cpool_index in [0, 1, 3, 4, 5] {
+        let raw = raw::VerificationTypeInfo::Object { cpool_index };
+        assert_eq!(
+            raw.resolve(&mut ctx).unwrap_err().kind(),
+            ParseErrorKind::Malformed
+        );
+    }
+    let VerificationTypeData::Object(id) = raw::VerificationTypeInfo::Object { cpool_index: 2 }
+        .resolve(&mut ctx)
+        .unwrap()
+    else {
+        panic!("expected an object verification type")
+    };
+    let pool = ctx.constant_pool.finish();
+    assert_eq!(pool.reference_type(id).descriptor(), "[I");
 }

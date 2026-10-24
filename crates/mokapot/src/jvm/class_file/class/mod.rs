@@ -1,5 +1,7 @@
 //! Class-file parsing and model conversion.
 
+use crate::jvm::{annotation::AnnotationsData, class::record_component::RecordComponentData};
+
 use zerocopy::byteorder::big_endian::U16;
 
 use crate::jvm::class_file::attribute::extract_attributes;
@@ -11,21 +13,14 @@ use crate::jvm::class_file::flags::parse_flags;
 mod decode;
 
 use super::{
-    ParseError, ResolutionContext,
-    attribute::AttributeInfo,
-    constant_pool::{ConstantPool, RawConstantPool},
-    field::FieldInfo,
-    method::MethodInfo,
-    resolve::Resolve,
+    ParseError, ResolutionContext, attribute::AttributeInfo, constant_pool::RawConstantPool,
+    field::FieldInfo, method::MethodInfo, resolve::Resolve,
 };
 use crate::{
     intrinsics::{ExactSizeIteratorExt, see_jvm_spec},
     jvm::{
-        Annotations, Class,
-        class::{
-            self, BootstrapMethod, EnclosingMethod, InnerClassInfo, NestedClassAccessFlags,
-            RecordComponent, Version,
-        },
+        Class,
+        class::{self, Version},
         errors::ParsingErrorContext,
     },
 };
@@ -47,6 +42,62 @@ pub(crate) struct ClassFile<'a> {
 }
 
 const JAVA_CLASS_MAGIC: u32 = 0xCAFE_BABE;
+
+const PREVIEW_FEATURES: u16 = u16::MAX;
+
+impl Version {
+    pub(super) fn from_versions(major: u16, minor: u16) -> Result<Self, ParseError> {
+        match (major, minor) {
+            (45, minor) => Ok(Version::Jdk1_1(minor)),
+            (46, 0x0000) => Ok(Version::Jdk1_2),
+            (47, 0x0000) => Ok(Version::Jdk1_3),
+            (48, 0x0000) => Ok(Version::Jdk1_4),
+            (49, 0x0000) => Ok(Version::Jdk5),
+            (50, 0x0000) => Ok(Version::Jdk6),
+            (51, 0x0000) => Ok(Version::Jdk7),
+            (52, 0x0000) => Ok(Version::Jdk8),
+            (53, 0x0000) => Ok(Version::Jdk9),
+            (54, 0x0000) => Ok(Version::Jdk10),
+            (55, 0x0000) => Ok(Version::Jdk11),
+            (56, 0x0000) => Ok(Version::Jdk12(false)),
+            (56, PREVIEW_FEATURES) => Ok(Version::Jdk12(true)),
+            (57, 0x0000) => Ok(Version::Jdk13(false)),
+            (57, PREVIEW_FEATURES) => Ok(Version::Jdk13(true)),
+            (58, 0x0000) => Ok(Version::Jdk14(false)),
+            (58, PREVIEW_FEATURES) => Ok(Version::Jdk14(true)),
+            (59, 0x0000) => Ok(Version::Jdk15(false)),
+            (59, PREVIEW_FEATURES) => Ok(Version::Jdk15(true)),
+            (60, 0x0000) => Ok(Version::Jdk16(false)),
+            (60, PREVIEW_FEATURES) => Ok(Version::Jdk16(true)),
+            (61, 0x0000) => Ok(Version::Jdk17(false)),
+            (61, PREVIEW_FEATURES) => Ok(Version::Jdk17(true)),
+            (62, 0x0000) => Ok(Version::Jdk18(false)),
+            (62, PREVIEW_FEATURES) => Ok(Version::Jdk18(true)),
+            (63, 0x0000) => Ok(Version::Jdk19(false)),
+            (63, PREVIEW_FEATURES) => Ok(Version::Jdk19(true)),
+            (64, 0x0000) => Ok(Version::Jdk20(false)),
+            (64, PREVIEW_FEATURES) => Ok(Version::Jdk20(true)),
+            (65, 0x0000) => Ok(Version::Jdk21(false)),
+            (65, PREVIEW_FEATURES) => Ok(Version::Jdk21(true)),
+            (66, 0x0000) => Ok(Version::Jdk22(false)),
+            (66, PREVIEW_FEATURES) => Ok(Version::Jdk22(true)),
+            (67, 0x0000) => Ok(Version::Jdk23(false)),
+            (67, PREVIEW_FEATURES) => Ok(Version::Jdk23(true)),
+            (68, 0x0000) => Ok(Version::Jdk24(false)),
+            (68, PREVIEW_FEATURES) => Ok(Version::Jdk24(true)),
+            (69, 0x0000) => Ok(Version::Jdk25(false)),
+            (69, PREVIEW_FEATURES) => Ok(Version::Jdk25(true)),
+            (70, 0x0000) => Ok(Version::Jdk26(false)),
+            (70, PREVIEW_FEATURES) => Ok(Version::Jdk26(true)),
+            (71, 0x0000) => Ok(Version::Jdk27(false)),
+            (71, PREVIEW_FEATURES) => Ok(Version::Jdk27(true)),
+            (major, _) if major > Version::LATEST.major() => {
+                Err(ParseError::malform("Unsupported class version"))
+            }
+            _ => Err(ParseError::malform("Invalid class version")),
+        }
+    }
+}
 
 impl Class {
     /// Parses exactly one class file from the given bytes.
@@ -81,24 +132,24 @@ impl Class {
         let version = Version::from_versions(major_version, minor_version)?;
         let access_flags =
             parse_flags::<class::AccessFlags>(access_flags, "Invalid class access flags")?;
-        let constant_pool = ConstantPool::from_raw(constant_pool)?;
-        let class_name = constant_pool.get_class_name(this_class)?;
+        let constant_pool = super::constant_pool::resolve(constant_pool)?;
+        let class_id = constant_pool.class_id(this_class)?;
+        let class_name = constant_pool.class_name(class_id);
         let super_class = match super_class {
-            0 if class_name == "java/lang/Object" => None,
+            0 if class_name.as_java_str() == "java/lang/Object" => None,
             0 if access_flags.contains(class::AccessFlags::MODULE) => None,
             0 => Err(ParseError::malform(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it => Some(constant_pool.get_class_name(it)?),
+            it => Some(constant_pool.class_id(it)?),
         };
 
-        let ctx = &ResolutionContext {
+        let mut ctx = ResolutionContext {
             constant_pool,
             class_version: version,
-            current_class_name: class_name.clone(),
         };
 
-        let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
+        let attributes = attributes.into_iter().map(|it| it.resolve(&mut ctx));
 
         extract_attributes! {
             for attributes in "class_file" {
@@ -128,29 +179,29 @@ impl Class {
         Ok(Class {
             version,
             access_flags,
-            name: class_name,
+            name: class_id,
             super_class,
             interfaces: interfaces
                 .iter()
-                .map(|it| ctx.constant_pool.get_class_name(it.get()))
+                .map(|it| ctx.constant_pool.class_id(it.get()))
                 .try_collect_exact()?,
             fields: fields
                 .into_iter()
-                .map(|it| it.resolve(ctx))
+                .map(|it| it.resolve(&mut ctx))
                 .try_collect_exact()?,
             methods: methods
                 .into_iter()
-                .map(|it| it.resolve(ctx))
+                .map(|it| it.resolve(&mut ctx))
                 .try_collect_exact()?,
             source_file,
             inner_classes,
             enclosing_method,
             source_debug_extension,
-            annotations: Annotations {
+            annotations: AnnotationsData {
                 runtime_visible: runtime_visible_annotations,
                 runtime_invisible: runtime_invisible_annotations,
             },
-            type_annotations: Annotations {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },
@@ -166,93 +217,34 @@ impl Class {
             signature,
             record,
             other_attributes,
-        })
-    }
-}
-
-impl Resolve for &raw::BootstrapMethod {
-    type Output = BootstrapMethod;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::BootstrapMethod {
-            bootstrap_method_ref,
-            bootstrap_arguments,
-            ..
-        } = raw;
-        let method = ctx
-            .constant_pool
-            .get_method_handle(bootstrap_method_ref.get())?;
-        let arguments = bootstrap_arguments
-            .iter()
-            .map(|it| ctx.constant_pool.get_constant_value(it.get()))
-            .try_collect_exact()?;
-        Ok(BootstrapMethod { method, arguments })
-    }
-}
-
-impl Resolve for raw::InnerClass {
-    type Output = InnerClassInfo;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::InnerClass {
-            inner_class_info_index,
-            outer_class_info_index,
-            inner_name_index,
-            inner_class_access_flags,
-        } = raw;
-        let inner_class_info_index = inner_class_info_index.get();
-        let outer_class_info_index = outer_class_info_index.get();
-        let inner_name_index = inner_name_index.get();
-        let inner_class_access_flags = inner_class_access_flags.get();
-        let inner_class = ctx.constant_pool.get_class_name(inner_class_info_index)?;
-        let outer_class = if outer_class_info_index == 0 {
-            None
-        } else {
-            let the_class = ctx.constant_pool.get_class_name(outer_class_info_index)?;
-            Some(the_class)
-        };
-        let inner_name = if inner_name_index == 0 {
-            None
-        } else {
-            Some(ctx.constant_pool.get_str(inner_name_index)?.into_owned())
-        };
-        let access_flags = parse_flags::<NestedClassAccessFlags>(
-            inner_class_access_flags,
-            "Invalid nested class access flags",
-        )?;
-        Ok(InnerClassInfo {
-            inner_class,
-            outer_class,
-            inner_name,
-            access_flags,
+            constant_pool: ctx.constant_pool.finish(),
         })
     }
 }
 
 impl Resolve for raw::RecordComponentInfo<'_> {
-    type Output = RecordComponent;
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
+    type Output = RecordComponentData;
+
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw::RecordComponentInfo {
             name_index,
             descriptor_index,
             attributes,
-        } = raw;
-        let name = ctx.constant_pool.get_str(name_index)?.into_owned();
+        } = self;
+        let name = ctx.constant_pool.utf8_id(name_index)?;
         let component_type = ctx
             .constant_pool
-            .get_str(descriptor_index)?
-            .parse()
+            .intern_field_type(descriptor_index)
             .context("Invalid component type descriptor")?;
-
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
+
         extract_attributes! {
             for attributes in "record_component" {
                 let signature: Signature,
-                let runtime_visible_annotations : RuntimeVisibleAnnotations as unwrap_or_default,
-                let runtime_invisible_annotations : RuntimeInvisibleAnnotations as unwrap_or_default,
+                let runtime_visible_annotations
+                    : RuntimeVisibleAnnotations as unwrap_or_default,
+                let runtime_invisible_annotations
+                    : RuntimeInvisibleAnnotations as unwrap_or_default,
                 let runtime_visible_type_annotations
                     : RuntimeVisibleTypeAnnotations as unwrap_or_default,
                 let runtime_invisible_type_annotations
@@ -261,44 +253,19 @@ impl Resolve for raw::RecordComponentInfo<'_> {
             }
         }
 
-        Ok(RecordComponent {
+        Ok(RecordComponentData {
             name,
             component_type,
             signature,
-            annotations: Annotations {
+            annotations: AnnotationsData {
                 runtime_visible: runtime_visible_annotations,
                 runtime_invisible: runtime_invisible_annotations,
             },
-            type_annotations: Annotations {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },
             other_attributes,
-        })
-    }
-}
-
-impl Resolve for raw::EnclosingMethod {
-    type Output = EnclosingMethod;
-
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
-        let raw = self;
-        let raw::EnclosingMethod {
-            class_index,
-            method_index,
-        } = raw;
-        let class_index = class_index.get();
-        let method_index = method_index.get();
-        let class = ctx.constant_pool.get_class_name(class_index)?;
-        let method_name_and_desc = if method_index > 0 {
-            let name_and_desc = ctx.constant_pool.get_method_name_and_type(method_index)?;
-            Some(name_and_desc)
-        } else {
-            None
-        };
-        Ok(EnclosingMethod {
-            class,
-            method_name_and_desc,
         })
     }
 }

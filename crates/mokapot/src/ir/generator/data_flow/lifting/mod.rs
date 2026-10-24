@@ -60,8 +60,8 @@ pub(super) fn lift_instruction(
         }
         BiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
         SiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
-        Ldc(value) | LdcW(value) => cx.constant(value.clone(), Category1),
-        Ldc2W(value) => cx.constant(value.clone(), Category2),
+        Ldc(value) | LdcW(value) => cx.constant(value.into_owned(), Category1),
+        Ldc2W(value) => cx.constant(value.into_owned(), Category2),
         ILoad(idx) | FLoad(idx) | ALoad(idx) => cx.load((*idx).into(), Category1),
         LLoad(idx) | DLoad(idx) => cx.load((*idx).into(), Category2),
         ILoad0 | FLoad0 | ALoad0 => cx.load(0, Category1),
@@ -83,14 +83,16 @@ pub(super) fn lift_instruction(
         LStore2 | DStore2 => cx.store(2, Category2),
         LStore3 | DStore3 => cx.store(3, Category2),
         IInc(idx, constant) => cx.increment((*idx).into(), *constant),
-        Wide(wide) => cx.lift_wide(wide),
+        Wide(wide) => cx.lift_wide(*wide),
         IALoad | FALoad | AALoad | BALoad | CALoad | SALoad => cx.array_read(Category1),
         LALoad | DALoad => cx.array_read(Category2),
         IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => cx.array_write(Category1),
         LAStore | DAStore => cx.array_write(Category2),
-        ANewArray(element_type) => cx.new_array(element_type.clone().into()),
+        ANewArray(element_type) => cx.new_array((*element_type).clone().into()),
         NewArray(element_type) => cx.new_array(FieldType::Base(*element_type)),
-        MultiANewArray(element_type, dim) => cx.new_multi_array(element_type.clone().into(), *dim),
+        MultiANewArray(element_type, dim) => {
+            cx.new_multi_array((*element_type).clone().into(), *dim)
+        }
         ArrayLength => cx.array_length(),
         Pop => cx.stack_effect(StackOperation::Pop),
         Pop2 => cx.stack_effect(StackOperation::Pop2),
@@ -145,20 +147,20 @@ pub(super) fn lift_instruction(
         FCmpG => cx.compare_float(NaNTreatment::IsLargest, Category1),
         DCmpL => cx.compare_float(NaNTreatment::IsSmallest, Category2),
         DCmpG => cx.compare_float(NaNTreatment::IsLargest, Category2),
-        GetStatic(field) => cx.read_static(field),
-        GetField(field) => cx.read_instance(field),
-        PutStatic(field) => cx.write_static(field),
-        PutField(field) => cx.write_instance(field),
+        GetStatic(field) => cx.read_static(*field),
+        GetField(field) => cx.read_instance(*field),
+        PutStatic(field) => cx.write_static(*field),
+        PutField(field) => cx.write_instance(*field),
         InvokeVirtual(method) => {
-            cx.invoke_instance(method, |this| InvocationKind::Virtual { this })
+            cx.invoke_instance(*method, |this| InvocationKind::Virtual { this })
         }
         InvokeSpecial(method) => {
-            cx.invoke_instance(method, |this| InvocationKind::Special { this })
+            cx.invoke_instance(*method, |this| InvocationKind::Special { this })
         }
         InvokeInterface(method, _) => {
-            cx.invoke_instance(method, |this| InvocationKind::Interface { this })
+            cx.invoke_instance(*method, |this| InvocationKind::Interface { this })
         }
-        InvokeStatic(method) => cx.invoke_static(method),
+        InvokeStatic(method) => cx.invoke_static(*method),
         InvokeDynamic {
             bootstrap_method_index,
             name,
@@ -167,12 +169,12 @@ pub(super) fn lift_instruction(
         Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(None),
         New(class) => cx.new_object(class),
         CheckCast(target) => cx.conversion(
-            |value| Conversion::CheckCast(value, target.clone()),
+            |value| Conversion::CheckCast(value, (*target).clone()),
             Category1,
             Category1,
         ),
         InstanceOf(target) => cx.conversion(
-            |value| Conversion::InstanceOf(value, target.clone()),
+            |value| Conversion::InstanceOf(value, (*target).clone()),
             Category1,
             Category1,
         ),

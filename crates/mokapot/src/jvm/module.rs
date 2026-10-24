@@ -1,56 +1,293 @@
 //! Modules in the JPMS.
-use crate::types::class_name::ClassName;
-use crate::types::package_name::PackageName;
+
+use std::fmt;
 
 use bitflags::bitflags;
 
-use super::references::ModuleRef;
-use crate::intrinsics::see_jvm_spec;
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{
+        Class, DebugList, JavaStr,
+        constant_pool::{ClassId, ModuleId, PackageId, Utf8Id},
+    },
+    types::{class_name::ClassName, module_name::ModuleName, package_name::PackageName},
+};
 
-/// A service provided by a module.
+/// A module declared by a class.
 #[doc = see_jvm_spec!(4, 7, 25)]
-#[derive(Debug, Clone)]
-pub struct Provide {
-    /// The reference to a class which is provided as a service.
-    pub service: ClassName,
-    /// The list of the classes which implement the service.
-    pub with: Box<[ClassName]>,
+#[derive(Clone, Copy)]
+pub struct Module<'class> {
+    pub(crate) class: &'class Class,
+    pub(crate) data: &'class ModuleData,
 }
 
-/// A module opening.
-#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
-pub struct Open {
-    /// The reference to the package which is opened.
-    pub package: PackageName,
-    /// The flags of the opening.
-    pub flags: OpenFlags,
-    /// The list of the modules which can access the package.
-    pub to: Box<[ModuleRef]>,
+pub(crate) struct ModuleData {
+    pub(crate) name: ModuleId,
+    pub(crate) flags: Flags,
+    pub(crate) version: Option<Utf8Id>,
+    pub(crate) requires: Box<[RequireData]>,
+    pub(crate) exports: Box<[ExportData]>,
+    pub(crate) opens: Box<[OpenData]>,
+    pub(crate) uses: Box<[ClassId]>,
+    pub(crate) provides: Box<[ProvideData]>,
 }
 
-/// A module export.
-#[doc = see_jvm_spec!(4, 7, 25)]
 #[derive(Debug, Clone)]
-pub struct Export {
-    /// The reference to the package which is exported.
-    pub package: PackageName,
-    /// The flags of the export.
-    pub flags: ExportFlags,
-    /// The list of the modules which can access the package.
-    pub to: Box<[ModuleRef]>,
+pub(crate) struct RequireData {
+    pub(crate) module: ModuleId,
+    pub(crate) flags: RequireFlags,
+    pub(crate) version: Option<Utf8Id>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ExportData {
+    pub(crate) package: PackageId,
+    pub(crate) flags: ExportFlags,
+    pub(crate) to: Box<[ModuleId]>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct OpenData {
+    pub(crate) package: PackageId,
+    pub(crate) flags: OpenFlags,
+    pub(crate) to: Box<[ModuleId]>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProvideData {
+    pub(crate) service: ClassId,
+    pub(crate) with: Box<[ClassId]>,
 }
 
 /// A module require.
 #[doc = see_jvm_spec!(4, 7, 25)]
-#[derive(Debug, Clone)]
-pub struct Require {
-    /// The reference to the module which is required.
-    pub module: ModuleRef,
-    /// The flags of the require.
-    pub flags: RequireFlags,
-    /// The version of the required module.
-    pub version: Option<String>,
+#[derive(Clone, Copy)]
+pub struct Require<'class> {
+    pub(crate) class: &'class Class,
+    pub(crate) data: &'class RequireData,
+}
+
+/// A module export.
+#[doc = see_jvm_spec!(4, 7, 25)]
+#[derive(Clone, Copy)]
+pub struct Export<'class> {
+    pub(crate) class: &'class Class,
+    pub(crate) data: &'class ExportData,
+}
+
+/// A module opening.
+#[doc = see_jvm_spec!(4, 7, 25)]
+#[derive(Clone, Copy)]
+pub struct Open<'class> {
+    pub(crate) class: &'class Class,
+    pub(crate) data: &'class OpenData,
+}
+
+/// A service provided by a module.
+#[doc = see_jvm_spec!(4, 7, 25)]
+#[derive(Clone, Copy)]
+pub struct Provide<'class> {
+    pub(crate) class: &'class Class,
+    pub(crate) data: &'class ProvideData,
+}
+
+impl<'class> Module<'class> {
+    /// Returns the module name.
+    #[must_use]
+    pub fn name(&self) -> &'class ModuleName {
+        self.class.constant_pool.module_name(self.data.name)
+    }
+
+    /// Returns the module flags.
+    #[must_use]
+    pub const fn flags(&self) -> Flags {
+        self.data.flags
+    }
+
+    /// Returns the module version, if present.
+    #[must_use]
+    pub fn version(&self) -> Option<&'class JavaStr> {
+        self.data
+            .version
+            .map(|id| self.class.constant_pool.utf8(id))
+    }
+
+    /// Returns the modules required by this module.
+    pub fn requires(self) -> impl ExactSizeIterator<Item = Require<'class>> + DoubleEndedIterator {
+        self.data.requires.iter().map(|data| Require {
+            class: self.class,
+            data,
+        })
+    }
+
+    /// Returns the packages exported by this module.
+    pub fn exports(self) -> impl ExactSizeIterator<Item = Export<'class>> + DoubleEndedIterator {
+        self.data.exports.iter().map(|data| Export {
+            class: self.class,
+            data,
+        })
+    }
+
+    /// Returns the packages opened by this module.
+    pub fn opens(self) -> impl ExactSizeIterator<Item = Open<'class>> + DoubleEndedIterator {
+        self.data.opens.iter().map(|data| Open {
+            class: self.class,
+            data,
+        })
+    }
+
+    /// Returns the service classes used by this module.
+    pub fn uses(self) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator {
+        self.data
+            .uses
+            .iter()
+            .map(|id| self.class.constant_pool.class_name(*id))
+    }
+
+    /// Returns the services provided by this module.
+    pub fn provides(self) -> impl ExactSizeIterator<Item = Provide<'class>> + DoubleEndedIterator {
+        self.data.provides.iter().map(|data| Provide {
+            class: self.class,
+            data,
+        })
+    }
+}
+
+impl<'class> Require<'class> {
+    /// Returns the required module.
+    #[must_use]
+    pub fn module(&self) -> &'class ModuleName {
+        self.class.constant_pool.module_name(self.data.module)
+    }
+
+    /// Returns the require flags.
+    #[must_use]
+    pub const fn flags(&self) -> RequireFlags {
+        self.data.flags
+    }
+
+    /// Returns the required module's version, if present.
+    #[must_use]
+    pub fn version(&self) -> Option<&'class JavaStr> {
+        self.data
+            .version
+            .map(|id| self.class.constant_pool.utf8(id))
+    }
+}
+
+impl<'class> Export<'class> {
+    /// Returns the exported package.
+    #[must_use]
+    pub fn package(&self) -> &'class PackageName {
+        self.class.constant_pool.package_name(self.data.package)
+    }
+
+    /// Returns the export flags.
+    #[must_use]
+    pub const fn flags(&self) -> ExportFlags {
+        self.data.flags
+    }
+
+    /// Returns the modules to which this package is exported.
+    pub fn to(self) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator {
+        self.data
+            .to
+            .iter()
+            .map(|id| self.class.constant_pool.module_name(*id))
+    }
+}
+
+impl<'class> Open<'class> {
+    /// Returns the opened package.
+    #[must_use]
+    pub fn package(&self) -> &'class PackageName {
+        self.class.constant_pool.package_name(self.data.package)
+    }
+
+    /// Returns the open flags.
+    #[must_use]
+    pub const fn flags(&self) -> OpenFlags {
+        self.data.flags
+    }
+
+    /// Returns the modules to which this package is opened.
+    pub fn to(self) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator {
+        self.data
+            .to
+            .iter()
+            .map(|id| self.class.constant_pool.module_name(*id))
+    }
+}
+
+impl<'class> Provide<'class> {
+    /// Returns the service class.
+    #[must_use]
+    pub fn service(&self) -> &'class ClassName {
+        self.class.constant_pool.class_name(self.data.service)
+    }
+
+    /// Returns the classes that implement the service.
+    pub fn with(self) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator {
+        self.data
+            .with
+            .iter()
+            .map(|id| self.class.constant_pool.class_name(*id))
+    }
+}
+
+impl fmt::Debug for Module<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Module")
+            .field("name", &self.name())
+            .field("flags", &self.flags())
+            .field("version", &self.version())
+            .field("requires", &DebugList::new(|| self.requires()))
+            .field("exports", &DebugList::new(|| self.exports()))
+            .field("opens", &DebugList::new(|| self.opens()))
+            .field("uses", &DebugList::new(|| self.uses()))
+            .field("provides", &DebugList::new(|| self.provides()))
+            .finish()
+    }
+}
+
+impl fmt::Debug for Require<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Require")
+            .field("module", self.module())
+            .field("flags", &self.flags())
+            .field("version", &self.version())
+            .finish()
+    }
+}
+
+impl fmt::Debug for Export<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Export")
+            .field("package", self.package())
+            .field("flags", &self.flags())
+            .field("to", &DebugList::new(|| self.to()))
+            .finish()
+    }
+}
+
+impl fmt::Debug for Open<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Open")
+            .field("package", self.package())
+            .field("flags", &self.flags())
+            .field("to", &DebugList::new(|| self.to()))
+            .finish()
+    }
+}
+
+impl fmt::Debug for Provide<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Provide")
+            .field("service", self.service())
+            .field("with", &DebugList::new(|| self.with()))
+            .finish()
+    }
 }
 
 bitflags! {

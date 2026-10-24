@@ -2,7 +2,10 @@
 
 use crate::types::class_name::ClassName;
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap};
+
+pub(crate) use crate::jvm::ConstantPool;
+pub(crate) use crate::jvm::code::InstructionData;
 
 pub(crate) use crate::ir::{
     BasicBlock, BlockId, BlockKind, BlockParameter, ControlTransfer, InstructionLocation,
@@ -12,17 +15,13 @@ pub(crate) use crate::ir::{
 use crate::{
     analysis::fixed_point::JoinSemiLattice,
     ir::NumericalId,
-    jvm::{
-        Method,
-        code::{ExceptionTableEntry, Instruction, ProgramCounter},
-        method::AccessFlags,
-        references::MethodRef,
-    },
+    jvm::{code::ProgramCounter, method::AccessFlags, references::MethodReference},
+    tests::{TestExceptionHandler, TestMethod},
     types::reference_type::ReferenceType,
 };
 
 /// A set-valued fact used by fixed-point analysis tests.
-#[derive(Debug, Clone, PartialEq, Eq, Default, proptest_derive::Arbitrary)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct TestSet(pub(crate) BTreeSet<u8>);
 
 impl<I> From<I> for TestSet
@@ -82,13 +81,33 @@ pub(crate) fn ids<const N: usize, T: NumericalId>(base: u32) -> [T; N] {
 pub(crate) fn method<I, PC>(
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
-) -> Method
+    exception_table: Vec<TestExceptionHandler>,
+) -> TestMethod
 where
-    I: IntoIterator<Item = (PC, Instruction)>,
+    I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
-    crate::tests::method(
+    crate::tests::method_with_pool(
+        ConstantPool::new(),
+        instructions,
+        descriptor,
+        exception_table,
+        AccessFlags::PUBLIC | AccessFlags::STATIC,
+    )
+}
+
+pub(crate) fn method_with_pool<I, PC>(
+    constant_pool: ConstantPool,
+    instructions: I,
+    descriptor: &str,
+    exception_table: Vec<TestExceptionHandler>,
+) -> TestMethod
+where
+    I: IntoIterator<Item = (PC, InstructionData)>,
+    PC: Into<ProgramCounter>,
+{
+    crate::tests::method_with_pool(
+        constant_pool,
         instructions,
         descriptor,
         exception_table,
@@ -107,10 +126,10 @@ pub(crate) fn ref_t(name: &str) -> ReferenceType {
 }
 
 /// A symbolic method on `java/lang/Object` with the given name and descriptor.
-pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodRef {
-    MethodRef {
+pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodReference {
+    MethodReference {
         owner: ref_t("java/lang/Object"),
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         descriptor: descriptor.parse().expect("a valid method descriptor"),
     }
 }
@@ -118,7 +137,7 @@ pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodRef {
 /// A call with the given dispatch kind, symbolic method, and arguments.
 pub(crate) fn call(
     kind: InvocationKind,
-    method: MethodRef,
+    method: MethodReference,
     args: impl IntoIterator<Item = ValueId>,
 ) -> Expression {
     Expression::Call {
@@ -126,17 +145,6 @@ pub(crate) fn call(
         method,
         args: args.into_iter().collect(),
     }
-}
-
-/// Fresh receiver and parameter identities for method-entry tests.
-pub(crate) fn entry_values(
-    instance: bool,
-    parameter_count: usize,
-) -> (Option<ValueId>, Vec<ValueId>) {
-    let mut allocator = crate::ir::IdAllocator::default();
-    let receiver = instance.then(|| allocator.new_id());
-    let parameters = (0..parameter_count).map(|_| allocator.new_id()).collect();
-    (receiver, parameters)
 }
 
 /// The method entry invoking `target` with `args`.
@@ -154,7 +162,7 @@ pub(crate) fn method_entry(
 pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) -> MokaIRMethod {
     MokaIRMethod {
         access_flags: AccessFlags::PUBLIC | AccessFlags::STATIC,
-        name: "test".to_owned(),
+        name: "test".to_owned().into(),
         descriptor: "()V".parse().expect("a valid descriptor"),
         owner: cls_name("java/lang/Object"),
         entry: method_entry(entry, []),
@@ -263,51 +271,6 @@ pub(crate) fn def(value: ValueId, expr: impl Into<Expression>) -> Operation {
         value,
         expr: expr.into(),
     }
-}
-
-/// The blocks reachable from the entry of `ir`.
-pub(crate) fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
-    reachable_of(&ir.blocks, ir.entry.block)
-}
-
-/// The blocks reachable from `entry` within `blocks`.
-pub(crate) fn reachable_of(
-    blocks: &HashMap<BlockId, BasicBlock>,
-    entry: BlockId,
-) -> Vec<(BlockId, &BasicBlock)> {
-    let mut result = Vec::new();
-    let mut visited = HashSet::new();
-    let mut pending = VecDeque::from([entry]);
-    while let Some(id) = pending.pop_front() {
-        if !visited.insert(id) {
-            continue;
-        }
-        let block = blocks
-            .get(&id)
-            .expect("a successor must belong to its method");
-        pending.extend(
-            block
-                .terminator
-                .successors()
-                .filter_map(Successor::block_target),
-        );
-        result.push((id, block));
-    }
-    result
-}
-
-/// The operations of `ir`'s reachable blocks.
-pub(crate) fn operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
-    reachable_blocks(ir)
-        .into_iter()
-        .flat_map(|(_, it)| &it.operations)
-}
-
-/// The operations of `ir`'s reachable terminators.
-pub(crate) fn terminator_operations(ir: &MokaIRMethod) -> impl Iterator<Item = &Operation> {
-    reachable_blocks(ir)
-        .into_iter()
-        .filter_map(|(_, it)| it.terminator.operation())
 }
 
 /// The JVM origin of `ir`'s entry terminator.

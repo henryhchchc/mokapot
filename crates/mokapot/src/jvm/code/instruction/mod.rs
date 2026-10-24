@@ -1,5 +1,9 @@
 //! Resolved JVM instruction model and presentation.
 
+use derive_more::Display;
+
+mod data;
+pub(crate) use data::InstructionData;
 mod display;
 mod name;
 
@@ -11,7 +15,7 @@ use super::ProgramCounter;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        ConstantValue,
+        ConstantVal, JavaStr,
         references::{FieldRef, MethodRef},
     },
     types::{
@@ -20,15 +24,15 @@ use crate::{
     },
 };
 
-/// A JVM instruction.
+/// A JVM instruction borrowing its class.
 #[doc = see_jvm_spec!(6, 5)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(
     missing_docs,
     reason = "This maps one-to-one to those in the JVM spec."
 )]
 #[repr(u8)]
-pub enum Instruction {
+pub enum Instruction<'class> {
     // Constants
     Nop = 0x00,
     AConstNull = 0x01,
@@ -48,9 +52,9 @@ pub enum Instruction {
     DConst1 = 0x0f,
     BiPush(i8) = 0x10,
     SiPush(i16) = 0x11,
-    Ldc(ConstantValue) = 0x12,
-    LdcW(ConstantValue) = 0x13,
-    Ldc2W(ConstantValue) = 0x14,
+    Ldc(ConstantVal<'class>) = 0x12,
+    LdcW(ConstantVal<'class>) = 0x13,
+    Ldc2W(ConstantVal<'class>) = 0x14,
 
     // Loads
     ILoad(u8) = 0x15,
@@ -216,12 +220,12 @@ pub enum Instruction {
     Ret(u8) = 0xa9,
     TableSwitch {
         low: i32,
-        jump_targets: Box<[ProgramCounter]>,
+        jump_targets: &'class [ProgramCounter],
         default: ProgramCounter,
     } = 0xaa,
     LookupSwitch {
         default: ProgramCounter,
-        match_targets: BTreeMap<i32, ProgramCounter>,
+        match_targets: &'class BTreeMap<i32, ProgramCounter>,
     } = 0xab,
     IReturn = 0xac,
     LReturn = 0xad,
@@ -231,32 +235,32 @@ pub enum Instruction {
     Return = 0xb1,
 
     // References
-    GetStatic(FieldRef) = 0xb2,
-    PutStatic(FieldRef) = 0xb3,
-    GetField(FieldRef) = 0xb4,
-    PutField(FieldRef) = 0xb5,
-    InvokeVirtual(MethodRef) = 0xb6,
-    InvokeSpecial(MethodRef) = 0xb7,
-    InvokeStatic(MethodRef) = 0xb8,
-    InvokeInterface(MethodRef, u8) = 0xb9,
+    GetStatic(FieldRef<'class>) = 0xb2,
+    PutStatic(FieldRef<'class>) = 0xb3,
+    GetField(FieldRef<'class>) = 0xb4,
+    PutField(FieldRef<'class>) = 0xb5,
+    InvokeVirtual(MethodRef<'class>) = 0xb6,
+    InvokeSpecial(MethodRef<'class>) = 0xb7,
+    InvokeStatic(MethodRef<'class>) = 0xb8,
+    InvokeInterface(MethodRef<'class>, u8) = 0xb9,
     InvokeDynamic {
         bootstrap_method_index: u16,
-        name: String,
-        descriptor: MethodDescriptor,
+        name: &'class JavaStr,
+        descriptor: &'class MethodDescriptor,
     } = 0xba,
-    New(ClassName) = 0xbb,
+    New(&'class ClassName) = 0xbb,
     NewArray(PrimitiveType) = 0xbc,
-    ANewArray(ReferenceType) = 0xbd,
+    ANewArray(&'class ReferenceType) = 0xbd,
     ArrayLength = 0xbe,
     AThrow = 0xbf,
-    CheckCast(ReferenceType) = 0xc0,
-    InstanceOf(ReferenceType) = 0xc1,
+    CheckCast(&'class ReferenceType) = 0xc0,
+    InstanceOf(&'class ReferenceType) = 0xc1,
     MonitorEnter = 0xc2,
     MonitorExit = 0xc3,
 
     // Extended
     Wide(WideInstruction) = 0xc4,
-    MultiANewArray(ReferenceType, u8) = 0xc5,
+    MultiANewArray(&'class ReferenceType, u8) = 0xc5,
     IfNull(ProgramCounter) = 0xc6,
     IfNonNull(ProgramCounter) = 0xc7,
     GotoW(ProgramCounter) = 0xc8,
@@ -278,23 +282,35 @@ pub enum Instruction {
     clippy::module_name_repetitions,
     reason = "For consistent type names with the JVM spec."
 )]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Display)]
 pub enum WideInstruction {
+    #[display("iload {_0}")]
     ILoad(u16),
+    #[display("lload {_0}")]
     LLoad(u16),
+    #[display("fload {_0}")]
     FLoad(u16),
+    #[display("dload {_0}")]
     DLoad(u16),
+    #[display("aload {_0}")]
     ALoad(u16),
+    #[display("istore {_0}")]
     IStore(u16),
+    #[display("lstore {_0}")]
     LStore(u16),
+    #[display("fstore {_0}")]
     FStore(u16),
+    #[display("dstore {_0}")]
     DStore(u16),
+    #[display("astore {_0}")]
     AStore(u16),
+    #[display("iinc {_0} {_1}")]
     IInc(u16, i32),
+    #[display("ret {_0}")]
     Ret(u16),
 }
 
-impl Instruction {
+impl Instruction<'_> {
     pub(crate) fn tableswitch_high(low: i32, target_count: usize) -> Option<i32> {
         let offset = i128::try_from(target_count.checked_sub(1)?).ok()?;
         i32::try_from(i128::from(low) + offset).ok()

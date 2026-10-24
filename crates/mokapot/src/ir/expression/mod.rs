@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use super::ValueId;
 use crate::{
-    jvm::{ConstantValue, references::MethodRef},
+    jvm::{ConstantValue, JavaString, references::MethodReference},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -40,14 +40,14 @@ pub enum Expression {
         /// The invocation opcode's dispatch semantics and receiver.
         kind: InvocationKind,
         /// The unresolved symbolic method reference.
-        method: MethodRef,
+        method: MethodReference,
         /// The arguments.
         args: Vec<ValueId>,
     },
     /// A call to a bootstrap method to create a closure.
     Closure {
         /// The name of the closure.
-        name: String,
+        name: JavaString,
         /// The values captured by the closure.
         captures: Vec<ValueId>,
         /// The index of the bootstrap method.

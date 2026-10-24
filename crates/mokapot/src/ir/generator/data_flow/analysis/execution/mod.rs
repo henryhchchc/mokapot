@@ -108,7 +108,7 @@ impl BlockInterpreter<'_, '_> {
         let mut operations = Vec::new();
         for (pc, instruction) in instructions {
             if let Some(operation) =
-                lifting::lift_instruction(values, instruction, pc, &mut frame).at_pc(pc)?
+                lifting::lift_instruction(values, &instruction, pc, &mut frame).at_pc(pc)?
             {
                 operations.push((pc, operation));
             }

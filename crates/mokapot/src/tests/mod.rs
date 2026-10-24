@@ -1,50 +1,23 @@
 use crate::{
     jvm::{
-        Annotations, Class, Method, class,
-        code::{ExceptionTableEntry, Instruction, MethodBody, ProgramCounter},
-        method::AccessFlags,
+        Class, ConstantPool, Method,
+        annotation::AnnotationsData,
+        class,
+        code::{ExceptionTableEntryData, InstructionData, MethodBodyData, ProgramCounter},
+        method::{AccessFlags, MethodData},
     },
     types::class_name::ClassName,
 };
 
-#[rustfmt::skip]
-#[must_use]
-/// Creates an empty class with the specified major and minor version numbers.
-///
-/// # Parameters
-/// - `major`: The major version number.
-/// - `minor`: The minor version number.
-///
-/// # Returns
-/// A byte array representing the class file structure of an empty class.
-pub const fn empty_class_with_version(major: u16, minor: u16) -> [u8; 40] {
-    [
-        0xCA, 0xFE, 0xBA, 0xBE, // Magic
-        minor.to_be_bytes()[0], minor.to_be_bytes()[1], // Minor version
-        major.to_be_bytes()[0], major.to_be_bytes()[1], // Major version
-        // Constant pool
-        0x00, 0x03, // Constant pool count 2+1
-        0x07, // Tag: Class
-        0x00, 0x02, // Name index: 2
-        0x01, // Tag: Utf8
-        0x00, 0x0A, // Length of string: 10
-        0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x57, 0x6F, 0x72, 0x6C, 0x64, // "Helloworld"
-        0x00, 0x01, // Access flags: public
-        0x00, 0x01, // This class index
-        0x00, 0x01, // Super class index
-        0x00, 0x00, // Interfaces count
-        0x00, 0x00, // Fields count
-        0x00, 0x00, // Methods count
-        0x00, 0x00, // Attributes count
-    ]
-}
-
 impl Default for Class {
     fn default() -> Self {
+        let mut constant_pool = ConstantPool::new();
+        let name = constant_pool.insert_class_name(ClassName::new("$default$".to_owned()).unwrap());
         Self {
             version: class::Version::LATEST,
+            constant_pool,
             access_flags: class::AccessFlags::empty(),
-            name: ClassName::new("$default$").unwrap(),
+            name,
             super_class: None,
             interfaces: Box::default(),
             fields: Box::default(),
@@ -53,8 +26,8 @@ impl Default for Class {
             inner_classes: Box::default(),
             enclosing_method: None,
             source_debug_extension: None,
-            annotations: Annotations::default(),
-            type_annotations: Annotations::default(),
+            annotations: AnnotationsData::default(),
+            type_annotations: AnnotationsData::default(),
             bootstrap_methods: Box::default(),
             module: None,
             module_packages: Box::default(),
@@ -71,48 +44,95 @@ impl Default for Class {
     }
 }
 
-/// Builds a method named `test` and owned by `org/mokapot/Test` from its body.
-pub(crate) fn method<I, PC>(
+pub(crate) struct TestMethod {
+    class: Class,
+}
+
+impl TestMethod {
+    pub(crate) fn as_method(&self) -> Method<'_> {
+        self.class
+            .methods()
+            .next()
+            .expect("the test class contains one method")
+    }
+
+    pub(crate) fn data_mut(&mut self) -> &mut MethodData {
+        self.class
+            .methods
+            .first_mut()
+            .expect("the test class contains one method")
+    }
+}
+
+pub(crate) struct TestExceptionHandler {
+    pub covered_pc: std::ops::Range<ProgramCounter>,
+    pub handler_pc: ProgramCounter,
+    pub catch_type: Option<ClassName>,
+}
+
+pub(crate) fn method_with_pool<I, PC>(
+    mut constant_pool: ConstantPool,
     instructions: I,
     descriptor: &str,
-    exception_table: Vec<ExceptionTableEntry>,
+    exception_table: Vec<TestExceptionHandler>,
     access_flags: AccessFlags,
-) -> Method
+) -> TestMethod
 where
-    I: IntoIterator<Item = (PC, Instruction)>,
+    I: IntoIterator<Item = (PC, InstructionData)>,
     PC: Into<ProgramCounter>,
 {
     let instructions = instructions
         .into_iter()
         .map(|(pc, instruction)| (pc.into(), instruction))
         .collect();
-    Method {
-        access_flags,
-        name: "test".to_owned(),
-        descriptor: descriptor.parse().expect("the descriptor must be valid"),
-        owner: "org/mokapot/Test"
+    let name = constant_pool.insert_utf8("test".to_owned().into());
+    let descriptor =
+        constant_pool.insert_method_descriptor(descriptor.parse().expect("valid test descriptor"));
+    let owner = constant_pool.insert_class_name(
+        "org/mokapot/Test"
             .parse()
             .expect("the owner must be a valid class reference"),
-        body: Some(MethodBody {
-            max_stack: 4,
-            max_locals: 4,
-            instructions,
-            exception_table: exception_table.into_boxed_slice(),
-            line_number_table: None,
-            local_variable_table: None,
-            stack_map_table: None,
-            type_annotations: Annotations::default(),
+    );
+    let exception_table = exception_table
+        .into_iter()
+        .map(|entry| ExceptionTableEntryData {
+            covered_pc: entry.covered_pc,
+            handler_pc: entry.handler_pc,
+            catch_type: entry
+                .catch_type
+                .map(|name| constant_pool.insert_class_name(name)),
+        })
+        .collect();
+    let class = Class {
+        constant_pool,
+        name: owner,
+        methods: Box::new([MethodData {
+            access_flags,
+            name,
+            descriptor,
+            body: Some(MethodBodyData {
+                max_stack: 4,
+                max_locals: 4,
+                instructions,
+                exception_table,
+                line_number_table: None,
+                local_variable_table: None,
+                stack_map_table: None,
+                type_annotations: AnnotationsData::default(),
+                other_attributes: Box::new([]),
+            }),
+            exceptions: Box::new([]),
+            annotations: AnnotationsData::default(),
+            type_annotations: AnnotationsData::default(),
+            parameter_annotations: AnnotationsData::default(),
+            annotation_default: None,
+            parameters: Box::new([]),
+            is_synthetic: false,
+            is_deprecated: false,
+            signature: None,
             other_attributes: Box::new([]),
-        }),
-        exceptions: Box::new([]),
-        annotations: Annotations::default(),
-        type_annotations: Annotations::default(),
-        parameter_annotations: Annotations::default(),
-        annotation_default: None,
-        parameters: Box::new([]),
-        is_synthetic: false,
-        is_deprecated: false,
-        signature: None,
-        other_attributes: Box::new([]),
-    }
+        }]),
+        ..Class::default()
+    };
+    TestMethod { class }
 }

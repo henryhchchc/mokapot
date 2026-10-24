@@ -79,7 +79,7 @@ impl<'a> ClassFormatter<'a> {
 /// formatted as text. This formatter handles field declarations including
 /// access modifiers, type, name, and constant values if present.
 pub struct FieldFormatter<'a> {
-    field: &'a Field,
+    field: Field<'a>,
 }
 
 impl<'a> FieldFormatter<'a> {
@@ -88,7 +88,7 @@ impl<'a> FieldFormatter<'a> {
     /// # Arguments
     ///
     /// * `field` - Reference to the Field to format
-    pub const fn new(field: &'a Field) -> Self {
+    pub const fn new(field: Field<'a>) -> Self {
         Self { field }
     }
 
@@ -102,7 +102,7 @@ impl<'a> FieldFormatter<'a> {
     ///
     /// A space-separated string of access flag keywords
     pub fn format_access_flags(&self) -> String {
-        let flags = self.field.access_flags;
+        let flags = self.field.access_flags();
         let mut result = Vec::new();
 
         if flags.contains(field::AccessFlags::PUBLIC) {
@@ -153,10 +153,10 @@ impl Display for FieldFormatter<'_> {
         }
 
         // Print field type and name
-        write!(f, "{} {}", self.field.field_type, self.field.name)?;
+        write!(f, "{} {}", self.field.field_type(), self.field.name())?;
 
         // For constant fields, print their value
-        if let Some(value) = &self.field.constant_value {
+        if let Some(value) = self.field.constant_value() {
             write!(f, " = {value}")?;
         }
 
@@ -171,7 +171,7 @@ impl Display for FieldFormatter<'_> {
 /// formatted as text. This formatter handles method declarations including
 /// access modifiers, return type, name, and parameters.
 pub struct MethodFormatter<'a> {
-    method: &'a Method,
+    method: Method<'a>,
 }
 
 impl<'a> MethodFormatter<'a> {
@@ -180,7 +180,7 @@ impl<'a> MethodFormatter<'a> {
     /// # Arguments
     ///
     /// * `method` - Reference to the Method to format
-    pub const fn new(method: &'a Method) -> Self {
+    pub const fn new(method: Method<'a>) -> Self {
         Self { method }
     }
 
@@ -194,7 +194,7 @@ impl<'a> MethodFormatter<'a> {
     ///
     /// A space-separated string of access flag keywords
     pub fn format_access_flags(&self) -> String {
-        let flags = self.method.access_flags;
+        let flags = self.method.access_flags();
         let mut result = Vec::new();
 
         if flags.contains(method::AccessFlags::PUBLIC) {
@@ -256,16 +256,17 @@ impl Display for MethodFormatter<'_> {
 
         // Convert the method's return type descriptor to a string
         // A return type can either be a specific type or void
-        let return_type = match &self.method.descriptor.return_type {
+        let descriptor = self.method.descriptor();
+        let return_type = match &descriptor.return_type {
             method_descriptor::ReturnType::Some(field_type) => field_type.to_string(),
             method_descriptor::ReturnType::Void => "void".to_string(),
         };
 
         // Write the return type and method name
-        write!(f, "{return_type} {}(", self.method.name)?;
+        write!(f, "{return_type} {}(", self.method.name())?;
 
         // Write the parameter list, comma-separated
-        for (i, param_type) in self.method.descriptor.parameters_types.iter().enumerate() {
+        for (i, param_type) in descriptor.parameters_types.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }

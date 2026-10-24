@@ -12,13 +12,20 @@ pub(crate) use local_variable::{LocalVariableDescriptorEntry, LocalVariableSigna
 
 use super::{ParseError, ResolutionContext, code::raw::Code, resolve::Resolve};
 use crate::jvm::{
-    Annotations,
+    annotation::AnnotationsData,
     class_file::code::raw_instruction::RawInstruction,
     code::{
-        ExceptionTableEntry, Instruction, InstructionList, LineNumberTableEntry,
-        LocalVariableTable, MethodBody, ProgramCounter,
+        ExceptionTableEntryData, InstructionData, InstructionStorage, LineNumberTableEntry,
+        LocalVariableTableData, MethodBodyData, ProgramCounter,
     },
 };
+use zerocopy::byteorder::big_endian::U16;
+
+impl From<U16> for ProgramCounter {
+    fn from(value: U16) -> Self {
+        Self::from(value.get())
+    }
+}
 
 impl From<raw::LineNumberTableEntry> for LineNumberTableEntry {
     fn from(raw: raw::LineNumberTableEntry) -> Self {
@@ -30,9 +37,9 @@ impl From<raw::LineNumberTableEntry> for LineNumberTableEntry {
 }
 
 impl Resolve for raw::ExceptionTableEntry {
-    type Output = ExceptionTableEntry;
+    type Output = ExceptionTableEntryData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::ExceptionTableEntry {
             start_pc,
@@ -48,9 +55,9 @@ impl Resolve for raw::ExceptionTableEntry {
         let catch_type = if catch_type == 0 {
             None
         } else {
-            Some(ctx.constant_pool.get_class_name(catch_type)?)
+            Some(ctx.constant_pool.class_id(catch_type)?)
         };
-        Ok(ExceptionTableEntry {
+        Ok(ExceptionTableEntryData {
             covered_pc,
             handler_pc,
             catch_type,
@@ -59,9 +66,9 @@ impl Resolve for raw::ExceptionTableEntry {
 }
 
 impl Resolve for Code<'_> {
-    type Output = MethodBody;
+    type Output = MethodBodyData;
 
-    fn resolve(self, ctx: &ResolutionContext) -> Result<Self::Output, ParseError> {
+    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let Code {
             max_stack,
@@ -71,23 +78,24 @@ impl Resolve for Code<'_> {
             attributes,
         } = raw;
 
-        let mut instructions = Vec::new();
+        let mut instructions = Vec::with_capacity(code.len().min(usize::from(u16::MAX)));
         for entry in RawInstruction::iter_from_bytes(code) {
             let (pc, raw) = entry?;
-            let instruction = Instruction::from_raw_instruction(raw, pc, &ctx.constant_pool)?;
+            let instruction =
+                InstructionData::from_raw_instruction(raw, pc, &mut ctx.constant_pool)?;
             instructions.push((pc, instruction));
         }
-        let instructions = InstructionList::from_ordered(instructions);
+        instructions.shrink_to_fit();
+        let instructions = InstructionStorage::from_ordered(instructions);
 
         let exception_table = exception_table
             .iter()
             .copied()
             .map(|it| it.resolve(ctx))
             .try_collect_exact()?;
-        let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
         let mut local_variable_table = None;
         extract_attributes! {
-            for attributes in "code" {
+            for attributes in "code" resolving ctx {
                 let line_number_table: LineNumberTable,
                 let stack_map_table: StackMapTable,
                 let runtime_visible_type_annotations:
@@ -95,22 +103,22 @@ impl Resolve for Code<'_> {
                 let runtime_invisible_type_annotations:
                     RuntimeInvisibleTypeAnnotations as unwrap_or_default,
                 match Attribute::LocalVariableTable(it) => {
-                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
+                    let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableDescriptorEntry { id, name, field_type } in it {
-                        table.merge_type(id, name, field_type)?;
+                        local_variable::merge_type(table, id, name, field_type, &ctx.constant_pool)?;
                     }
                 },
                 match Attribute::LocalVariableTypeTable(it) => {
-                    let table = local_variable_table.get_or_insert(LocalVariableTable::default());
+                    let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableSignatureEntry { id, name, signature } in it {
-                        table.merge_signature(id, name, signature)?;
+                        local_variable::merge_signature(table, id, name, signature, &ctx.constant_pool)?;
                     }
                 },
                 else let other_attributes
             }
         }
 
-        Ok(MethodBody {
+        Ok(MethodBodyData {
             max_stack,
             max_locals,
             instructions,
@@ -118,7 +126,7 @@ impl Resolve for Code<'_> {
             line_number_table,
             local_variable_table,
             stack_map_table,
-            type_annotations: Annotations {
+            type_annotations: AnnotationsData {
                 runtime_visible: runtime_visible_type_annotations,
                 runtime_invisible: runtime_invisible_type_annotations,
             },
@@ -131,20 +139,19 @@ impl Resolve for Code<'_> {
 mod tests {
     use super::*;
     use crate::jvm::class::Version;
-    use crate::jvm::class_file::constant_pool::ConstantPool;
+    use crate::jvm::class_file::constant_pool::{RawConstantPool, resolve};
 
-    fn context() -> ResolutionContext<'static> {
+    fn context() -> ResolutionContext {
         ResolutionContext {
-            constant_pool: ConstantPool::new(),
+            constant_pool: resolve(RawConstantPool::from_entries([])).unwrap(),
             class_version: Version::LATEST,
-            current_class_name: "Test".parse().unwrap(),
         }
     }
 
     #[test]
     fn instructions_preserve_offsets_and_reject_invalid_bytecode() {
-        let context = context();
-        let resolve = |code| {
+        let mut context = context();
+        let mut resolve = |code| {
             Code {
                 max_stack: 2,
                 max_locals: 0,
@@ -152,17 +159,17 @@ mod tests {
                 exception_table: &[],
                 attributes: Box::new([]),
             }
-            .resolve(&context)
+            .resolve(&mut context)
         };
         let body = resolve(&[0x10, 42, 0x04, 0x60, 0xac]).unwrap();
         let instructions: Vec<_> = body.instructions.into_iter().collect();
         assert_eq!(
             instructions,
             [
-                (0.into(), Instruction::BiPush(42)),
-                (2.into(), Instruction::IConst1),
-                (3.into(), Instruction::IAdd),
-                (4.into(), Instruction::IReturn),
+                (0.into(), InstructionData::BiPush(42)),
+                (2.into(), InstructionData::IConst1),
+                (3.into(), InstructionData::IAdd),
+                (4.into(), InstructionData::IReturn),
             ]
         );
         for bytes in [&[0x10][..], &[0xb2, 0, 1], &[0xcb]] {
@@ -174,15 +181,46 @@ mod tests {
     }
 
     #[test]
+    fn catch_types_reject_array_and_descriptor_class_entries() {
+        use crate::jvm::{
+            class_file::constant_pool::{RawConstantPool, RawEntry},
+            errors::ParseErrorKind,
+        };
+
+        for name in [b"[I".as_slice(), b"Ljava/lang/Throwable;"] {
+            let pool = RawConstantPool::from_entries([
+                RawEntry::Utf8(name),
+                RawEntry::Class {
+                    name_index: 1.into(),
+                },
+            ]);
+            let mut ctx = ResolutionContext {
+                constant_pool: resolve(pool).unwrap(),
+                class_version: Version::LATEST,
+            };
+            let entry = raw::ExceptionTableEntry {
+                start_pc: 0.into(),
+                end_pc: 1.into(),
+                handler_pc: 1.into(),
+                catch_type: 2.into(),
+            };
+            assert_eq!(
+                entry.resolve(&mut ctx).unwrap_err().kind(),
+                ParseErrorKind::Malformed
+            );
+        }
+    }
+
+    #[test]
     fn exception_table_entry_preserves_exclusive_end_pc() {
-        let context = context();
+        let mut context = context();
         let entry = raw::ExceptionTableEntry {
             start_pc: 1.into(),
             end_pc: 4.into(),
             handler_pc: 5.into(),
             catch_type: 0.into(),
         }
-        .resolve(&context)
+        .resolve(&mut context)
         .unwrap();
 
         assert_eq!(
