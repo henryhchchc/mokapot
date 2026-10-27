@@ -28,6 +28,18 @@ pub struct FieldReference {
     pub field_type: FieldType,
 }
 
+impl FieldReference {
+    /// Borrows this symbolic field reference.
+    #[must_use]
+    pub const fn as_view(&self) -> FieldRef<'_> {
+        FieldRef {
+            owner: &self.owner,
+            name: self.name.as_java_str(),
+            field_type: &self.field_type,
+        }
+    }
+}
+
 /// A reference to a [`Method`].
 #[doc = see_jvm_spec!(4, 4, 2)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Display)]
@@ -42,19 +54,26 @@ pub struct MethodReference {
 }
 
 impl MethodReference {
+    /// Borrows this symbolic method reference.
+    #[must_use]
+    pub const fn as_view(&self) -> MethodRef<'_> {
+        MethodRef {
+            owner: &self.owner,
+            name: self.name.as_java_str(),
+            descriptor: &self.descriptor,
+        }
+    }
+
     /// Checks if the method reference refers to a constructor.
     #[must_use]
     pub fn is_constructor(&self) -> bool {
-        self.name == Method::CONSTRUCTOR_NAME
-            && matches!(self.descriptor.return_type, ReturnType::Void)
+        self.as_view().is_constructor()
     }
 
     /// Checks if the method reference refers to a static initializer block.
     #[must_use]
     pub fn is_static_initializer_block(&self) -> bool {
-        self.name == Method::CLASS_INITIALIZER_NAME
-            && self.descriptor.parameters_types.is_empty()
-            && matches!(self.descriptor.return_type, ReturnType::Void)
+        self.as_view().is_static_initializer_block()
     }
 }
 

@@ -1,6 +1,6 @@
 //! JVM record components.
 
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use crate::jvm::{
     Class, DebugList, JavaStr,
@@ -73,7 +73,8 @@ impl<'class> RecordComponent<'class> {
     /// The unrecognized record component attributes.
     pub fn other_attributes(
         self,
-    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .other_attributes
             .iter()

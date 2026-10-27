@@ -1,6 +1,6 @@
 //! JVM bootstrap methods.
 
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use crate::jvm::{
     Class, ConstantVal, DebugList,
@@ -37,7 +37,8 @@ impl<'class> BootstrapMethod<'class> {
     /// The constants passed to the bootstrap method.
     pub fn arguments(
         self,
-    ) -> impl ExactSizeIterator<Item = ConstantVal<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = ConstantVal<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .arguments
             .iter()

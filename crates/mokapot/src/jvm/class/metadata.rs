@@ -1,5 +1,7 @@
 //! Borrowed accessors for class-file metadata.
 
+use std::iter::FusedIterator;
+
 use crate::{
     jvm::{Class, JavaStr},
     types::{class_name::ClassName, package_name::PackageName},
@@ -19,7 +21,10 @@ impl Class {
     }
 
     /// Returns the interfaces implemented by this class.
-    pub fn interfaces(&self) -> impl ExactSizeIterator<Item = &ClassName> + DoubleEndedIterator {
+    pub fn interfaces(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &ClassName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.interfaces
             .iter()
             .map(|id| self.constant_pool.class_name(*id))
@@ -34,7 +39,8 @@ impl Class {
     /// Returns the module packages declared by this class, if any.
     pub fn module_packages(
         &self,
-    ) -> impl ExactSizeIterator<Item = &PackageName> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = &PackageName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.module_packages
             .iter()
             .map(|id| self.constant_pool.package_name(*id))
@@ -54,7 +60,10 @@ impl Class {
     }
 
     /// Returns the classes in this class's nest.
-    pub fn nest_members(&self) -> impl ExactSizeIterator<Item = &ClassName> + DoubleEndedIterator {
+    pub fn nest_members(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &ClassName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.nest_members
             .iter()
             .map(|id| self.constant_pool.class_name(*id))
@@ -63,7 +72,8 @@ impl Class {
     /// Returns the subclasses permitted by this sealed class or interface.
     pub fn permitted_subclasses(
         &self,
-    ) -> impl ExactSizeIterator<Item = &ClassName> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = &ClassName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.permitted_subclasses
             .iter()
             .map(|id| self.constant_pool.class_name(*id))

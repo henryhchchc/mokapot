@@ -110,92 +110,124 @@ impl ConstantVal<'_> {
     }
 }
 
-macro_rules! impl_value_semantics {
-    ($ty:ty) => {
-        impl PartialEq<Self> for $ty {
-            fn eq(&self, other: &Self) -> bool {
-                match (self, other) {
-                    (Self::Null, Self::Null) => true,
-                    (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
-                    (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
-                    (Self::Float(lhs), Self::Float(rhs)) => lhs.to_bits() == rhs.to_bits(),
-                    (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
-                    (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
-                    (Self::Double(lhs), Self::Double(rhs)) => lhs.to_bits() == rhs.to_bits(),
-                    (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
-                    (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
-                    (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
-                    (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
-                    (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
-                        lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
-                    }
-                    _ => false,
-                }
+impl ConstantValue {
+    /// Borrows this constant value.
+    #[must_use]
+    pub const fn as_view(&self) -> ConstantVal<'_> {
+        match self {
+            Self::Null => ConstantVal::Null,
+            Self::Integer(value) => ConstantVal::Integer(*value),
+            Self::Float(value) => ConstantVal::Float(*value),
+            Self::Long(value) => ConstantVal::Long(*value),
+            Self::Double(value) => ConstantVal::Double(*value),
+            Self::String(value) => ConstantVal::String(value.as_java_str()),
+            Self::Class(value) => ConstantVal::Class(value),
+            Self::Handle(value) => ConstantVal::Handle(value.as_view()),
+            Self::MethodType(value) => ConstantVal::MethodType(value),
+            Self::Dynamic(bootstrap, name, ty) => {
+                ConstantVal::Dynamic(*bootstrap, name.as_java_str(), ty)
             }
         }
-
-        impl PartialOrd for $ty {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                match (self, other) {
-                    (Self::Null, Self::Null) => Some(Ordering::Equal),
-                    (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
-                    (Self::Long(lhs), Self::Long(rhs)) => lhs.partial_cmp(rhs),
-                    (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
-                        (true, true) => Some(Ordering::Equal),
-                        (false, false) => Some(lhs.total_cmp(rhs)),
-                        _ => None,
-                    },
-                    (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
-                        (true, true) => Some(Ordering::Equal),
-                        (false, false) => Some(lhs.total_cmp(rhs)),
-                        _ => None,
-                    },
-                    (Self::String(lhs), Self::String(rhs)) => lhs.partial_cmp(rhs),
-                    (Self::Class(lhs), Self::Class(rhs)) if lhs == rhs => Some(Ordering::Equal),
-                    (Self::Handle(lhs), Self::Handle(rhs)) if lhs == rhs => Some(Ordering::Equal),
-                    (Self::MethodType(lhs), Self::MethodType(rhs)) if lhs == rhs => {
-                        Some(Ordering::Equal)
-                    }
-                    (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2))
-                        if lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2 =>
-                    {
-                        Some(Ordering::Equal)
-                    }
-                    _ => None,
-                }
-            }
-        }
-
-        impl Eq for $ty {}
-
-        impl Hash for $ty {
-            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                core::mem::discriminant(self).hash(state);
-                match self {
-                    Self::Integer(v) => v.hash(state),
-                    Self::Long(v) => v.hash(state),
-                    Self::Float(v) if !v.is_nan() => {
-                        v.to_bits().hash(state);
-                    }
-                    Self::Double(v) if !v.is_nan() => {
-                        v.to_bits().hash(state);
-                    }
-                    Self::Null | Self::Float(_) | Self::Double(_) => {}
-                    Self::String(v) => v.hash(state),
-                    Self::Class(v) => v.hash(state),
-                    Self::Handle(v) => v.hash(state),
-                    Self::MethodType(v) => v.hash(state),
-                    Self::Dynamic(v0, v1, v2) => {
-                        (v0, v1, v2).hash(state);
-                    }
-                }
-            }
-        }
-    };
+    }
 }
 
-impl_value_semantics!(ConstantValue);
-impl_value_semantics!(ConstantVal<'_>);
+impl PartialEq for ConstantValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_view() == other.as_view()
+    }
+}
+
+impl Eq for ConstantValue {}
+
+impl PartialOrd for ConstantValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.as_view().partial_cmp(&other.as_view())
+    }
+}
+
+impl Hash for ConstantValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_view().hash(state);
+    }
+}
+
+impl PartialEq<Self> for ConstantVal<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Null, Self::Null) => true,
+            (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
+            (Self::Float(lhs), Self::Float(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+            (Self::Float(lhs), Self::Float(rhs)) => lhs.to_bits() == rhs.to_bits(),
+            (Self::Long(lhs), Self::Long(rhs)) => lhs == rhs,
+            (Self::Double(lhs), Self::Double(rhs)) if lhs.is_nan() && rhs.is_nan() => true,
+            (Self::Double(lhs), Self::Double(rhs)) => lhs.to_bits() == rhs.to_bits(),
+            (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
+            (Self::Class(lhs), Self::Class(rhs)) => lhs == rhs,
+            (Self::Handle(lhs), Self::Handle(rhs)) => lhs == rhs,
+            (Self::MethodType(lhs), Self::MethodType(rhs)) => lhs == rhs,
+            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2)) => {
+                lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2
+            }
+            _ => false,
+        }
+    }
+}
+
+impl PartialOrd for ConstantVal<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Self::Null, Self::Null) => Some(Ordering::Equal),
+            (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => lhs.partial_cmp(rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
+                (true, true) => Some(Ordering::Equal),
+                (false, false) => Some(lhs.total_cmp(rhs)),
+                _ => None,
+            },
+            (Self::Double(lhs), Self::Double(rhs)) => match (lhs.is_nan(), rhs.is_nan()) {
+                (true, true) => Some(Ordering::Equal),
+                (false, false) => Some(lhs.total_cmp(rhs)),
+                _ => None,
+            },
+            (Self::String(lhs), Self::String(rhs)) => lhs.partial_cmp(rhs),
+            (Self::Class(lhs), Self::Class(rhs)) if lhs == rhs => Some(Ordering::Equal),
+            (Self::Handle(lhs), Self::Handle(rhs)) if lhs == rhs => Some(Ordering::Equal),
+            (Self::MethodType(lhs), Self::MethodType(rhs)) if lhs == rhs => Some(Ordering::Equal),
+            (Self::Dynamic(lhs0, lhs1, lhs2), Self::Dynamic(rhs0, rhs1, rhs2))
+                if lhs0 == rhs0 && lhs1 == rhs1 && lhs2 == rhs2 =>
+            {
+                Some(Ordering::Equal)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Eq for ConstantVal<'_> {}
+
+impl Hash for ConstantVal<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Integer(v) => v.hash(state),
+            Self::Long(v) => v.hash(state),
+            Self::Float(v) if !v.is_nan() => {
+                v.to_bits().hash(state);
+            }
+            Self::Double(v) if !v.is_nan() => {
+                v.to_bits().hash(state);
+            }
+            Self::Null | Self::Float(_) | Self::Double(_) => {}
+            Self::String(v) => v.hash(state),
+            Self::Class(v) => v.hash(state),
+            Self::Handle(v) => v.hash(state),
+            Self::MethodType(v) => v.hash(state),
+            Self::Dynamic(v0, v1, v2) => {
+                (v0, v1, v2).hash(state);
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

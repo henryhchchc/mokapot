@@ -1,6 +1,6 @@
 //! JVM fields and constant values.
 
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use crate::{
     intrinsics::see_jvm_spec,
@@ -115,7 +115,8 @@ impl<'class> Field<'class> {
     /// The unrecognized field attributes.
     pub fn other_attributes(
         self,
-    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .other_attributes
             .iter()

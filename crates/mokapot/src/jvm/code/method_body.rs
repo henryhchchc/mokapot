@@ -3,6 +3,7 @@ use crate::types::class_name::ClassName;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
+    iter::FusedIterator,
     ops::{Bound, Range, RangeBounds},
 };
 
@@ -14,6 +15,7 @@ use crate::{
         annotation::{AnnotationsData, TypeAnnotationData, TypeAnnotations},
         attribute::{Attribute, AttributeData},
         constant_pool::{ClassId, FieldTypeId, ReferenceTypeId, Utf8Id},
+        view::define_view_list,
     },
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
@@ -59,13 +61,16 @@ impl<'class> MethodBody<'class> {
     /// Returns the executable instructions.
     #[must_use]
     pub const fn instructions(self) -> InstructionList<'class> {
-        InstructionList::new(self.class, &self.data.instructions)
+        InstructionList::new(&self.class.constant_pool, &self.data.instructions)
     }
 
     /// Returns the exception handlers.
     pub fn exception_table(
         self,
-    ) -> impl ExactSizeIterator<Item = ExceptionTableEntry<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = ExceptionTableEntry<'class>>
+    + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data
             .exception_table
             .iter()
@@ -97,7 +102,12 @@ impl<'class> MethodBody<'class> {
     #[must_use]
     pub fn stack_map_table(
         self,
-    ) -> Option<impl ExactSizeIterator<Item = StackMapFrame<'class>> + DoubleEndedIterator> {
+    ) -> Option<
+        impl ExactSizeIterator<Item = StackMapFrame<'class>>
+        + DoubleEndedIterator
+        + FusedIterator
+        + Clone,
+    > {
         self.data.stack_map_table.as_ref().map(|table| {
             table
                 .iter()
@@ -114,7 +124,8 @@ impl<'class> MethodBody<'class> {
     /// Returns the unrecognized attributes.
     pub fn other_attributes(
         self,
-    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .other_attributes
             .iter()
@@ -283,6 +294,7 @@ mod test {
     use Instruction::*;
 
     use super::*;
+
     #[test]
     fn exception_table_entry_covers_half_open_range() {
         let data = ExceptionTableEntryData {
@@ -466,7 +478,8 @@ impl<'class> LocalVariableTable<'class> {
     pub fn iter(
         self,
     ) -> impl ExactSizeIterator<Item = (&'class LocalVariableId, LocalVariableTableEntry<'class>)>
-    {
+    + FusedIterator
+    + Clone {
         self.data.entries.iter().map(move |(id, data)| {
             (
                 id,
@@ -675,48 +688,12 @@ impl<'class> VerificationType<'class> {
     }
 }
 
-/// The verification types of local variables or operand stack entries.
-#[derive(Clone, Copy)]
-pub struct VerificationTypes<'class> {
-    class: &'class Class,
-    data: &'class [VerificationTypeData],
-}
-
-impl<'class> VerificationTypes<'class> {
-    /// Iterates over the verification types.
-    pub fn iter(
-        self,
-    ) -> impl ExactSizeIterator<Item = VerificationType<'class>> + DoubleEndedIterator {
-        self.data
-            .iter()
-            .map(move |data| VerificationType::new(self.class, *data))
-    }
-
-    /// Returns the verification type at the given index.
-    #[must_use]
-    pub fn get(self, index: usize) -> Option<VerificationType<'class>> {
-        self.data
-            .get(index)
-            .map(|data| VerificationType::new(self.class, *data))
-    }
-
-    /// Returns the number of verification types.
-    #[must_use]
-    pub const fn len(self) -> usize {
-        self.data.len()
-    }
-
-    /// Returns whether the sequence is empty.
-    #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.data.is_empty()
-    }
-}
-
-impl fmt::Debug for VerificationTypes<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
-    }
+define_view_list! {
+    /// The verification types of local variables or operand stack entries.
+    pub struct VerificationTypes<'class>;
+    iterator VerificationTypeIter;
+    VerificationTypeData => VerificationType<'class>;
+    |class, data| VerificationType::new(class, *data)
 }
 
 #[derive(Debug, Clone)]
@@ -768,10 +745,7 @@ impl<'class> StackMapFrame<'class> {
                 locals,
             } => Self::AppendFrame {
                 offset_delta: *offset_delta,
-                locals: VerificationTypes {
-                    class,
-                    data: locals,
-                },
+                locals: VerificationTypes::new(class, locals),
             },
             StackMapFrameData::Full {
                 offset_delta,
@@ -779,11 +753,8 @@ impl<'class> StackMapFrame<'class> {
                 stack,
             } => Self::FullFrame {
                 offset_delta: *offset_delta,
-                locals: VerificationTypes {
-                    class,
-                    data: locals,
-                },
-                stack: VerificationTypes { class, data: stack },
+                locals: VerificationTypes::new(class, locals),
+                stack: VerificationTypes::new(class, stack),
             },
         }
     }
