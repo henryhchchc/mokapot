@@ -34,24 +34,26 @@ pub enum MethodHandle {
 impl MethodHandle {
     /// Borrows this method handle.
     #[must_use]
-    pub const fn as_view(&self) -> MethodHndl<'_> {
+    pub const fn as_borrowed(&self) -> MethodHndl<'_> {
         match self {
-            Self::RefGetField(value) => MethodHndl::RefGetField(value.as_view()),
-            Self::RefGetStatic(value) => MethodHndl::RefGetStatic(value.as_view()),
-            Self::RefPutField(value) => MethodHndl::RefPutField(value.as_view()),
-            Self::RefPutStatic(value) => MethodHndl::RefPutStatic(value.as_view()),
-            Self::RefInvokeVirtual(value) => MethodHndl::RefInvokeVirtual(value.as_view()),
-            Self::RefInvokeStatic(value) => MethodHndl::RefInvokeStatic(value.as_view()),
-            Self::RefInvokeSpecial(value) => MethodHndl::RefInvokeSpecial(value.as_view()),
-            Self::RefNewInvokeSpecial(value) => MethodHndl::RefNewInvokeSpecial(value.as_view()),
-            Self::RefInvokeInterface(value) => MethodHndl::RefInvokeInterface(value.as_view()),
+            Self::RefGetField(value) => MethodHndl::RefGetField(value.as_borrowed()),
+            Self::RefGetStatic(value) => MethodHndl::RefGetStatic(value.as_borrowed()),
+            Self::RefPutField(value) => MethodHndl::RefPutField(value.as_borrowed()),
+            Self::RefPutStatic(value) => MethodHndl::RefPutStatic(value.as_borrowed()),
+            Self::RefInvokeVirtual(value) => MethodHndl::RefInvokeVirtual(value.as_borrowed()),
+            Self::RefInvokeStatic(value) => MethodHndl::RefInvokeStatic(value.as_borrowed()),
+            Self::RefInvokeSpecial(value) => MethodHndl::RefInvokeSpecial(value.as_borrowed()),
+            Self::RefNewInvokeSpecial(value) => {
+                MethodHndl::RefNewInvokeSpecial(value.as_borrowed())
+            }
+            Self::RefInvokeInterface(value) => MethodHndl::RefInvokeInterface(value.as_borrowed()),
         }
     }
 
     /// Gets the reference kind of this method handle.
     #[must_use]
     pub const fn reference_kind(&self) -> u8 {
-        self.as_view().reference_kind()
+        self.as_borrowed().reference_kind()
     }
 }
 
@@ -129,7 +131,7 @@ pub(crate) enum MethodHandleData {
 }
 
 impl MethodHandleData {
-    pub fn view(self, pool: &ConstantPool) -> MethodHndl<'_> {
+    pub fn as_borrowed(self, pool: &ConstantPool) -> MethodHndl<'_> {
         match self {
             Self::GetField(id) => MethodHndl::RefGetField(pool.field_ref(id)),
             Self::GetStatic(id) => MethodHndl::RefGetStatic(pool.field_ref(id)),

@@ -318,7 +318,7 @@ impl ConstantPool {
     }
     pub(crate) fn method_handle(&self, id: MethodHandleId) -> MethodHndl<'_> {
         match self.get_entry(id.0.get()).expect("validated pool ID") {
-            Entry::MethodHandle(value) => value.view(self),
+            Entry::MethodHandle(value) => value.as_borrowed(self),
             _ => unreachable!("validated entry kind"),
         }
     }
@@ -434,7 +434,7 @@ impl ConstantPool {
             Entry::String(value) => ConstantVal::String(self.utf8(*value)),
             Entry::Class { reference_type, .. } => ConstantVal::Class(reference_type),
             Entry::MethodType(value) => ConstantVal::MethodType(self.method_descriptor(*value)),
-            Entry::MethodHandle(value) => ConstantVal::Handle(value.view(self)),
+            Entry::MethodHandle(value) => ConstantVal::Handle(value.as_borrowed(self)),
             Entry::Dynamic {
                 bootstrap_method_attr_index,
                 name_and_type,

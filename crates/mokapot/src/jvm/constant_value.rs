@@ -113,7 +113,7 @@ impl ConstantVal<'_> {
 impl ConstantValue {
     /// Borrows this constant value.
     #[must_use]
-    pub const fn as_view(&self) -> ConstantVal<'_> {
+    pub const fn as_borrowed(&self) -> ConstantVal<'_> {
         match self {
             Self::Null => ConstantVal::Null,
             Self::Integer(value) => ConstantVal::Integer(*value),
@@ -122,7 +122,7 @@ impl ConstantValue {
             Self::Double(value) => ConstantVal::Double(*value),
             Self::String(value) => ConstantVal::String(value.as_java_str()),
             Self::Class(value) => ConstantVal::Class(value),
-            Self::Handle(value) => ConstantVal::Handle(value.as_view()),
+            Self::Handle(value) => ConstantVal::Handle(value.as_borrowed()),
             Self::MethodType(value) => ConstantVal::MethodType(value),
             Self::Dynamic(bootstrap, name, ty) => {
                 ConstantVal::Dynamic(*bootstrap, name.as_java_str(), ty)
@@ -133,7 +133,7 @@ impl ConstantValue {
 
 impl PartialEq for ConstantValue {
     fn eq(&self, other: &Self) -> bool {
-        self.as_view() == other.as_view()
+        self.as_borrowed() == other.as_borrowed()
     }
 }
 
@@ -141,13 +141,13 @@ impl Eq for ConstantValue {}
 
 impl PartialOrd for ConstantValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.as_view().partial_cmp(&other.as_view())
+        self.as_borrowed().partial_cmp(&other.as_borrowed())
     }
 }
 
 impl Hash for ConstantValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_view().hash(state);
+        self.as_borrowed().hash(state);
     }
 }
 
