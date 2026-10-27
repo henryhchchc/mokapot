@@ -42,7 +42,7 @@ impl<'class> InstructionList<'class> {
     /// Returns the instruction at the given program counter.
     #[must_use]
     pub fn get(self, pc: &ProgramCounter) -> Option<Instruction<'class>> {
-        self.data.get(*pc).map(|data| data.view(self.pool))
+        self.data.get(*pc).map(|data| data.as_borrowed(self.pool))
     }
 
     /// Returns the first instruction.
@@ -50,7 +50,7 @@ impl<'class> InstructionList<'class> {
     pub fn entry_point(self) -> Option<(ProgramCounter, Instruction<'class>)> {
         self.data
             .entry_point()
-            .map(|(pc, data)| (pc, data.view(self.pool)))
+            .map(|(pc, data)| (pc, data.as_borrowed(self.pool)))
     }
 
     /// Returns the program counter of the next instruction after the given one.
@@ -132,7 +132,7 @@ impl<'class> Iterator for InstructionIter<'class> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(|(pc, data)| (*pc, data.view(self.pool)))
+            .map(|(pc, data)| (*pc, data.as_borrowed(self.pool)))
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.inner.size_hint()
@@ -142,7 +142,7 @@ impl DoubleEndedIterator for InstructionIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner
             .next_back()
-            .map(|(pc, data)| (*pc, data.view(self.pool)))
+            .map(|(pc, data)| (*pc, data.as_borrowed(self.pool)))
     }
 }
 impl ExactSizeIterator for InstructionIter<'_> {}

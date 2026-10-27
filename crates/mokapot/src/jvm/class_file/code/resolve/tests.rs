@@ -17,7 +17,7 @@ fn tableswitch_resolves_backward_default_and_inclusive_range() {
         .unwrap();
     let actual = InstructionData::from_raw_instruction(raw, 10.into(), &mut empty_pool()).unwrap();
     assert_eq!(
-        actual.view(&Class::default().constant_pool),
+        actual.as_borrowed(&Class::default().constant_pool),
         Instruction::TableSwitch {
             default: 5.into(),
             low: -1,
@@ -72,7 +72,7 @@ fn invokeinterface_parses_interface_method_refs() {
         constant_pool: pool.finish(),
         ..Class::default()
     };
-    let Instruction::InvokeInterface(method, count) = data.view(&class.constant_pool) else {
+    let Instruction::InvokeInterface(method, count) = data.as_borrowed(&class.constant_pool) else {
         panic!("expected invokeinterface")
     };
     assert_eq!(count, 1);

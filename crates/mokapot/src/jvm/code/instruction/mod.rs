@@ -71,7 +71,7 @@ macro_rules! define_instructions {
         }
 
         impl InstructionData {
-            pub(crate) fn view<$class>(&$class self, $pool: &$class ConstantPool) -> Instruction<$class> {
+            pub(crate) fn as_borrowed<$class>(&$class self, $pool: &$class ConstantPool) -> Instruction<$class> {
                 match self {
                     $(Self::$unit => Instruction::$unit,)*
                     $(Self::$copy($($copy_arg),+) => Instruction::$copy($(*$copy_arg),+),)*

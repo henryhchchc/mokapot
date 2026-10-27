@@ -31,7 +31,7 @@ pub struct FieldReference {
 impl FieldReference {
     /// Borrows this symbolic field reference.
     #[must_use]
-    pub const fn as_view(&self) -> FieldRef<'_> {
+    pub const fn as_borrowed(&self) -> FieldRef<'_> {
         FieldRef {
             owner: &self.owner,
             name: self.name.as_java_str(),
@@ -56,7 +56,7 @@ pub struct MethodReference {
 impl MethodReference {
     /// Borrows this symbolic method reference.
     #[must_use]
-    pub const fn as_view(&self) -> MethodRef<'_> {
+    pub const fn as_borrowed(&self) -> MethodRef<'_> {
         MethodRef {
             owner: &self.owner,
             name: self.name.as_java_str(),
@@ -67,13 +67,13 @@ impl MethodReference {
     /// Checks if the method reference refers to a constructor.
     #[must_use]
     pub fn is_constructor(&self) -> bool {
-        self.as_view().is_constructor()
+        self.as_borrowed().is_constructor()
     }
 
     /// Checks if the method reference refers to a static initializer block.
     #[must_use]
     pub fn is_static_initializer_block(&self) -> bool {
-        self.as_view().is_static_initializer_block()
+        self.as_borrowed().is_static_initializer_block()
     }
 }
 
