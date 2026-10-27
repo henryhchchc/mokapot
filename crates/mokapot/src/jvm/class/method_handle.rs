@@ -32,20 +32,26 @@ pub enum MethodHandle {
 }
 
 impl MethodHandle {
+    /// Borrows this method handle.
+    #[must_use]
+    pub const fn as_view(&self) -> MethodHndl<'_> {
+        match self {
+            Self::RefGetField(value) => MethodHndl::RefGetField(value.as_view()),
+            Self::RefGetStatic(value) => MethodHndl::RefGetStatic(value.as_view()),
+            Self::RefPutField(value) => MethodHndl::RefPutField(value.as_view()),
+            Self::RefPutStatic(value) => MethodHndl::RefPutStatic(value.as_view()),
+            Self::RefInvokeVirtual(value) => MethodHndl::RefInvokeVirtual(value.as_view()),
+            Self::RefInvokeStatic(value) => MethodHndl::RefInvokeStatic(value.as_view()),
+            Self::RefInvokeSpecial(value) => MethodHndl::RefInvokeSpecial(value.as_view()),
+            Self::RefNewInvokeSpecial(value) => MethodHndl::RefNewInvokeSpecial(value.as_view()),
+            Self::RefInvokeInterface(value) => MethodHndl::RefInvokeInterface(value.as_view()),
+        }
+    }
+
     /// Gets the reference kind of this method handle.
     #[must_use]
     pub const fn reference_kind(&self) -> u8 {
-        match self {
-            Self::RefGetField(..) => 1,
-            Self::RefGetStatic(..) => 2,
-            Self::RefPutField(..) => 3,
-            Self::RefPutStatic(..) => 4,
-            Self::RefInvokeVirtual(..) => 5,
-            Self::RefInvokeStatic(..) => 6,
-            Self::RefInvokeSpecial(..) => 7,
-            Self::RefNewInvokeSpecial(..) => 8,
-            Self::RefInvokeInterface(..) => 9,
-        }
+        self.as_view().reference_kind()
     }
 }
 

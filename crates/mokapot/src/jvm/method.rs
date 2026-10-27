@@ -1,6 +1,6 @@
 //! JVM methods.
 
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use bitflags::bitflags;
 
@@ -86,7 +86,8 @@ impl<'class> Method<'class> {
     /// The declared checked exceptions.
     pub fn exceptions(
         self,
-    ) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .exceptions
             .iter()
@@ -123,7 +124,8 @@ impl<'class> Method<'class> {
     /// The method parameter information.
     pub fn parameters(
         self,
-    ) -> impl ExactSizeIterator<Item = ParameterInfo<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = ParameterInfo<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data.parameters.iter().map(move |data| ParameterInfo {
             class: self.class,
             data,
@@ -153,7 +155,8 @@ impl<'class> Method<'class> {
     /// The unrecognized method attributes.
     pub fn other_attributes(
         self,
-    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = Attribute<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .other_attributes
             .iter()

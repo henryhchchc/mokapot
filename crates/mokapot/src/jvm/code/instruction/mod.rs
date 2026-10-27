@@ -11,7 +11,7 @@ use super::ProgramCounter;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
     jvm::{
-        Class, ConstantVal, JavaStr,
+        ConstantPool, ConstantVal, JavaStr,
         constant_pool::{
             ClassId, ConstantValueId, FieldRefId, InvokeDynamicId, MethodRefId, ReferenceTypeId,
         },
@@ -71,8 +71,7 @@ macro_rules! define_instructions {
         }
 
         impl InstructionData {
-            pub(crate) fn view<$class>(&$class self, class: &$class Class) -> Instruction<$class> {
-                let $pool = &class.constant_pool;
+            pub(crate) fn view<$class>(&$class self, $pool: &$class ConstantPool) -> Instruction<$class> {
                 match self {
                     $(Self::$unit => Instruction::$unit,)*
                     $(Self::$copy($($copy_arg),+) => Instruction::$copy($(*$copy_arg),+),)*

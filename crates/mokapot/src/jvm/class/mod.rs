@@ -11,7 +11,7 @@ pub use bootstrap::BootstrapMethod;
 pub use nesting::{EnclosingMethod, InnerClassInfo};
 pub use record_component::RecordComponent;
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter::FusedIterator};
 
 use bitflags::bitflags;
 
@@ -91,7 +91,10 @@ impl Class {
     }
 
     /// Iterates over the methods declared by this class.
-    pub fn methods(&self) -> impl ExactSizeIterator<Item = Method<'_>> + DoubleEndedIterator {
+    pub fn methods(
+        &self,
+    ) -> impl ExactSizeIterator<Item = Method<'_>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.methods.iter().map(|data| Method { class: self, data })
     }
 
@@ -116,7 +119,10 @@ impl Class {
     }
 
     /// Iterates over fields declared by this class.
-    pub fn fields(&self) -> impl ExactSizeIterator<Item = Field<'_>> + DoubleEndedIterator {
+    pub fn fields(
+        &self,
+    ) -> impl ExactSizeIterator<Item = Field<'_>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.fields.iter().map(|data| Field { class: self, data })
     }
     /// Gets a field by name and type.
@@ -141,7 +147,9 @@ impl Class {
     #[must_use]
     pub fn record(
         &self,
-    ) -> Option<impl ExactSizeIterator<Item = RecordComponent<'_>> + DoubleEndedIterator> {
+    ) -> Option<
+        impl ExactSizeIterator<Item = RecordComponent<'_>> + DoubleEndedIterator + FusedIterator + Clone,
+    > {
         self.record.as_ref().map(|items| {
             items
                 .iter()
@@ -151,7 +159,8 @@ impl Class {
     /// Iterates over inner-class information.
     pub fn inner_classes(
         &self,
-    ) -> impl ExactSizeIterator<Item = InnerClassInfo<'_>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = InnerClassInfo<'_>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.inner_classes
             .iter()
             .map(|data| InnerClassInfo { class: self, data })
@@ -166,7 +175,8 @@ impl Class {
     /// Iterates over bootstrap methods.
     pub fn bootstrap_methods(
         &self,
-    ) -> impl ExactSizeIterator<Item = BootstrapMethod<'_>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = BootstrapMethod<'_>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.bootstrap_methods
             .iter()
             .map(|data| BootstrapMethod { class: self, data })

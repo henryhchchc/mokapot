@@ -18,6 +18,7 @@ pub mod references;
 mod constant_pool;
 mod constant_value;
 mod debug;
+mod view;
 pub(crate) use constant_pool::ConstantPool;
 pub(crate) use debug::DebugList;
 

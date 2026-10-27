@@ -1,6 +1,6 @@
 //! Unrecognized JVM attributes.
 
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use crate::jvm::{Class, JavaStr, constant_pool::Utf8Id};
 
@@ -63,7 +63,8 @@ impl Class {
     /// The unrecognized class attributes.
     pub fn other_attributes(
         &self,
-    ) -> impl ExactSizeIterator<Item = Attribute<'_>> + DoubleEndedIterator {
+    ) -> impl ExactSizeIterator<Item = Attribute<'_>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.other_attributes
             .iter()
             .map(|data| Attribute::new(self, data))

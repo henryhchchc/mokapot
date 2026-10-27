@@ -1,10 +1,11 @@
 //! Module for the APIs for the annotation in JVM.
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use super::{
     Class, ConstantVal, DebugList, JavaStr,
     code::{LocalVariableId, ProgramCounter},
     constant_pool::{ConstantValueId, FieldTypeId, ReturnTypeId, Utf8Id},
+    view::define_view_list,
 };
 use crate::{
     intrinsics::see_jvm_spec,
@@ -76,45 +77,17 @@ impl<'class> ElementValue<'class> {
             ElementValueData::AnnotationInterface(data) => {
                 Self::AnnotationInterface(Annotation::new(class, data))
             }
-            ElementValueData::Array(data) => Self::Array(ElementValues { class, data }),
+            ElementValueData::Array(data) => Self::Array(ElementValues::new(class, data)),
         }
     }
 }
 
-/// The values in an annotation array.
-#[derive(Clone, Copy)]
-pub struct ElementValues<'class> {
-    class: &'class Class,
-    data: &'class [ElementValueData],
-}
-
-impl<'class> ElementValues<'class> {
-    /// Returns the array values.
-    pub fn iter(self) -> impl ExactSizeIterator<Item = ElementValue<'class>> + Clone {
-        self.data
-            .iter()
-            .map(move |data| ElementValue::new(self.class, data))
-    }
-
-    /// Returns the value at an index.
-    #[must_use]
-    pub fn get(self, index: usize) -> Option<ElementValue<'class>> {
-        self.data
-            .get(index)
-            .map(|data| ElementValue::new(self.class, data))
-    }
-
-    /// Returns the number of values.
-    #[must_use]
-    pub const fn len(self) -> usize {
-        self.data.len()
-    }
-
-    /// Returns whether the array is empty.
-    #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.data.is_empty()
-    }
+define_view_list! {
+    /// The values in an annotation array.
+    pub struct ElementValues<'class>;
+    iterator ElementValueIter;
+    ElementValueData => ElementValue<'class>;
+    |class, data| ElementValue::new(class, data)
 }
 
 impl PartialEq for ElementValues<'_> {
@@ -124,12 +97,6 @@ impl PartialEq for ElementValues<'_> {
 }
 
 impl Eq for ElementValues<'_> {}
-
-impl fmt::Debug for ElementValues<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AnnotationData {
@@ -187,7 +154,10 @@ impl<'class> Annotation<'class> {
     /// Returns the element names and values.
     pub fn element_value_pairs(
         self,
-    ) -> impl ExactSizeIterator<Item = (&'class JavaStr, ElementValue<'class>)> + Clone {
+    ) -> impl ExactSizeIterator<Item = (&'class JavaStr, ElementValue<'class>)>
+    + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data
             .element_value_pairs
             .iter()
@@ -246,6 +216,25 @@ impl fmt::Debug for Annotation<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn array_iteration_projects_both_ends() {
+        let mut class = Class::default();
+        let first = class.constant_pool.insert_utf8("first".to_owned().into());
+        let last = class.constant_pool.insert_utf8("last".to_owned().into());
+        let data = [
+            ElementValueData::String(first),
+            ElementValueData::String(last),
+        ];
+        let values = ElementValues::new(&class, &data);
+        let first = ElementValue::String(class.constant_pool.utf8(first));
+        let last = ElementValue::String(class.constant_pool.utf8(last));
+
+        let mut iter = values.into_iter();
+        assert_eq!(iter.next_back(), Some(last));
+        assert_eq!(iter.next(), Some(first));
+        assert_eq!(iter.next_back(), None);
+    }
 
     #[test]
     fn annotation_equality_compares_values_across_pools() {
@@ -311,7 +300,10 @@ impl<'class> TypeAnnotation<'class> {
     /// Returns the element names and values.
     pub fn element_value_pairs(
         self,
-    ) -> impl ExactSizeIterator<Item = (&'class JavaStr, ElementValue<'class>)> + Clone {
+    ) -> impl ExactSizeIterator<Item = (&'class JavaStr, ElementValue<'class>)>
+    + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data
             .element_value_pairs
             .iter()
@@ -365,7 +357,10 @@ impl<'class> Annotations<'class> {
     }
 
     /// Returns the runtime-visible annotations.
-    pub fn runtime_visible(self) -> impl ExactSizeIterator<Item = Annotation<'class>> + Clone {
+    pub fn runtime_visible(
+        self,
+    ) -> impl ExactSizeIterator<Item = Annotation<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .runtime_visible
             .iter()
@@ -373,7 +368,10 @@ impl<'class> Annotations<'class> {
     }
 
     /// Returns the runtime-invisible annotations.
-    pub fn runtime_invisible(self) -> impl ExactSizeIterator<Item = Annotation<'class>> + Clone {
+    pub fn runtime_invisible(
+        self,
+    ) -> impl ExactSizeIterator<Item = Annotation<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .runtime_invisible
             .iter()
@@ -421,7 +419,12 @@ impl<'class> TypeAnnotations<'class> {
     }
 
     /// Returns the runtime-visible type annotations.
-    pub fn runtime_visible(self) -> impl ExactSizeIterator<Item = TypeAnnotation<'class>> + Clone {
+    pub fn runtime_visible(
+        self,
+    ) -> impl ExactSizeIterator<Item = TypeAnnotation<'class>>
+    + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data
             .runtime_visible
             .iter()
@@ -431,7 +434,10 @@ impl<'class> TypeAnnotations<'class> {
     /// Returns the runtime-invisible type annotations.
     pub fn runtime_invisible(
         self,
-    ) -> impl ExactSizeIterator<Item = TypeAnnotation<'class>> + Clone {
+    ) -> impl ExactSizeIterator<Item = TypeAnnotation<'class>>
+    + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data
             .runtime_invisible
             .iter()
@@ -481,8 +487,14 @@ impl<'class> ParameterAnnotations<'class> {
     /// Returns runtime-visible annotations for each parameter.
     pub fn runtime_visible(
         self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = Annotation<'class>> + Clone> + Clone
-    {
+    ) -> impl ExactSizeIterator<
+        Item = impl ExactSizeIterator<Item = Annotation<'class>>
+               + DoubleEndedIterator
+               + FusedIterator
+               + Clone,
+    > + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data.runtime_visible.iter().map(move |annotations| {
             annotations
                 .iter()
@@ -493,8 +505,14 @@ impl<'class> ParameterAnnotations<'class> {
     /// Returns runtime-invisible annotations for each parameter.
     pub fn runtime_invisible(
         self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = Annotation<'class>> + Clone> + Clone
-    {
+    ) -> impl ExactSizeIterator<
+        Item = impl ExactSizeIterator<Item = Annotation<'class>>
+               + DoubleEndedIterator
+               + FusedIterator
+               + Clone,
+    > + DoubleEndedIterator
+    + FusedIterator
+    + Clone {
         self.data.runtime_invisible.iter().map(move |annotations| {
             annotations
                 .iter()

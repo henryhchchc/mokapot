@@ -1,6 +1,6 @@
 //! Modules in the JPMS.
 
-use std::fmt;
+use std::{fmt, iter::FusedIterator};
 
 use bitflags::bitflags;
 
@@ -114,7 +114,10 @@ impl<'class> Module<'class> {
     }
 
     /// Returns the modules required by this module.
-    pub fn requires(self) -> impl ExactSizeIterator<Item = Require<'class>> + DoubleEndedIterator {
+    pub fn requires(
+        self,
+    ) -> impl ExactSizeIterator<Item = Require<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data.requires.iter().map(|data| Require {
             class: self.class,
             data,
@@ -122,7 +125,10 @@ impl<'class> Module<'class> {
     }
 
     /// Returns the packages exported by this module.
-    pub fn exports(self) -> impl ExactSizeIterator<Item = Export<'class>> + DoubleEndedIterator {
+    pub fn exports(
+        self,
+    ) -> impl ExactSizeIterator<Item = Export<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data.exports.iter().map(|data| Export {
             class: self.class,
             data,
@@ -130,7 +136,10 @@ impl<'class> Module<'class> {
     }
 
     /// Returns the packages opened by this module.
-    pub fn opens(self) -> impl ExactSizeIterator<Item = Open<'class>> + DoubleEndedIterator {
+    pub fn opens(
+        self,
+    ) -> impl ExactSizeIterator<Item = Open<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data.opens.iter().map(|data| Open {
             class: self.class,
             data,
@@ -138,7 +147,10 @@ impl<'class> Module<'class> {
     }
 
     /// Returns the service classes used by this module.
-    pub fn uses(self) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator {
+    pub fn uses(
+        self,
+    ) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .uses
             .iter()
@@ -146,7 +158,10 @@ impl<'class> Module<'class> {
     }
 
     /// Returns the services provided by this module.
-    pub fn provides(self) -> impl ExactSizeIterator<Item = Provide<'class>> + DoubleEndedIterator {
+    pub fn provides(
+        self,
+    ) -> impl ExactSizeIterator<Item = Provide<'class>> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data.provides.iter().map(|data| Provide {
             class: self.class,
             data,
@@ -190,7 +205,10 @@ impl<'class> Export<'class> {
     }
 
     /// Returns the modules to which this package is exported.
-    pub fn to(self) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator {
+    pub fn to(
+        self,
+    ) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .to
             .iter()
@@ -212,7 +230,10 @@ impl<'class> Open<'class> {
     }
 
     /// Returns the modules to which this package is opened.
-    pub fn to(self) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator {
+    pub fn to(
+        self,
+    ) -> impl ExactSizeIterator<Item = &'class ModuleName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .to
             .iter()
@@ -228,7 +249,10 @@ impl<'class> Provide<'class> {
     }
 
     /// Returns the classes that implement the service.
-    pub fn with(self) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator {
+    pub fn with(
+        self,
+    ) -> impl ExactSizeIterator<Item = &'class ClassName> + DoubleEndedIterator + FusedIterator + Clone
+    {
         self.data
             .with
             .iter()

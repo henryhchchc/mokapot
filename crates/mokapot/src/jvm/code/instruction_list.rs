@@ -1,28 +1,28 @@
 use std::{fmt, ops::RangeBounds, slice};
 
 use super::{Instruction, InstructionData, InstructionStorage, ProgramCounter};
-use crate::jvm::Class;
+use crate::jvm::ConstantPool;
 
 /// Instructions ordered by program counter, borrowing their class.
 #[derive(Clone, Copy)]
 pub struct InstructionList<'class> {
-    class: &'class Class,
+    pool: &'class ConstantPool,
     data: &'class InstructionStorage<InstructionData>,
 }
 
 impl<'class> InstructionList<'class> {
     pub(crate) const fn new(
-        class: &'class Class,
+        pool: &'class ConstantPool,
         data: &'class InstructionStorage<InstructionData>,
     ) -> Self {
-        Self { class, data }
+        Self { pool, data }
     }
 
     /// Iterates over the instructions.
     #[must_use]
     pub fn iter(self) -> InstructionIter<'class> {
         InstructionIter {
-            class: self.class,
+            pool: self.pool,
             inner: self.data.as_slice().iter(),
         }
     }
@@ -34,7 +34,7 @@ impl<'class> InstructionList<'class> {
     #[must_use]
     pub fn range(self, range: impl RangeBounds<ProgramCounter>) -> InstructionIter<'class> {
         InstructionIter {
-            class: self.class,
+            pool: self.pool,
             inner: self.data.range_slice(range).iter(),
         }
     }
@@ -42,7 +42,7 @@ impl<'class> InstructionList<'class> {
     /// Returns the instruction at the given program counter.
     #[must_use]
     pub fn get(self, pc: &ProgramCounter) -> Option<Instruction<'class>> {
-        self.data.get(*pc).map(|data| data.view(self.class))
+        self.data.get(*pc).map(|data| data.view(self.pool))
     }
 
     /// Returns the first instruction.
@@ -50,7 +50,7 @@ impl<'class> InstructionList<'class> {
     pub fn entry_point(self) -> Option<(ProgramCounter, Instruction<'class>)> {
         self.data
             .entry_point()
-            .map(|(pc, data)| (pc, data.view(self.class)))
+            .map(|(pc, data)| (pc, data.view(self.pool)))
     }
 
     /// Returns the program counter of the next instruction after the given one.
@@ -117,7 +117,7 @@ impl<'class> IntoIterator for &InstructionList<'class> {
 /// An iterator over a method's instructions.
 #[derive(Clone)]
 pub struct InstructionIter<'class> {
-    class: &'class Class,
+    pool: &'class ConstantPool,
     inner: slice::Iter<'class, (ProgramCounter, InstructionData)>,
 }
 
@@ -132,7 +132,7 @@ impl<'class> Iterator for InstructionIter<'class> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(|(pc, data)| (*pc, data.view(self.class)))
+            .map(|(pc, data)| (*pc, data.view(self.pool)))
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.inner.size_hint()
@@ -142,7 +142,7 @@ impl DoubleEndedIterator for InstructionIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner
             .next_back()
-            .map(|(pc, data)| (*pc, data.view(self.class)))
+            .map(|(pc, data)| (*pc, data.view(self.pool)))
     }
 }
 impl ExactSizeIterator for InstructionIter<'_> {}

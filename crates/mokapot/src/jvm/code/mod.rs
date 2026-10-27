@@ -9,7 +9,8 @@ pub(crate) use instruction::InstructionData;
 pub use instruction::{Instruction, WideInstruction};
 pub use method_body::{
     ExceptionTableEntry, LineNumberTableEntry, LocalVariableId, LocalVariableTable,
-    LocalVariableTableEntry, MethodBody, StackMapFrame, VerificationType, VerificationTypes,
+    LocalVariableTableEntry, MethodBody, StackMapFrame, VerificationType, VerificationTypeIter,
+    VerificationTypes,
 };
 pub(crate) use method_body::{
     ExceptionTableEntryData, InstructionStorage, LocalVariableTableData,
