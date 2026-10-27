@@ -203,6 +203,9 @@ impl Class {
 }
 
 /// The version of a class file.
+///
+/// Versions through JDK 11 contain the minor version; later versions indicate
+/// whether preview features are enabled.
 #[doc = see_jvm_spec!(4, 1)]
 #[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 #[non_exhaustive]
@@ -210,25 +213,25 @@ pub enum Version {
     /// JDK 1.1
     Jdk1_1(u16),
     /// JDK 1.2
-    Jdk1_2,
+    Jdk1_2(u16),
     /// JDK 1.3
-    Jdk1_3,
+    Jdk1_3(u16),
     /// JDK 1.4
-    Jdk1_4,
+    Jdk1_4(u16),
     /// JDK 5
-    Jdk5,
+    Jdk5(u16),
     /// JDK 6
-    Jdk6,
+    Jdk6(u16),
     /// JDK 7
-    Jdk7,
+    Jdk7(u16),
     /// JDK 8
-    Jdk8,
+    Jdk8(u16),
     /// JDK 9
-    Jdk9,
+    Jdk9(u16),
     /// JDK 10
-    Jdk10,
+    Jdk10(u16),
     /// JDK 11
-    Jdk11,
+    Jdk11(u16),
     /// JDK 12
     Jdk12(bool),
     /// JDK 13
@@ -295,16 +298,16 @@ impl Version {
     pub const fn major(&self) -> u16 {
         match self {
             Self::Jdk1_1(_) => 45,
-            Self::Jdk1_2 => 46,
-            Self::Jdk1_3 => 47,
-            Self::Jdk1_4 => 48,
-            Self::Jdk5 => 49,
-            Self::Jdk6 => 50,
-            Self::Jdk7 => 51,
-            Self::Jdk8 => 52,
-            Self::Jdk9 => 53,
-            Self::Jdk10 => 54,
-            Self::Jdk11 => 55,
+            Self::Jdk1_2(_) => 46,
+            Self::Jdk1_3(_) => 47,
+            Self::Jdk1_4(_) => 48,
+            Self::Jdk5(_) => 49,
+            Self::Jdk6(_) => 50,
+            Self::Jdk7(_) => 51,
+            Self::Jdk8(_) => 52,
+            Self::Jdk9(_) => 53,
+            Self::Jdk10(_) => 54,
+            Self::Jdk11(_) => 55,
             Self::Jdk12(_) => 56,
             Self::Jdk13(_) => 57,
             Self::Jdk14(_) => 58,
@@ -330,8 +333,9 @@ impl Version {
         #[allow(clippy::enum_glob_use)]
         use Version::*;
         match self {
-            Jdk1_1(minor) => *minor,
-            Jdk1_2 | Jdk1_3 | Jdk1_4 | Jdk5 | Jdk6 | Jdk7 | Jdk8 | Jdk9 | Jdk10 | Jdk11 => 0,
+            Jdk1_1(minor) | Jdk1_2(minor) | Jdk1_3(minor) | Jdk1_4(minor) | Jdk5(minor)
+            | Jdk6(minor) | Jdk7(minor) | Jdk8(minor) | Jdk9(minor) | Jdk10(minor)
+            | Jdk11(minor) => *minor,
             Jdk12(enable_preview)
             | Jdk13(enable_preview)
             | Jdk14(enable_preview)

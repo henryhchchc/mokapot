@@ -62,9 +62,9 @@ mod tests {
     use crate::jvm::{Class, class::Version, errors::ParseErrorKind};
 
     fn assert_version_matches_spec(major: u16, minor: u16) {
-        let valid = major == 45
-            || ((46..=Version::LATEST.major()).contains(&major)
-                && (minor == 0 || major >= 56 && minor == u16::MAX));
+        let valid = (45..=55).contains(&major)
+            || ((56..=Version::LATEST.major()).contains(&major)
+                && (minor == 0 || minor == u16::MAX));
         let expected = if valid {
             Ok((major, minor, major >= 56 && minor == u16::MAX))
         } else {
@@ -84,15 +84,7 @@ mod tests {
 
     #[test]
     fn class_version_boundaries_match_spec() {
-        for major in [
-            44,
-            45,
-            46,
-            55,
-            56,
-            Version::LATEST.major(),
-            Version::LATEST.major() + 1,
-        ] {
+        for major in 44..=Version::LATEST.major() + 1 {
             for minor in [0, 1, u16::MAX - 1, u16::MAX] {
                 assert_version_matches_spec(major, minor);
             }

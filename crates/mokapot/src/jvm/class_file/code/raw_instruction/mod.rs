@@ -632,19 +632,13 @@ impl<'a> RawInstruction<'a> {
             0x75 => LNeg,
             0xab => {
                 while !(original_len - bytes.len()).is_multiple_of(4) {
-                    let padding_byte: u8 = decode_value(bytes)?;
-                    if padding_byte != 0 {
-                        Err(ParseError::malform("Switch padding is not zero"))?;
-                    }
+                    let _: u8 = decode_value(bytes)?;
                 }
                 LookupSwitch(decode_value(bytes)?)
             }
             0xaa => {
                 while !(original_len - bytes.len()).is_multiple_of(4) {
-                    let padding_byte: u8 = decode_value(bytes)?;
-                    if padding_byte != 0 {
-                        Err(ParseError::malform("Switch padding is not zero"))?;
-                    }
+                    let _: u8 = decode_value(bytes)?;
                 }
                 TableSwitch(decode_value(bytes)?)
             }
