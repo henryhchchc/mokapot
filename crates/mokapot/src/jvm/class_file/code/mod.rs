@@ -190,6 +190,8 @@ mod tests {
 
     #[test]
     fn instructions_preserve_offsets_and_reject_invalid_bytecode() {
+        use crate::jvm::errors::ParseErrorKind;
+
         let mut context = context();
         let mut resolve = |code| {
             Code {
@@ -212,11 +214,27 @@ mod tests {
                 (4.into(), InstructionData::IReturn),
             ]
         );
-        for bytes in [&[0x10][..], &[0xb2, 0, 1], &[0xcb]] {
-            assert_eq!(
-                resolve(bytes).unwrap_err().kind(),
-                crate::jvm::errors::ParseErrorKind::Malformed
-            );
+        for (bytes, expected) in [
+            (
+                &[0x10][..],
+                ParseErrorKind::Truncated {
+                    requested: 1,
+                    available: 0,
+                },
+            ),
+            (
+                &[0xb2, 0, 1][..],
+                ParseErrorKind::InvalidConstantPoolIndex { index: 1 },
+            ),
+            (
+                &[0xcb][..],
+                ParseErrorKind::InvalidOpcode {
+                    opcode: 0xcb,
+                    pc: 0,
+                },
+            ),
+        ] {
+            assert_eq!(resolve(bytes).unwrap_err().kind(), expected);
         }
     }
 
@@ -246,7 +264,11 @@ mod tests {
             };
             assert_eq!(
                 entry.resolve(&mut ctx).unwrap_err().kind(),
-                ParseErrorKind::Malformed
+                ParseErrorKind::UnexpectedConstantPoolEntry {
+                    index: 2,
+                    expected: "ClassName",
+                    actual: "CONSTANT_Class"
+                }
             );
         }
     }

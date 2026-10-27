@@ -21,7 +21,7 @@ use crate::{
     jvm::{
         Class,
         class::{self, Version},
-        errors::ParsingErrorContext,
+        errors::ParseErrorKind,
     },
 };
 
@@ -91,8 +91,11 @@ impl Version {
             (70, PREVIEW_FEATURES) => Ok(Version::Jdk26(true)),
             (71, 0x0000) => Ok(Version::Jdk27(false)),
             (71, PREVIEW_FEATURES) => Ok(Version::Jdk27(true)),
-            (major, _) if major > Version::LATEST.major() => {
-                Err(ParseError::malform("Unsupported class version"))
+            (major, minor) if major > Version::LATEST.major() => {
+                Err(ParseError::from_kind(ParseErrorKind::UnsupportedVersion {
+                    major,
+                    minor,
+                }))
             }
             _ => Err(ParseError::malform("Invalid class version")),
         }
@@ -235,7 +238,7 @@ impl Resolve for raw::RecordComponentInfo<'_> {
         let component_type = ctx
             .constant_pool
             .intern_field_type(descriptor_index)
-            .context("Invalid component type descriptor")?;
+            .map_err(|error| error.add_context("Invalid component type descriptor"))?;
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
 
         extract_attributes! {

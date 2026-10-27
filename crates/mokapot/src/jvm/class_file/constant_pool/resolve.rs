@@ -37,8 +37,8 @@ pub(crate) fn resolve(raw: RawConstantPool<'_>) -> Result<ConstantPoolBuilder, P
         for (index, entry) in pending.iter_mut().enumerate() {
             if let Some(raw) = entry.take_if(|entry| entry.resolution_tier() == tier) {
                 let index = u16::try_from(index).expect("constant pool count is u16");
-                resolve_entry(&mut pool, index, raw).with_context(|error| {
-                    format!("Invalid constant pool entry at index {index}: {error}")
+                resolve_entry(&mut pool, index, raw).map_err(|error| {
+                    error.add_context(format!("Invalid constant pool entry at index {index}"))
                 })?;
             }
         }

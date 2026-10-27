@@ -1,4 +1,5 @@
 use super::*;
+use crate::ir::test::prelude::assert_matches;
 use crate::jvm::{
     ConstantVal, ConstantValue, JavaString,
     class::{MethodHandle, MethodHndl},
@@ -7,6 +8,22 @@ use crate::jvm::{
 };
 use crate::types::Descriptor;
 use crate::types::class_name::ClassName;
+
+#[test]
+fn resolution_context_preserves_structured_error() {
+    use std::error::Error;
+
+    let raw = RawConstantPool::from_entries([RawEntry::Class {
+        name_index: 2.into(),
+    }]);
+    let error = resolve(raw).unwrap_err();
+    assert_eq!(
+        error.kind(),
+        ParseErrorKind::InvalidConstantPoolIndex { index: 2 }
+    );
+    let context = error.source().unwrap();
+    assert!(context.source().is_none());
+}
 
 #[test]
 fn resolves_and_validates_module_names() {
@@ -165,7 +182,14 @@ fn member_resolution_rejects_invalid_owners_and_name_and_type_kinds() {
                 },
                 entry,
             ]);
-            assert_eq!(resolve(raw).unwrap_err().kind(), ParseErrorKind::Malformed);
+            assert_matches!(
+                resolve(raw).unwrap_err().kind(),
+                ParseErrorKind::InvalidConstantPoolIndex { index: 0 | 99 }
+                    | ParseErrorKind::UnexpectedConstantPoolEntry {
+                        index: 1 | 5 | 7,
+                        ..
+                    }
+            );
         }
     }
 }
@@ -181,13 +205,19 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
     ]);
     let mut pool = resolve(raw).unwrap();
     for index in [0, 2, 3, 7] {
-        assert_eq!(
-            pool.utf8_id(index).unwrap_err().kind(),
-            ParseErrorKind::Malformed
-        );
+        let expected = if index == 2 {
+            ParseErrorKind::UnexpectedConstantPoolEntry {
+                index,
+                expected: "Utf8",
+                actual: "CONSTANT_Long",
+            }
+        } else {
+            ParseErrorKind::InvalidConstantPoolIndex { index }
+        };
+        assert_eq!(pool.utf8_id(index).unwrap_err().kind(), expected);
         assert_eq!(
             pool.intern_method_descriptor(index).unwrap_err().kind(),
-            ParseErrorKind::Malformed
+            expected
         );
     }
     let name = pool.utf8_id(4).unwrap();
@@ -205,7 +235,10 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
             pool.intern_return_type(index).map(|_| ()),
             pool.constant_value_id(index).map(|_| ()),
         ] {
-            assert_eq!(result.unwrap_err().kind(), ParseErrorKind::Malformed);
+            assert_matches!(
+                result.unwrap_err().kind(),
+                ParseErrorKind::InvalidConstantPoolIndex { index: actual } if actual == index
+            );
         }
     }
     let pool = pool.finish();
@@ -231,13 +264,13 @@ fn class_and_package_names_parse_with_distinct_tags() {
         pool.package_name(pool.package_id(3).unwrap()).clone(),
         package_name
     );
-    assert_eq!(
+    assert_matches!(
         pool.class_id(3).unwrap_err().kind(),
-        ParseErrorKind::Malformed,
+        ParseErrorKind::UnexpectedConstantPoolEntry { index: 3, .. }
     );
-    assert_eq!(
+    assert_matches!(
         pool.package_id(2).unwrap_err().kind(),
-        ParseErrorKind::Malformed,
+        ParseErrorKind::UnexpectedConstantPoolEntry { index: 2, .. }
     );
 }
 
@@ -260,7 +293,11 @@ fn class_name_accessor_rejects_descriptors() {
         );
         assert_eq!(
             pool.class_id(index).unwrap_err().kind(),
-            ParseErrorKind::Malformed,
+            ParseErrorKind::UnexpectedConstantPoolEntry {
+                index: 2,
+                expected: "ClassName",
+                actual: "CONSTANT_Class"
+            },
         );
     }
 }
@@ -327,7 +364,11 @@ fn method_handles_validate_reference_kinds_and_tags() {
                 }
                 Err(error) => {
                     assert!(!valid, "kind {kind}, tag {tag}");
-                    assert_eq!(error.kind(), ParseErrorKind::Malformed);
+                    assert_matches!(
+                        error.kind(),
+                        ParseErrorKind::Malformed
+                            | ParseErrorKind::UnexpectedConstantPoolEntry { .. }
+                    );
                 }
             }
         }
@@ -434,7 +475,13 @@ fn resolution_rejects_invalid_dependencies_and_descriptors() {
             RawEntry::Long(42.into()),
             entry,
         ]);
-        assert_eq!(resolve(raw).unwrap_err().kind(), ParseErrorKind::Malformed);
+        assert_matches!(
+            resolve(raw).unwrap_err().kind(),
+            ParseErrorKind::InvalidConstantPoolIndex {
+                index: 0 | 3 | u16::MAX
+            } | ParseErrorKind::UnexpectedConstantPoolEntry { index: 2, .. }
+                | ParseErrorKind::Malformed
+        );
     }
 }
 

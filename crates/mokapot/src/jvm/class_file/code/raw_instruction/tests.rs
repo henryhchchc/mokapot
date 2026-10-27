@@ -1,12 +1,30 @@
+use crate::ir::test::prelude::assert_matches;
 use proptest::prelude::*;
 
 use super::*;
 use crate::jvm::errors::ParseErrorKind;
 
+#[test]
+fn invalid_opcodes_report_instruction_offset() {
+    for (bytes, opcode) in [(&[0, 0xcb][..], 0xcb), (&[0, 0xc4, 0xff][..], 0xff)] {
+        let error = RawInstruction::iter_from_bytes(bytes)
+            .nth(1)
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::InvalidOpcode { opcode, pc: 1 }
+        );
+    }
+}
+
 fn assert_malformed(bytes: &[u8]) {
     let mut reader = bytes;
     let error = RawInstruction::read_one(&mut reader, bytes.len()).unwrap_err();
-    assert_eq!(error.kind(), ParseErrorKind::Malformed);
+    assert_matches!(
+        error.kind(),
+        ParseErrorKind::Malformed | ParseErrorKind::Truncated { .. }
+    );
 }
 
 proptest! {

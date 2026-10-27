@@ -7,7 +7,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     Decode, ParseError,
     attribute::AttributeInfo,
-    decoder::{decode_value, parse_repeated},
+    decoder::{borrow_view, decode_value, parse_repeated},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -47,11 +47,7 @@ impl<'a> Decode<'a> for &'a BootstrapMethod {
         let mut header = *bytes;
         let _: u16 = decode_value(&mut header)?;
         let count: u16 = decode_value(&mut header)?;
-        let (entry, remaining) =
-            BootstrapMethod::ref_from_prefix_with_elems(bytes, usize::from(count))
-                .map_err(|_| ParseError::malform("Truncated class-file bootstrap method"))?;
-        *bytes = remaining;
-        Ok(entry)
+        borrow_view::<BootstrapMethod>(bytes, usize::from(count))
     }
 }
 

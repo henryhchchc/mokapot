@@ -3,7 +3,10 @@
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
 
 use super::super::{
-    Decode, ParseError, class::raw as class_raw, code::raw as code_raw, decoder::decode_value,
+    Decode, ParseError,
+    class::raw as class_raw,
+    code::raw as code_raw,
+    decoder::{borrow_view, decode_value},
     fixed_layout::FixedLayout,
 };
 use crate::intrinsics::see_jvm_spec;
@@ -14,11 +17,7 @@ macro_rules! impl_decode {
             fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
                 let mut header = *bytes;
                 let count: $count = decode_value(&mut header)?;
-                let (attribute, remaining) =
-                    $name::ref_from_prefix_with_elems(bytes, usize::from(count))
-                        .map_err(|_| ParseError::malform("Truncated counted attribute"))?;
-                *bytes = remaining;
-                Ok(attribute)
+                borrow_view::<$name>(bytes, usize::from(count))
             }
         }
     };

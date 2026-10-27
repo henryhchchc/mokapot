@@ -1,12 +1,18 @@
 //! Raw JVM instruction model and parser.
 
-use crate::jvm::class_file::{Decode, decoder::decode_value};
+use crate::jvm::class_file::{
+    Decode,
+    decoder::{borrow_view, decode_value},
+};
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::I32};
 
 use std::iter;
 
 use super::super::{ParseError, fixed_layout::FixedLayout};
-use crate::{intrinsics::see_jvm_spec, jvm::code::ProgramCounter};
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{code::ProgramCounter, errors::ParseErrorKind},
+};
 
 /// A JVM instruction before resolving constant-pool references.
 /// Switch tables borrow their wire data from the input bytecode.
@@ -289,10 +295,7 @@ impl<'a> Decode<'a> for &'a TableSwitchInfo {
         }
         let count = usize::try_from(i64::from(high) - i64::from(low) + 1)
             .map_err(|_| ParseError::malform("Invalid tableswitch range"))?;
-        let (info, remaining) = TableSwitchInfo::ref_from_prefix_with_elems(bytes, count)
-            .map_err(|_| ParseError::malform("Truncated tableswitch payload"))?;
-        *bytes = remaining;
-        Ok(info)
+        borrow_view::<TableSwitchInfo>(bytes, count)
     }
 }
 
@@ -315,8 +318,8 @@ impl<'a> Decode<'a> for &'a LookupSwitchInfo {
         let npairs: i32 = decode_value(&mut header)?;
         let count = usize::try_from(npairs)
             .map_err(|_| ParseError::malform("Invalid lookupswitch pair count"))?;
-        let (info, remaining) = LookupSwitchInfo::ref_from_prefix_with_elems(bytes, count)
-            .map_err(|_| ParseError::malform("Truncated lookupswitch payload"))?;
+        let mut remaining = *bytes;
+        let info = borrow_view::<LookupSwitchInfo>(&mut remaining, count)?;
         if info
             .match_offsets
             .windows(2)
@@ -349,9 +352,9 @@ impl<'a> RawInstruction<'a> {
         #[allow(clippy::enum_glob_use)]
         use RawInstruction::*;
 
-        let pc = u16::try_from(original_len - bytes.len())
-            .map_err(|_| ParseError::malform("The instruction list is too long"))?
-            .into();
+        let pc_value = u16::try_from(original_len - bytes.len())
+            .map_err(|_| ParseError::malform("The instruction list is too long"))?;
+        let pc = pc_value.into();
         if bytes.is_empty() {
             return Ok(None);
         }
@@ -731,11 +734,17 @@ impl<'a> RawInstruction<'a> {
                     0xa9 => RawWideInstruction::Ret {
                         index: decode_value(bytes)?,
                     },
-                    _ => Err(ParseError::malform("Invalid opcode"))?,
+                    _ => Err(ParseError::from_kind(ParseErrorKind::InvalidOpcode {
+                        opcode: wide_opcode,
+                        pc: pc_value,
+                    }))?,
                 };
                 Wide(wide_insn)
             }
-            _ => Err(ParseError::malform("Invalid opcode"))?,
+            _ => Err(ParseError::from_kind(ParseErrorKind::InvalidOpcode {
+                opcode,
+                pc: pc_value,
+            }))?,
         };
         Ok(Some((pc, instruction)))
     }
