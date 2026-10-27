@@ -93,15 +93,18 @@ impl Resolve for Code<'_> {
             .copied()
             .map(|it| it.resolve(ctx))
             .try_collect_exact()?;
+        let mut line_number_table: Option<Vec<LineNumberTableEntry>> = None;
         let mut local_variable_table = None;
         extract_attributes! {
             for attributes in "code" resolving ctx {
-                let line_number_table: LineNumberTable,
                 let stack_map_table: StackMapTable,
                 let runtime_visible_type_annotations:
                     RuntimeVisibleTypeAnnotations as unwrap_or_default,
                 let runtime_invisible_type_annotations:
                     RuntimeInvisibleTypeAnnotations as unwrap_or_default,
+                match Attribute::LineNumberTable(it) => {
+                    line_number_table.get_or_insert_with(Vec::new).extend(it);
+                },
                 match Attribute::LocalVariableTable(it) => {
                     let table = local_variable_table.get_or_insert(LocalVariableTableData::default());
                     for LocalVariableDescriptorEntry { id, name, field_type } in it {
@@ -123,7 +126,7 @@ impl Resolve for Code<'_> {
             max_locals,
             instructions,
             exception_table,
-            line_number_table,
+            line_number_table: line_number_table.map(Vec::into_boxed_slice),
             local_variable_table,
             stack_map_table,
             type_annotations: AnnotationsData {
@@ -146,6 +149,43 @@ mod tests {
             constant_pool: resolve(RawConstantPool::from_entries([])).unwrap(),
             class_version: Version::LATEST,
         }
+    }
+
+    #[test]
+    fn line_number_tables_are_merged_in_attribute_order() {
+        use crate::jvm::class_file::{Decode, attribute::AttributeInfo, constant_pool::RawEntry};
+
+        let pool = RawConstantPool::from_entries([RawEntry::Utf8(b"LineNumberTable")]);
+        let mut context = ResolutionContext {
+            constant_pool: resolve(pool).unwrap(),
+            class_version: Version::LATEST,
+        };
+        let first = [0, 1, 0, 0, 0, 6, 0, 1, 0, 0, 0, 10];
+        let second = [0, 1, 0, 0, 0, 6, 0, 1, 0, 1, 0, 20];
+        let empty = [0, 1, 0, 0, 0, 2, 0, 0];
+        let first = <&AttributeInfo>::decode(&mut first.as_slice()).unwrap();
+        let second = <&AttributeInfo>::decode(&mut second.as_slice()).unwrap();
+        let empty = <&AttributeInfo>::decode(&mut empty.as_slice()).unwrap();
+        let mut resolve = |attributes: Box<[&AttributeInfo]>| {
+            Code {
+                max_stack: 0,
+                max_locals: 0,
+                code: &[0, 0],
+                exception_table: &[],
+                attributes,
+            }
+            .resolve(&mut context)
+            .unwrap()
+            .line_number_table
+        };
+        assert!(resolve(Box::new([])).is_none());
+        assert!(resolve(Box::new([empty])).unwrap().is_empty());
+        let entries = resolve(Box::new([first, second])).unwrap();
+        let entries: Vec<_> = entries
+            .iter()
+            .map(|it| (it.start_pc, it.line_number))
+            .collect();
+        assert_eq!(entries, [(0.into(), 10), (1.into(), 20)]);
     }
 
     #[test]

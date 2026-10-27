@@ -4,16 +4,7 @@ use super::*;
 use crate::jvm::errors::ParseErrorKind;
 
 fn assert_malformed(bytes: &[u8]) {
-    assert_malformed_at(bytes, 0);
-}
-
-fn assert_malformed_at(bytes: &[u8], prefix_len: usize) {
     let mut reader = bytes;
-    for _ in 0..prefix_len {
-        RawInstruction::read_one(&mut reader, bytes.len())
-            .expect("prefix Nop should parse")
-            .expect("prefix Nop should be present");
-    }
     let error = RawInstruction::read_one(&mut reader, bytes.len()).unwrap_err();
     assert_eq!(error.kind(), ParseErrorKind::Malformed);
 }
@@ -28,27 +19,6 @@ proptest! {
         bytes.extend(dynamic_index.to_be_bytes());
         bytes.extend(reserved.to_be_bytes());
         assert_malformed(&bytes);
-    }
-
-    #[test]
-    fn switches_reject_nonzero_padding(
-        opcode in prop_oneof![Just(0xaa_u8), Just(0xab_u8)],
-        prefix_len in 0usize..3,
-        padding_slot in any::<usize>(),
-        nonzero in 1u8..=u8::MAX,
-    ) {
-        let mut bytes = vec![0; prefix_len];
-        bytes.push(opcode);
-        let padding_len = (4 - bytes.len() % 4) % 4;
-        let padding_start = bytes.len();
-        bytes.resize(padding_start + padding_len, 0);
-        bytes[padding_start + padding_slot % padding_len] = nonzero;
-        bytes.extend(if opcode == 0xaa {
-            &[0; 16][..]
-        } else {
-            &[0; 8][..]
-        });
-        assert_malformed_at(&bytes, prefix_len);
     }
 
     #[test]
@@ -198,7 +168,7 @@ fn switches_decode_at_every_instruction_alignment() {
             let mut bytes = vec![0; prefix_len];
             bytes.push(opcode);
             while !bytes.len().is_multiple_of(4) {
-                bytes.push(0);
+                bytes.push(0xff);
             }
             let header: &[i32] = if opcode == 0xaa { &[0, 0, 1] } else { &[0, 2] };
             bytes.extend(header.iter().flat_map(|value| value.to_be_bytes()));
@@ -225,6 +195,17 @@ fn switches_decode_at_every_instruction_alignment() {
                 }
                 _ => panic!("expected a switch"),
             }
+        }
+    }
+}
+
+#[test]
+fn switches_reject_truncated_padding() {
+    for opcode in [0xaa, 0xab] {
+        for padding_len in 0..3 {
+            let mut bytes = vec![opcode];
+            bytes.extend(vec![0xff; padding_len]);
+            assert_malformed(&bytes);
         }
     }
 }
