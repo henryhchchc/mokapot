@@ -6,7 +6,7 @@ use super::super::fixed_layout::FixedLayout;
 
 use super::super::{
     Decode, ParseError,
-    decoder::{borrow_slice, decode_value, parse_repeated},
+    decoder::{borrow_slice, borrow_view, decode_value, parse_repeated},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -77,10 +77,7 @@ impl<'a> Decode<'a> for &'a ExportsInfo {
         let _: u16 = decode_value(&mut header)?;
         let _: u16 = decode_value(&mut header)?;
         let count: u16 = decode_value(&mut header)?;
-        let (entry, remaining) = ExportsInfo::ref_from_prefix_with_elems(bytes, usize::from(count))
-            .map_err(|_| ParseError::malform("Truncated class-file exports entry"))?;
-        *bytes = remaining;
-        Ok(entry)
+        borrow_view::<ExportsInfo>(bytes, usize::from(count))
     }
 }
 
@@ -100,11 +97,7 @@ impl<'a> Decode<'a> for &'a OpensInfo {
         let _: u16 = decode_value(&mut header)?;
         let _: u16 = decode_value(&mut header)?;
         let count: u16 = decode_value(&mut header)?;
-        let (entry, remaining) =
-            OpensInfo::ref_from_prefix_with_elems(bytes, usize::from(count))
-                .map_err(|_| ParseError::malform("Truncated class-file opens entry"))?;
-        *bytes = remaining;
-        Ok(entry)
+        borrow_view::<OpensInfo>(bytes, usize::from(count))
     }
 }
 
@@ -122,10 +115,6 @@ impl<'a> Decode<'a> for &'a ProvidesInfo {
         let mut header = *bytes;
         let _: u16 = decode_value(&mut header)?;
         let count: u16 = decode_value(&mut header)?;
-        let (entry, remaining) =
-            ProvidesInfo::ref_from_prefix_with_elems(bytes, usize::from(count))
-                .map_err(|_| ParseError::malform("Truncated class-file provides entry"))?;
-        *bytes = remaining;
-        Ok(entry)
+        borrow_view::<ProvidesInfo>(bytes, usize::from(count))
     }
 }

@@ -59,6 +59,7 @@ impl<'a> Decode<'a> for ClassFile<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ir::test::prelude::assert_matches;
     use crate::jvm::{Class, class::Version, errors::ParseErrorKind};
 
     fn assert_version_matches_spec(major: u16, minor: u16) {
@@ -68,7 +69,11 @@ mod tests {
         let expected = if valid {
             Ok((major, minor, major >= 56 && minor == u16::MAX))
         } else {
-            Err(ParseErrorKind::Malformed)
+            Err(if major > Version::LATEST.major() {
+                ParseErrorKind::UnsupportedVersion { major, minor }
+            } else {
+                ParseErrorKind::Malformed
+            })
         };
         let actual = Version::from_versions(major, minor)
             .map(|version| {
@@ -126,7 +131,7 @@ mod tests {
         assert!(class.super_class().is_none());
         for end in 0..bytes.len() {
             let error = Class::from_bytes(&bytes[..end]).unwrap_err();
-            assert_eq!(error.kind(), ParseErrorKind::Malformed, "prefix {end}");
+            assert_matches!(error.kind(), ParseErrorKind::Truncated { .. });
         }
     }
 
@@ -145,6 +150,6 @@ mod tests {
         bytes.push(1); // attributes count
         bytes.extend([0, 1, 0xff, 0xff, 0xff, 0xff]);
         let error = Class::from_bytes(&bytes).unwrap_err();
-        assert_eq!(error.kind(), ParseErrorKind::Malformed);
+        assert_matches!(error.kind(), ParseErrorKind::Truncated { .. });
     }
 }

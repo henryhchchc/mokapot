@@ -13,7 +13,6 @@ use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
         annotation::AnnotationsData,
-        errors::ParsingErrorContext,
         field::{self, FieldData},
     },
 };
@@ -58,7 +57,7 @@ impl Resolve for FieldInfo<'_> {
         let field_type = ctx
             .constant_pool
             .intern_field_type(descriptor_index)
-            .context("Invalid field descriptor")?;
+            .map_err(|error| error.add_context("Invalid field descriptor"))?;
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
 
         extract_attributes! {
@@ -97,5 +96,41 @@ impl Resolve for FieldInfo<'_> {
             },
             other_attributes,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jvm::{
+        class::Version,
+        class_file::{
+            class::raw::RecordComponentInfo,
+            constant_pool::{RawConstantPool, RawEntry, resolve},
+        },
+        errors::ParseErrorKind,
+    };
+
+    #[test]
+    fn descriptor_context_preserves_invalid_pool_index() {
+        let pool = RawConstantPool::from_entries([RawEntry::Utf8(b"name")]);
+        let mut ctx = ResolutionContext {
+            constant_pool: resolve(pool).unwrap(),
+            class_version: Version::LATEST,
+        };
+        let field = FieldInfo {
+            access_flags: 0,
+            name_index: 1,
+            descriptor_index: 2,
+            attributes: Box::new([]),
+        };
+        let component = RecordComponentInfo {
+            name_index: 1,
+            descriptor_index: 2,
+            attributes: Box::new([]),
+        };
+        let expected = ParseErrorKind::InvalidConstantPoolIndex { index: 2 };
+        assert_eq!(field.resolve(&mut ctx).unwrap_err().kind(), expected);
+        assert_eq!(component.resolve(&mut ctx).unwrap_err().kind(), expected);
     }
 }

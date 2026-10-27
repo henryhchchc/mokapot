@@ -3,7 +3,7 @@
 use crate::intrinsics::ExactSizeIteratorExt;
 
 use zerocopy::{
-    FromBytes, KnownLayout,
+    FromBytes, Immutable, KnownLayout, Unaligned,
     byteorder::big_endian::{I16, I32, U16, U32},
 };
 
@@ -18,7 +18,7 @@ pub(crate) trait Decode<'a>: Sized {
 /// Copies a fixed wire value. Leaves the input unchanged on failure.
 fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
     let (value, remaining) = T::read_from_prefix(bytes)
-        .map_err(|_| ParseError::malform("Truncated class-file value"))?;
+        .map_err(|_| ParseError::truncated(std::mem::size_of::<T>(), bytes.len()))?;
     *bytes = remaining;
     Ok(value)
 }
@@ -52,7 +52,7 @@ impl<'a, T: FixedLayout> Decode<'a> for T {
 pub(super) fn borrow_bytes<'a>(bytes: &mut &'a [u8], len: usize) -> Result<&'a [u8], ParseError> {
     let (value, remaining) = bytes
         .split_at_checked(len)
-        .ok_or_else(|| ParseError::malform("Truncated class-file payload"))?;
+        .ok_or_else(|| ParseError::truncated(len, bytes.len()))?;
     *bytes = remaining;
     Ok(value)
 }
@@ -62,10 +62,22 @@ pub(super) fn borrow_slice<'a, T>(bytes: &mut &'a [u8], count: usize) -> Result<
 where
     T: FixedLayout + KnownLayout,
 {
-    let (values, remaining) = <[T]>::ref_from_prefix_with_elems(bytes, count)
-        .map_err(|_| ParseError::malform("Truncated class-file table"))?;
+    borrow_view(bytes, count)
+}
+
+/// Borrows a wire structure with `count` trailing elements, preserving input on failure.
+pub(super) fn borrow_view<'a, T>(bytes: &mut &'a [u8], count: usize) -> Result<&'a T, ParseError>
+where
+    T: ?Sized + FromBytes + Immutable + Unaligned + KnownLayout<PointerMetadata = usize>,
+{
+    let (value, remaining) = T::ref_from_prefix_with_elems(bytes, count).map_err(|_| {
+        ParseError::truncated(
+            T::size_for_metadata(count).unwrap_or(usize::MAX),
+            bytes.len(),
+        )
+    })?;
     *bytes = remaining;
-    Ok(values)
+    Ok(value)
 }
 
 /// Parses an explicit number of elements, stopping at the first failure.
@@ -81,6 +93,20 @@ pub(super) fn parse_repeated<'a, E>(
 mod tests {
     use super::{ParseError, decode_value, parse_repeated};
     use crate::jvm::errors::ParseErrorKind;
+
+    #[test]
+    fn truncated_value_reports_size_without_consuming_input() {
+        let mut remaining = [1].as_slice();
+        let error = decode_value::<u16>(&mut remaining).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::Truncated {
+                requested: 2,
+                available: 1
+            }
+        );
+        assert_eq!(remaining, [1]);
+    }
 
     #[test]
     fn repeated_parsing_stops_when_an_element_is_rejected() {

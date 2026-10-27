@@ -1,6 +1,7 @@
 #[test]
 fn object_verification_types_validate_indices_and_resolve_arrays() {
     use super::*;
+    use crate::ir::test::prelude::assert_matches;
     use crate::jvm::{
         class::Version,
         class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
@@ -21,10 +22,18 @@ fn object_verification_types_validate_indices_and_resolve_arrays() {
     };
     for cpool_index in [0, 1, 3, 4, 5] {
         let raw = raw::VerificationTypeInfo::Object { cpool_index };
-        assert_eq!(
-            raw.resolve(&mut ctx).unwrap_err().kind(),
-            ParseErrorKind::Malformed
-        );
+        let kind = raw.resolve(&mut ctx).unwrap_err().kind();
+        if matches!(cpool_index, 1 | 3) {
+            assert_matches!(
+                kind,
+                ParseErrorKind::UnexpectedConstantPoolEntry { index, .. } if index == cpool_index
+            );
+        } else {
+            assert_matches!(
+                kind,
+                ParseErrorKind::InvalidConstantPoolIndex { index } if index == cpool_index
+            );
+        }
     }
     let VerificationTypeData::Object(id) = raw::VerificationTypeInfo::Object { cpool_index: 2 }
         .resolve(&mut ctx)

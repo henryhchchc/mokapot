@@ -1,4 +1,5 @@
 use super::*;
+use crate::ir::test::prelude::assert_matches;
 use crate::jvm::class_file::constant_pool::{
     ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
 };
@@ -104,9 +105,12 @@ fn invocation_opcodes_preserve_pool_kind_validation() {
             if valid {
                 assert!(result.is_ok());
             } else {
-                assert_eq!(
+                assert_matches!(
                     result.unwrap_err().kind(),
-                    crate::jvm::errors::ParseErrorKind::Malformed
+                    crate::jvm::errors::ParseErrorKind::UnexpectedConstantPoolEntry {
+                        index: 6,
+                        ..
+                    }
                 );
             }
         }

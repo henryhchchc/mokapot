@@ -14,7 +14,7 @@ use super::{
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
-    decoder::{decode_value, parse_repeated},
+    decoder::{borrow_view, decode_value, parse_repeated},
     module::raw as module_raw,
     resolve::{Resolve, decode_resolved},
 };
@@ -53,11 +53,7 @@ impl<'a> Decode<'a> for &'a AttributeInfo {
         let attribute_length: u32 = decode_value(&mut header)?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        let (attribute, remaining) =
-            AttributeInfo::ref_from_prefix_with_elems(bytes, attribute_length)
-                .map_err(|_| ParseError::malform("Truncated class-file attribute"))?;
-        *bytes = remaining;
-        Ok(attribute)
+        borrow_view::<AttributeInfo>(bytes, attribute_length)
     }
 }
 
@@ -435,7 +431,10 @@ mod tests {
         );
         assert_eq!(
             resolve(&bytes[1..bytes.len() - 1]).unwrap_err().kind(),
-            ParseErrorKind::Malformed
+            ParseErrorKind::Truncated {
+                requested: 5,
+                available: 4
+            }
         );
         let name = ctx.constant_pool.utf8(parameters[0].name.unwrap());
         assert_eq!(name.as_bytes(), &[0xed, 0xa0, 0x80]);
