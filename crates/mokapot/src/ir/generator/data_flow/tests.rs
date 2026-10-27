@@ -16,8 +16,6 @@ fn verify_method(method: &TestMethod) {
 
 mod cases {
     use super::*;
-    use std::collections::BTreeMap;
-
     use crate::{
         ir::{generator::data_flow::analyze, test::prelude::*},
         jvm::code::InstructionData,
@@ -27,7 +25,7 @@ mod cases {
     fn parallel_edges_deliver_their_join_arguments() {
         let switch = InstructionData::LookupSwitch {
             default: 8.into(),
-            match_targets: BTreeMap::from([(1, 12.into()), (2, 12.into())]),
+            match_targets: Box::new([(1, 12.into()), (2, 12.into())]),
         };
         let body = [
             (0, InstructionData::IConst0),

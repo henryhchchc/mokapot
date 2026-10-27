@@ -2,8 +2,6 @@
 
 use crate::intrinsics::ExactSizeIteratorExt;
 
-use itertools::Itertools;
-
 use super::raw_instruction::{RawInstruction, RawWideInstruction};
 use crate::{
     jvm::{
@@ -289,7 +287,7 @@ impl InstructionData {
                             .map(|target| (value, target))
                             .context("Invalid jump offset")
                     })
-                    .try_collect()?;
+                    .try_collect_exact()?;
                 Self::LookupSwitch {
                     default: (pc + info.default.get()).context("Invalid jump offset")?,
                     match_targets: targets,

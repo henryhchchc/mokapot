@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use super::*;
 use crate::jvm::ConstantPool;
 use crate::{
@@ -65,7 +63,7 @@ fn switches_preserve_ordered_parallel_arms_and_case_guards() {
     };
     let lookup = InstructionData::LookupSwitch {
         default: 10.into(),
-        match_targets: BTreeMap::from([(1, 10.into()), (5, 10.into())]),
+        match_targets: Box::new([(1, 10.into()), (5, 10.into())]),
     };
     for (instruction, cases) in [(table, [3, 4]), (lookup, [1, 5])] {
         let body = [
@@ -98,7 +96,7 @@ fn switches_preserve_ordered_parallel_arms_and_case_guards() {
 
 #[test]
 fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
-    let match_targets = BTreeMap::new();
+    let match_targets = Box::new([]);
     let instruction = InstructionData::LookupSwitch {
         default: 10.into(),
         match_targets,

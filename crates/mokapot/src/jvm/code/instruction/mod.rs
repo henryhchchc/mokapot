@@ -9,8 +9,6 @@ mod name;
 
 use crate::types::class_name::ClassName;
 
-use std::collections::BTreeMap;
-
 use super::ProgramCounter;
 use crate::{
     intrinsics::{enum_discriminant, see_jvm_spec},
@@ -225,7 +223,8 @@ pub enum Instruction<'class> {
     } = 0xaa,
     LookupSwitch {
         default: ProgramCounter,
-        match_targets: &'class BTreeMap<i32, ProgramCounter>,
+        /// Match values and targets, ordered by strictly increasing match value.
+        match_targets: &'class [(i32, ProgramCounter)],
     } = 0xab,
     IReturn = 0xac,
     LReturn = 0xad,

@@ -140,7 +140,7 @@ impl BlockExit<ProgramCounter> {
                 match_targets,
                 default,
             } => Self::Switch {
-                cases: (*match_targets).clone(),
+                cases: match_targets.iter().copied().collect(),
                 default: *default,
             },
             _ => Self::Continue {
