@@ -7,7 +7,6 @@ use crate::jvm::{
     },
 };
 use crate::types::field_type::PrimitiveType;
-use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u8)]
 pub(crate) enum InstructionData {
@@ -203,7 +202,7 @@ pub(crate) enum InstructionData {
     } = 0xaa,
     LookupSwitch {
         default: ProgramCounter,
-        match_targets: BTreeMap<i32, ProgramCounter>,
+        match_targets: Box<[(i32, ProgramCounter)]>,
     } = 0xab,
     IReturn = 0xac,
     LReturn = 0xad,
