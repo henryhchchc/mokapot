@@ -33,6 +33,13 @@ impl MokaIRMethod {
         self.blocks.get(&id)
     }
 
+    /// Iterates over all reachable blocks and their method-local identities.
+    ///
+    /// The iteration order is unspecified.
+    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock)> + '_ {
+        self.blocks.iter().map(|(&id, block)| (id, block))
+    }
+
     /// Resolves a block parameter, operation, or terminator by structural location.
     ///
     /// Locations outside this method's block structure yield `None`.
