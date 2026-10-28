@@ -178,7 +178,7 @@ mod tests {
         .filter_map(Cube::from_branch_guard)
         .collect();
         let minimized = BoundedMinimizer::new(SolvingBudget::default()).minimize(cubes);
-        let expected: HashSet<_> = [Cube::from_branch_guard(BranchGuard::of(a))]
+        let expected: HashSet<_> = [Cube::from_branch_guard(BranchGuard::from_literal(a))]
             .into_iter()
             .flatten()
             .collect();
@@ -190,10 +190,13 @@ mod tests {
     fn deferred_generalization_still_absorbs_subsumed_cubes() {
         let a = BooleanVariable::Positive(1_u8);
         let b = BooleanVariable::Positive(2_u8);
-        let cubes = [BranchGuard::of(a.clone()), BranchGuard::from_iter([a, b])]
-            .into_iter()
-            .filter_map(Cube::from_branch_guard)
-            .collect();
+        let cubes = [
+            BranchGuard::from_literal(a.clone()),
+            BranchGuard::from_iter([a, b]),
+        ]
+        .into_iter()
+        .filter_map(Cube::from_branch_guard)
+        .collect();
         let minimized = BoundedMinimizer::deferring_generalization(SolvingBudget {
             on_set_size: 0,
             heuristic_rounds: 0,

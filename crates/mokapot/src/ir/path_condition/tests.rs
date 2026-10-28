@@ -105,7 +105,7 @@ mod explicit_reduction {
             BranchGuard::from_iter([a.clone(), !b]),
         ]);
         let budget = SolvingBudget::default();
-        let expected = PathCondition::from_branch_guards([BranchGuard::of(a)]);
+        let expected = PathCondition::from_branch_guards([BranchGuard::from_literal(a)]);
         assert_ne!(structural, expected);
         let reduced = structural.reduce_with_budget(budget);
         assert_eq!(reduced, expected);
@@ -130,8 +130,8 @@ mod analyzer {
         let positive: BooleanVariable<Predicate> = condition.into();
         let negative = !positive.clone();
         let [b0, b1, b2, b3] = ids(0);
-        let taken = Transfer::Conditional(BranchGuard::of(positive));
-        let missed = Transfer::Conditional(BranchGuard::of(negative));
+        let taken = Transfer::Conditional(BranchGuard::from_literal(positive));
+        let missed = Transfer::Conditional(BranchGuard::from_literal(negative));
         let exit = void();
 
         let blocks = HashMap::from([
@@ -155,8 +155,8 @@ mod analyzer {
         let positive: BooleanVariable<Predicate> = condition.into();
         let negative = !positive.clone();
         let [entry_id, tried, normal, handler, otherwise] = ids(0);
-        let taken = Transfer::Conditional(BranchGuard::of(positive));
-        let missed = Transfer::Conditional(BranchGuard::of(negative));
+        let taken = Transfer::Conditional(BranchGuard::from_literal(positive));
+        let missed = Transfer::Conditional(BranchGuard::from_literal(negative));
         let caught = Transfer::Exception(Some("java/lang/RuntimeException".parse().unwrap()));
         let exit = void();
 
@@ -183,7 +183,8 @@ mod analyzer {
         let [entry, branch_id, impossible, reachable] = ids(0);
         let [zero]: [ValueId; 1] = ids(0);
         let predicate = Predicate::IsZero(zero.into());
-        let false_guard = Transfer::Conditional(BranchGuard::of(!BooleanVariable::from(predicate)));
+        let false_guard =
+            Transfer::Conditional(BranchGuard::from_literal(!BooleanVariable::from(predicate)));
         let blocks = HashMap::from([
             bb(
                 entry,
@@ -220,7 +221,7 @@ mod analyzer {
                     arm(
                         first_taken,
                         [],
-                        Transfer::Conditional(BranchGuard::of(first.into())),
+                        Transfer::Conditional(BranchGuard::from_literal(first.into())),
                     ),
                     edge(first_otherwise, []),
                 ),
@@ -231,7 +232,9 @@ mod analyzer {
                     arm(
                         impossible,
                         [],
-                        Transfer::Conditional(BranchGuard::of(!BooleanVariable::from(second))),
+                        Transfer::Conditional(BranchGuard::from_literal(!BooleanVariable::from(
+                            second,
+                        ))),
                     ),
                     edge(reachable, []),
                 ),

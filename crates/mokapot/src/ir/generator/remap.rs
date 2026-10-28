@@ -65,7 +65,7 @@ impl RemapValues for ControlTransfer {
         let Self::Conditional(guard) = self else {
             return Ok(());
         };
-        let old = std::mem::replace(guard, BranchGuard::one());
+        let old = std::mem::replace(guard, BranchGuard::tautology());
         *guard = old
             .into_iter()
             .map(|literal| match literal {
@@ -152,10 +152,8 @@ fn remap_field<E>(
 ) -> Result<(), E> {
     match access {
         FieldAccess::ReadStatic { .. } => Ok(()),
-        FieldAccess::WriteStatic { value, .. }
-        | FieldAccess::ReadInstance {
-            object_ref: value, ..
-        } => remap_value(value, remap),
+        FieldAccess::WriteStatic { value, .. } => remap_value(value, remap),
+        FieldAccess::ReadInstance { object_ref, .. } => remap_value(object_ref, remap),
         FieldAccess::WriteInstance {
             object_ref, value, ..
         } => {
@@ -170,9 +168,8 @@ fn remap_array<E>(
     remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
 ) -> Result<(), E> {
     match operation {
-        ArrayOperation::New { length, .. } | ArrayOperation::Length { array_ref: length } => {
-            remap_value(length, remap)
-        }
+        ArrayOperation::New { length, .. } => remap_value(length, remap),
+        ArrayOperation::Length { array_ref } => remap_value(array_ref, remap),
         ArrayOperation::NewMultiDim { dimensions, .. } => {
             for value in dimensions {
                 remap_value(value, remap)?;

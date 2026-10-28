@@ -114,10 +114,11 @@ impl BlockExit<ProgramCounter> {
                 exception_arms: exception_arms(body, pc),
             },
             Goto(target) | GotoW(target) => Self::Goto { target: *target },
-            IfEq(pc) | IfNe(pc) | IfLt(pc) | IfGe(pc) | IfGt(pc) | IfLe(pc) | IfICmpEq(pc)
-            | IfICmpNe(pc) | IfICmpLt(pc) | IfICmpGe(pc) | IfICmpGt(pc) | IfICmpLe(pc)
-            | IfACmpEq(pc) | IfACmpNe(pc) | IfNull(pc) | IfNonNull(pc) => Self::Branch {
-                taken: *pc,
+            IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target)
+            | IfLe(target) | IfICmpEq(target) | IfICmpNe(target) | IfICmpLt(target)
+            | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
+            | IfACmpNe(target) | IfNull(target) | IfNonNull(target) => Self::Branch {
+                taken: *target,
                 otherwise: next()?,
             },
             Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {

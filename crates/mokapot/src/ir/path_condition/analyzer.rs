@@ -254,7 +254,7 @@ mod tests {
         ];
 
         for (literal, expected_taken) in cases {
-            let normalized = problem.normalize_guard(&BranchGuard::of(literal));
+            let normalized = problem.normalize_guard(&BranchGuard::from_literal(literal));
             assert_eq!(normalized.is_some(), expected_taken);
             if expected_taken {
                 assert!(normalized.unwrap().is_tautology());

@@ -113,8 +113,8 @@ impl<P> PathCondition<P> {
     /// ```
     /// use mokapot::ir::{BranchGuard, expression::BooleanVariable, path_condition::{PathCondition, SolvingBudget}};
     ///
-    /// let positive = BranchGuard::of(BooleanVariable::Positive("ready"));
-    /// let negative = BranchGuard::of(BooleanVariable::Negative("ready"));
+    /// let positive = BranchGuard::from_literal(BooleanVariable::Positive("ready"));
+    /// let negative = BranchGuard::from_literal(BooleanVariable::Negative("ready"));
     /// let condition = (PathCondition::one() & positive) | (PathCondition::one() & negative);
     /// assert_eq!(condition.reduce_with_budget(SolvingBudget::default()), PathCondition::one());
     /// ```

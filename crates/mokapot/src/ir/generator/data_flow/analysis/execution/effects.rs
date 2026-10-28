@@ -23,8 +23,8 @@ pub(super) fn branch_transfers(
 ) -> Result<(ControlTransfer, ControlTransfer), FrameError> {
     let condition: BooleanVariable<Predicate> = pop_condition(frame, instruction)?.into();
     Ok((
-        ControlTransfer::Conditional(BranchGuard::of(condition.clone())),
-        ControlTransfer::Conditional(BranchGuard::of(!condition)),
+        ControlTransfer::Conditional(BranchGuard::from_literal(condition.clone())),
+        ControlTransfer::Conditional(BranchGuard::from_literal(!condition)),
     ))
 }
 
@@ -35,7 +35,7 @@ pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, FrameError> 
 
 /// The transfer selected when `selector` matches `case`.
 pub(super) fn case_guard(selector: ValueId, case: i32) -> ControlTransfer {
-    ControlTransfer::Conditional(BranchGuard::of(BooleanVariable::Positive(equal(
+    ControlTransfer::Conditional(BranchGuard::from_literal(BooleanVariable::Positive(equal(
         selector, case,
     ))))
 }

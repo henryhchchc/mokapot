@@ -24,8 +24,8 @@ fn branch_preserves_taken_then_fallthrough_guards() {
     let taken = branch.successors().next().unwrap().transfer().unwrap();
     let otherwise = branch.successors().nth(1).unwrap().transfer().unwrap();
     let is_zero = Predicate::IsZero(PathValue::Variable(ir.parameters[0]));
-    let positive = BranchGuard::of(BooleanVariable::Positive(is_zero.clone()));
-    let negative = BranchGuard::of(BooleanVariable::Negative(is_zero));
+    let positive = BranchGuard::from_literal(BooleanVariable::Positive(is_zero.clone()));
+    let negative = BranchGuard::from_literal(BooleanVariable::Negative(is_zero));
     assert_eq!(taken, &ControlTransfer::Conditional(positive));
     assert_eq!(otherwise, &ControlTransfer::Conditional(negative));
     assert_eq!(entry_origin(&ir), Some(1.into()));
@@ -48,7 +48,7 @@ fn comparison_branch_preserves_operand_order() {
         PathValue::Variable(ir.parameters[1]),
     );
     let predicate = BooleanVariable::Positive(Predicate::LessThan(lhs, rhs));
-    let expected = ControlTransfer::Conditional(BranchGuard::of(predicate));
+    let expected = ControlTransfer::Conditional(BranchGuard::from_literal(predicate));
 
     let taken = branch.successors().next().unwrap().transfer();
     assert_eq!(taken, Some(&expected));
@@ -77,7 +77,7 @@ fn switches_preserve_ordered_parallel_arms_and_case_guards() {
         let case_guard = |it| {
             let case = PathValue::Constant(ConstantValue::Integer(it));
             let predicate = BooleanVariable::Positive(Predicate::Equal(match_value.clone(), case));
-            ControlTransfer::Conditional(BranchGuard::of(predicate))
+            ControlTransfer::Conditional(BranchGuard::from_literal(predicate))
         };
 
         assert_matches!(switch, Terminator::Switch { .. });

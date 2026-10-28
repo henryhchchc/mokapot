@@ -301,17 +301,17 @@ where
 impl<P> BranchGuard<P> {
     /// Creates the tautological guard `⊤`.
     #[must_use]
-    pub fn one() -> Self {
+    pub fn tautology() -> Self {
         Self(HashSet::new())
     }
 
     /// Creates a guard containing a single literal.
     #[must_use]
-    pub fn of(predicate: BooleanVariable<P>) -> Self
+    pub fn from_literal(literal: BooleanVariable<P>) -> Self
     where
         P: Hash + Eq,
     {
-        Self(HashSet::from([predicate]))
+        Self(HashSet::from([literal]))
     }
 
     /// Returns whether this guard is `⊤`.
