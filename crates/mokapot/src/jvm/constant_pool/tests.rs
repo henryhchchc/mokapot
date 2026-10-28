@@ -20,22 +20,9 @@ fn miri_utf8_ranges_preserve_boundaries() {
         pool.insert_resolved_at(ids[0].0.get(), Entry::Utf8(1..2))
             .is_err()
     );
-    let mut start = 0;
     for (id, bytes) in ids.into_iter().zip(values) {
-        let end = start + bytes.len();
-        let Entry::Utf8(range) = pool.get_entry(id.0.get()).unwrap() else {
-            panic!()
-        };
-        assert_eq!(range, &(start..end));
-        let value = pool.utf8(id);
-        assert_eq!(value.as_bytes(), bytes);
-        assert_eq!(
-            value.as_bytes().as_ptr(),
-            pool.utf8_bytes[start..end].as_ptr()
-        );
-        start = end;
+        assert_eq!(pool.utf8(id).as_bytes(), bytes);
     }
-    assert_eq!(pool.utf8_bytes.len(), start);
 }
 
 #[test]

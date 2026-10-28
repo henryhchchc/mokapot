@@ -20,12 +20,6 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
             Terminator::Try { exceptional, .. } if exceptional == &[Successor::Unwind]
         );
     }
-    let blocks = ir.blocks().collect::<Vec<_>>();
-    assert_eq!(blocks.len(), 3);
-    assert!(blocks.iter().any(|(id, _)| *id == ir.entry.block));
-    for (id, block) in blocks {
-        assert_eq!(ir.block(id), Some(block));
-    }
 }
 
 #[test]

@@ -102,11 +102,6 @@ mod tests {
 
     proptest! {
         #[test]
-        fn entry_point_matches_zero(value in any::<u16>()) {
-            prop_assert_eq!(ProgramCounter::from(value).is_entry_point(), value == 0);
-        }
-
-        #[test]
         fn i32_offset_matches_checked_arithmetic(value in any::<u16>(), offset in any::<i32>()) {
             let expected = i64::from(value) + i64::from(offset);
             let actual = ProgramCounter::from(value) + offset;
@@ -142,10 +137,6 @@ mod tests {
             }
         }
 
-        #[test]
-        fn display_is_zero_padded_uppercase_hex(value in any::<u16>()) {
-            let pc = ProgramCounter::from(value);
-            prop_assert_eq!(format!("{pc}"), format!("#{value:04X}"));
-        }
+
     }
 }

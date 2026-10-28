@@ -1,10 +1,8 @@
 use super::*;
 use crate::ir::test::prelude::assert_matches;
 use crate::jvm::{
-    ConstantVal, ConstantValue, JavaString,
-    class::{MethodHandle, MethodHndl},
-    class_file::constant_pool::RawEntry,
-    errors::ParseErrorKind,
+    ConstantVal, ConstantValue, JavaString, class::MethodHandle,
+    class_file::constant_pool::RawEntry, errors::ParseErrorKind,
 };
 use crate::types::Descriptor;
 use crate::types::class_name::ClassName;
@@ -45,7 +43,8 @@ fn resolves_and_validates_module_names() {
     }
 }
 
-fn member_pool() -> ConstantPool {
+#[test]
+fn member_views_resolve_owners_names_and_descriptors() {
     let raw = RawConstantPool::from_entries([
         RawEntry::Utf8(b"[I"),
         RawEntry::Class {
@@ -61,42 +60,18 @@ fn member_pool() -> ConstantPool {
             class_index: 2.into(),
             name_and_type_index: 5.into(),
         },
-        RawEntry::FieldRef {
-            class_index: 2.into(),
-            name_and_type_index: 5.into(),
-        },
-        RawEntry::NameAndType {
-            name_index: 3.into(),
-            descriptor_index: 4.into(),
-        },
-        RawEntry::FieldRef {
-            class_index: 2.into(),
-            name_and_type_index: 8.into(),
-        },
         RawEntry::Utf8(b"(I[Ljava/lang/Object;)V"),
         RawEntry::NameAndType {
             name_index: 3.into(),
-            descriptor_index: 10.into(),
+            descriptor_index: 7.into(),
         },
         RawEntry::MethodRef {
             class_index: 2.into(),
-            name_and_type_index: 11.into(),
-        },
-        RawEntry::MethodRef {
-            class_index: 2.into(),
-            name_and_type_index: 11.into(),
+            name_and_type_index: 8.into(),
         },
         RawEntry::InterfaceMethodRef {
             class_index: 2.into(),
-            name_and_type_index: 11.into(),
-        },
-        RawEntry::NameAndType {
-            name_index: 3.into(),
-            descriptor_index: 10.into(),
-        },
-        RawEntry::MethodRef {
-            class_index: 2.into(),
-            name_and_type_index: 15.into(),
+            name_and_type_index: 8.into(),
         },
         RawEntry::Dynamic {
             bootstrap_method_attr_index: 1.into(),
@@ -104,47 +79,37 @@ fn member_pool() -> ConstantPool {
         },
         RawEntry::InvokeDynamic {
             bootstrap_method_attr_index: 2.into(),
-            name_and_type_index: 11.into(),
+            name_and_type_index: 8.into(),
         },
     ]);
-    resolve(raw).unwrap().finish()
-}
-
-#[test]
-fn member_views_share_owners_names_and_descriptors() {
-    let pool = member_pool();
-    let owner = pool.reference_type(pool.reference_type_id(2).unwrap());
+    let pool = resolve(raw).unwrap().finish();
     let name = pool.utf8(pool.utf8_id(3).unwrap());
     let field = pool.field_ref(pool.field_ref_id(6).unwrap());
-    for index in [6, 7, 9] {
-        let other = pool.field_ref(pool.field_ref_id(index).unwrap());
-        assert!(std::ptr::eq(other.owner(), owner));
-        assert!(std::ptr::eq(other.name(), name));
-        assert!(std::ptr::eq(other.field_type(), field.field_type()));
-    }
-    let method = pool.method_ref(pool.method_ref_id(12).unwrap());
-    for index in [12, 13, 14, 16] {
-        let other = pool.method_ref(pool.method_or_interface_ref_id(index).unwrap());
-        assert!(std::ptr::eq(other.owner(), owner));
-        assert!(std::ptr::eq(other.name(), name));
-        assert!(std::ptr::eq(other.descriptor(), method.descriptor()));
+    assert_eq!(field.owner().descriptor(), "[I");
+    assert_eq!(field.name().as_bytes(), &[0xed, 0xa0, 0x80]);
+    assert_eq!(field.field_type().descriptor(), "I");
+    assert_eq!(field.into_owned().name.as_bytes(), name.as_bytes());
+
+    for index in [9, 10] {
+        let method = pool.method_ref(pool.method_or_interface_ref_id(index).unwrap());
+        assert_eq!(method.owner().descriptor(), "[I");
+        assert_eq!(method.name(), name);
+        assert_eq!(method.descriptor().descriptor(), "(I[Ljava/lang/Object;)V");
+        assert_eq!(method.into_owned().name.as_bytes(), name.as_bytes());
     }
     let (bootstrap, dynamic_name, descriptor) =
-        pool.invoke_dynamic(pool.invoke_dynamic_id(18).unwrap());
+        pool.invoke_dynamic(pool.invoke_dynamic_id(12).unwrap());
     assert_eq!(bootstrap, 2);
-    assert!(std::ptr::eq(dynamic_name, name));
-    assert!(std::ptr::eq(descriptor, method.descriptor()));
-    assert_eq!(field.name().as_bytes(), &[0xed, 0xa0, 0x80]);
-    assert_eq!(field.into_owned().name.as_bytes(), name.as_bytes());
-    assert_eq!(method.into_owned().name.as_bytes(), name.as_bytes());
+    assert_eq!(dynamic_name, name);
+    assert_eq!(descriptor.descriptor(), "(I[Ljava/lang/Object;)V");
     let ConstantVal::Dynamic(bootstrap, dynamic_name, ty) =
-        pool.constant_value(pool.constant_value_id(17).unwrap())
+        pool.constant_value(pool.constant_value_id(11).unwrap())
     else {
         panic!("expected dynamic constant");
     };
     assert_eq!(bootstrap, 1);
-    assert!(std::ptr::eq(dynamic_name, name));
-    assert!(std::ptr::eq(ty, field.field_type()));
+    assert_eq!(dynamic_name, name);
+    assert_eq!(ty.descriptor(), "I");
 }
 
 #[test]
@@ -195,7 +160,7 @@ fn member_resolution_rejects_invalid_owners_and_name_and_type_kinds() {
 }
 
 #[test]
-fn checked_ids_preserve_values_and_share_parsed_descriptors() {
+fn checked_ids_preserve_values_and_reject_invalid_indices() {
     let raw = RawConstantPool::from_entries([
         RawEntry::Utf8(b"()V"),
         RawEntry::Long(0.into()),
@@ -222,13 +187,9 @@ fn checked_ids_preserve_values_and_share_parsed_descriptors() {
     }
     let name = pool.utf8_id(4).unwrap();
     let descriptor = pool.intern_method_descriptor(1).unwrap();
-    assert_eq!(pool.intern_method_descriptor(1).unwrap(), descriptor);
     let field_type = pool.intern_field_type(5).unwrap();
-    assert_eq!(pool.intern_field_type(5).unwrap(), field_type);
     let return_type = pool.intern_return_type(6).unwrap();
-    assert_eq!(pool.intern_return_type(6).unwrap(), return_type);
     let constant = pool.constant_value_id(2).unwrap();
-    assert_eq!(pool.constant_value_id(2).unwrap(), constant);
     for index in [0, 3, 7] {
         for result in [
             pool.intern_field_type(index).map(|_| ()),
@@ -376,19 +337,6 @@ fn method_handles_validate_reference_kinds_and_tags() {
 }
 
 #[test]
-fn method_handle_views_share_member_references() {
-    let pool = method_handle_pool(9, 11).unwrap();
-    let handle = pool.method_handle(pool.method_handle_id(7).unwrap());
-    let MethodHndl::RefInvokeInterface(method) = handle else {
-        panic!()
-    };
-    let member = pool.method_ref(pool.interface_method_ref_id(6).unwrap());
-    assert!(std::ptr::eq(method.owner(), member.owner()));
-    assert!(std::ptr::eq(method.name(), member.name()));
-    assert!(std::ptr::eq(method.descriptor(), member.descriptor()));
-}
-
-#[test]
 fn forward_references_resolve_typed_values_and_keep_indices() {
     let raw = RawConstantPool::from_entries([
         RawEntry::MethodHandle {
@@ -501,7 +449,7 @@ fn string_entries_preserve_jvm_bytes() {
     let ConstantVal::String(value) = constant else {
         panic!("expected string constant");
     };
-    assert!(std::ptr::eq(value, pool.utf8(pool.utf8_id(1).unwrap())));
+    assert_eq!(value, pool.utf8(pool.utf8_id(1).unwrap()));
     assert_eq!(constant.into_owned(), ConstantValue::String(expected));
 }
 

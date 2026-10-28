@@ -342,7 +342,7 @@ mod tests {
     #[doc = see_jvm_spec!(6, 5)]
     #[test]
     fn pop_arguments_pops_in_reverse_declaration_order() {
-        // `(JI)V`: the last argument takes two slots, the one before it takes one.
+        // `(JI)V`: the last argument takes one slot, the one before it takes two.
         let descriptor: MethodDescriptor = "(JI)V".parse().expect("the descriptor is valid");
         let mut ids = IdAllocator::default();
         let arguments = [(ids.new_id(), Category2), (ids.new_id(), Category1)]

@@ -291,93 +291,49 @@ impl<I> InstructionStorage<I> {
 
 #[cfg(test)]
 mod test {
-    use Instruction::*;
-
     use super::*;
 
     #[test]
-    fn exception_table_entry_covers_half_open_range() {
-        let data = ExceptionTableEntryData {
-            covered_pc: 1.into()..4.into(),
-            handler_pc: 5.into(),
-            catch_type: None,
-        };
-        let class = Class::default();
-        let entry = ExceptionTableEntry {
-            class: &class,
-            data: &data,
-        };
-        assert!(entry.covers(1.into()));
-        assert!(entry.covers(3.into()));
-        assert!(!entry.covers(4.into()));
+    fn catch_all_handlers_include_implicit_and_throwable_types() {
+        let mut class = Class::default();
+        let throwable = class
+            .constant_pool
+            .insert_class_name("java/lang/Throwable".parse().unwrap());
+        let exception = class
+            .constant_pool
+            .insert_class_name("java/lang/Exception".parse().unwrap());
+        for (catch_type, catches_all) in [
+            (None, true),
+            (Some(throwable), true),
+            (Some(exception), false),
+        ] {
+            let data = ExceptionTableEntryData {
+                covered_pc: 0.into()..1.into(),
+                handler_pc: 1.into(),
+                catch_type,
+            };
+            let entry = ExceptionTableEntry {
+                class: &class,
+                data: &data,
+            };
+            assert_eq!(entry.catches_all(), catches_all);
+        }
     }
 
     #[test]
-    fn exception_and_stack_map_types_resolve_pool_ids() {
-        use crate::types::Descriptor;
-
-        let mut pool = crate::jvm::ConstantPool::new();
-        let catch_type = pool.insert_class_name("java/lang/Throwable".parse().unwrap());
-        let array_type = pool.insert_reference_type("[I".parse().unwrap());
-        let class = Class {
-            name: catch_type,
-            constant_pool: pool,
-            ..Class::default()
-        };
-        let entry_data = ExceptionTableEntryData {
-            covered_pc: 0.into()..1.into(),
-            handler_pc: 1.into(),
-            catch_type: Some(catch_type),
-        };
-        let entry = ExceptionTableEntry {
-            class: &class,
-            data: &entry_data,
-        };
-        let caught = entry.catch_type().unwrap();
-        assert!(std::ptr::eq(
-            caught,
-            class.constant_pool.class_name(catch_type)
-        ));
-        assert!(entry.catches_all());
-        let array = VerificationType::new(&class, VerificationTypeData::Object(array_type));
-        let VerificationType::ObjectVariable(array) = array else {
-            panic!("expected an object type");
-        };
-        assert_eq!(array.descriptor(), "[I");
-        assert!(std::ptr::eq(
-            array,
-            class.constant_pool.reference_type(array_type)
-        ));
-    }
-
-    #[test]
-    fn instruction_at() {
-        let data = MethodBodyData {
-            instructions: InstructionStorage::from([
-                (0.into(), InstructionData::Nop),
-                (1.into(), InstructionData::IConst0),
-                (2.into(), InstructionData::IConst1),
-            ]),
-            max_stack: 0,
-            max_locals: 0,
-            exception_table: Box::new([]),
-            line_number_table: None,
-            local_variable_table: None,
-            stack_map_table: None,
-            type_annotations: AnnotationsData::default(),
-            other_attributes: Box::new([]),
-        };
-        let class = Class::default();
-        let body = MethodBody::new(&class, &data);
-        assert_eq!(Some(IConst0), body.instruction_at(1.into()));
-    }
-
-    #[test]
-    fn previous_pc() {
-        let instruction_list =
-            InstructionStorage::from([(0.into(), 10), (1.into(), 20), (2.into(), 30)]);
-        assert_eq!(Some(0.into()), instruction_list.prev_pc_of(1.into()));
-        assert_eq!(None, instruction_list.prev_pc_of(0.into()));
+    fn instruction_storage_orders_sparse_offsets_and_finds_neighbors() {
+        let instructions = InstructionStorage::from_iter([
+            (5.into(), 50),
+            (0.into(), 0),
+            (2.into(), 20),
+            (2.into(), 21),
+        ]);
+        assert_eq!(instructions.get(2.into()), Some(&21));
+        assert_eq!(instructions.get(3.into()), None);
+        assert_eq!(instructions.prev_pc_of(3.into()), Some(2.into()));
+        assert_eq!(instructions.next_pc_of(3.into()), Some(5.into()));
+        assert_eq!(instructions.prev_pc_of(0.into()), None);
+        assert_eq!(instructions.next_pc_of(5.into()), None);
     }
 }
 

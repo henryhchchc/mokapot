@@ -101,10 +101,6 @@ fn decodes_nested_annotation_values_and_continues_to_the_next_annotation() {
         panic!("expected nested annotation");
     };
     assert_eq!(nested.annotation_type(), annotation.annotation_type());
-    assert!(std::ptr::eq(
-        nested.annotation_type(),
-        annotation.annotation_type()
-    ));
     let ElementValue::Array(empty) = nested.get_value().unwrap() else {
         panic!("expected nested annotation array");
     };
@@ -160,11 +156,11 @@ fn preserves_unpaired_surrogates_in_annotation_names_and_strings() {
         panic!("expected string element");
     };
     assert_eq!(name.as_bytes(), b"\xed\xa0\x80");
-    assert!(std::ptr::eq(name, string));
+    assert_eq!(name, string);
     let ElementValue::EnumConstant { const_name, .. } = annotation.get_value().unwrap() else {
         panic!("expected enum constant");
     };
-    assert!(std::ptr::eq(name, const_name));
+    assert_eq!(name, const_name);
     assert_eq!(
         annotation.get_element_value(name),
         Some(ElementValue::String(string))

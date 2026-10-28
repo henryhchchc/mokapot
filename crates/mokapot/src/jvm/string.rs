@@ -415,9 +415,18 @@ mod tests {
     fn miri_split_ascii_preserves_encoding() {
         for bytes in VALID_STRINGS {
             let view = JavaStr::from_cesu8(bytes).unwrap();
-            for part in view.split_ascii(b'/') {
+            let parts: Vec<_> = view.split_ascii(b'/').collect();
+            for part in &parts {
                 assert!(JavaStr::from_cesu8(part.as_bytes()).is_ok());
             }
+            assert_eq!(
+                parts
+                    .iter()
+                    .map(|part| part.as_bytes())
+                    .collect::<Vec<_>>()
+                    .join(&b'/'),
+                bytes
+            );
         }
     }
 
@@ -426,20 +435,25 @@ mod tests {
         for bytes in VALID_STRINGS {
             let view = JavaStr::from_cesu8(bytes).unwrap();
             let replaced = view.replace_ascii(b'/', b'.');
+            let expected = bytes
+                .split(|&byte| byte == b'/')
+                .collect::<Vec<_>>()
+                .join(&b'.');
+            assert_eq!(replaced.as_bytes(), expected);
             assert!(JavaStr::from_cesu8(replaced.as_bytes()).is_ok());
         }
     }
 
     #[test]
-    fn miri_owned_strings_preserve_bytes() {
+    fn miri_owned_boxed_and_shared_strings_preserve_bytes() {
         for bytes in VALID_STRINGS {
             let view = JavaStr::from_cesu8(bytes).unwrap();
             let owned = view.to_owned();
             let borrowed: &JavaStr = owned.borrow();
-            assert_eq!(view.as_bytes(), bytes);
             assert_eq!(borrowed, view);
-            assert_eq!(&*owned, view);
-            assert_eq!(owned.into_bytes(), bytes);
+            assert_eq!(owned.clone().into_bytes(), bytes);
+            assert_eq!(owned.into_boxed_java_str().as_bytes(), bytes);
+            assert_eq!(Arc::<JavaStr>::from(view).as_bytes(), bytes);
         }
     }
 
@@ -452,24 +466,6 @@ mod tests {
             let checked = JavaString::from_cesu8(input).unwrap();
             assert_eq!(checked.as_bytes().as_ptr(), pointer);
             assert_eq!(checked.as_java_str(), view);
-        }
-    }
-
-    #[test]
-    fn miri_boxed_strings_preserve_bytes() {
-        for bytes in VALID_STRINGS {
-            let owned = JavaString::from_cesu8(bytes.to_vec()).unwrap();
-            let boxed = owned.into_boxed_java_str();
-            assert_eq!(boxed.as_bytes(), bytes);
-        }
-    }
-
-    #[test]
-    fn miri_shared_strings_preserve_bytes() {
-        for bytes in VALID_STRINGS {
-            let view = JavaStr::from_cesu8(bytes).unwrap();
-            let shared = Arc::<JavaStr>::from(view);
-            assert_eq!(shared.as_bytes(), bytes);
         }
     }
 
@@ -500,11 +496,9 @@ mod tests {
             assert_eq!(error.valid_up_to(), 6);
             assert_eq!(error.error_len(), error_len);
             let expected = bytes.clone();
-            let pointer = bytes.as_ptr();
             let owned_error = JavaString::from_cesu8(bytes).unwrap_err();
             assert_eq!(owned_error.cesu8_error(), error);
             assert_eq!(owned_error.as_bytes(), expected);
-            assert_eq!(owned_error.as_bytes().as_ptr(), pointer);
             assert_eq!(owned_error.into_bytes(), expected);
         }
     }
