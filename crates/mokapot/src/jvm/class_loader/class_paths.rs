@@ -14,8 +14,8 @@ use std::{
 #[cfg(feature = "jar")]
 use zip::{ZipArchive, result::ZipError};
 
-use super::{ClassPath, Error};
-use crate::{analysis::ClassNames, jvm::Class, types::class_name::ClassName};
+use super::{ClassNames, ClassPath, Error};
+use crate::{jvm::Class, types::class_name::ClassName};
 
 /// A class path that does nothing.
 ///
@@ -36,8 +36,8 @@ impl ClassPath for NopClassPath {
 }
 
 impl ClassNames for NopClassPath {
-    fn class_names(&self) -> HashSet<ClassName> {
-        HashSet::new()
+    fn class_names(&self) -> Result<HashSet<ClassName>, Error> {
+        Ok(HashSet::new())
     }
 }
 
@@ -74,23 +74,26 @@ impl DirectoryClassPath {
 }
 
 impl ClassNames for DirectoryClassPath {
-    fn class_names(&self) -> HashSet<ClassName> {
-        walkdir::WalkDir::new(&self.directory)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|it| it.path().extension().is_some_and(|it| it == "class"))
-            .filter_map(|it| {
-                let class_name = it
-                    .path()
-                    .strip_prefix(&self.directory)
-                    .expect("The directory should start with `self.directory`")
-                    .with_extension("")
-                    .to_str()
-                    .expect("The path name is not valid UTF-8")
-                    .to_owned();
-                class_name.parse().ok()
-            })
-            .collect()
+    fn class_names(&self) -> Result<HashSet<ClassName>, Error> {
+        let mut names = HashSet::new();
+        for entry in walkdir::WalkDir::new(&self.directory) {
+            let entry = entry.map_err(|error| Error::Other(Box::new(error)))?;
+            if entry.path().extension().is_none_or(|ext| ext != "class") {
+                continue;
+            }
+            let relative = entry
+                .path()
+                .strip_prefix(&self.directory)
+                .map_err(|error| Error::Other(Box::new(error)))?
+                .with_extension("");
+            let name = relative.to_str().ok_or_else(|| {
+                io::Error::new(ErrorKind::InvalidData, "class path is not valid UTF-8")
+            })?;
+            if let Ok(name) = name.parse() {
+                names.insert(name);
+            }
+        }
+        Ok(names)
     }
 }
 
@@ -139,18 +142,23 @@ impl ClassPath for JarClassPath {
 
 #[cfg(feature = "jar")]
 impl ClassNames for JarClassPath {
-    fn class_names(&self) -> HashSet<ClassName> {
-        let Ok(jar_file) = File::open(&self.jar_file) else {
-            return HashSet::default();
-        };
+    fn class_names(&self) -> Result<HashSet<ClassName>, Error> {
+        let jar_file = File::open(&self.jar_file)?;
         let jar_reader = BufReader::new(jar_file);
-        let Ok(jar_archive) = ZipArchive::new(jar_reader) else {
-            return HashSet::default();
-        };
-        jar_archive
-            .file_names()
-            .filter_map(|it| it.ok()?.strip_suffix(".class")?.parse().ok())
-            .collect()
+        let jar_archive = ZipArchive::new(jar_reader).map_err(|error| match error {
+            ZipError::Io(error) => Error::IO(error),
+            error => Error::Other(Box::new(error)),
+        })?;
+        let mut names = HashSet::new();
+        for name in jar_archive.file_names() {
+            let name = name.map_err(|error| Error::Other(Box::new(error)))?;
+            if let Some(name) = name.strip_suffix(".class")
+                && let Ok(name) = name.parse()
+            {
+                names.insert(name);
+            }
+        }
+        Ok(names)
     }
 }
 

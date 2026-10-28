@@ -1,6 +1,6 @@
 //! Discovering and loading classes.
 
-use std::ops::Deref;
+use std::{collections::HashSet, ops::Deref};
 
 use super::Class;
 use crate::{intrinsics::Cache, types::class_name::ClassName};
@@ -35,6 +35,15 @@ pub trait ClassPath {
     /// # Errors
     /// See [`Error`].
     fn find_class(&self, class_name: &ClassName) -> Result<Class, Error>;
+}
+
+/// A class path that can enumerate its class names.
+pub trait ClassNames {
+    /// Lists all classes.
+    ///
+    /// # Errors
+    /// Returns an error if the class path cannot be enumerated.
+    fn class_names(&self) -> Result<HashSet<ClassName>, Error>;
 }
 
 impl<T> ClassPath for T

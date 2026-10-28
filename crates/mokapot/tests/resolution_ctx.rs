@@ -15,7 +15,7 @@ mod support;
 #[test]
 fn interfaces_impl() {
     let app_cp = DirectoryClassPath::new(support::classes_dir());
-    let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY);
+    let ctx = ResolutionContext::new([app_cp], NopClassPath::EMPTY).unwrap();
     let my_class: ClassName = "org/mokapot/test/MyClass".parse().unwrap();
     let implements = ctx
         .interface_implementations
