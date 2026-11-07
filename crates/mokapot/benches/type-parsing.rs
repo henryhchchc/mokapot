@@ -2,7 +2,10 @@
 
 use std::{fmt, hint::black_box, sync::LazyLock};
 
-use divan::{Bencher, counter::BytesCount};
+use divan::{
+    Bencher,
+    counter::{BytesCount, ItemsCount},
+};
 use mokapot::{
     jvm::JavaString,
     types::{
@@ -16,11 +19,29 @@ use mokapot::{
 #[global_allocator]
 static ALLOC: divan::AllocProfiler = divan::AllocProfiler::system();
 
+const PARSES_PER_BATCH: usize = 1_024;
+
+// Measure repeated parsing to amortize startup and cold-cache costs.
+fn bench_batch<T>(bencher: Bencher, bytes: usize, parse: impl Fn() -> T + Sync) {
+    bencher
+        .counter(BytesCount::new(bytes * PARSES_PER_BATCH))
+        .counter(ItemsCount::new(PARSES_PER_BATCH))
+        .bench(|| {
+            for _ in 0..PARSES_PER_BATCH {
+                drop(black_box(parse()));
+            }
+        });
+}
+
 const FIELD_DESCRIPTORS: &[&str] = &[
     "I",
+    "Z",
+    "J",
+    "F",
     "Ljava/lang/String;",
     "Ljava/util/Map$Entry;",
     "Lexample/日本語;",
+    "Lexample/😀;",
     "[I",
     "[[[D",
     "[[Ljava/lang/String;",
@@ -29,6 +50,10 @@ const FIELD_DESCRIPTORS: &[&str] = &[
 const METHOD_DESCRIPTORS: &[&str] = &[
     "()V",
     "()I",
+    "()Ljava/lang/Object;",
+    "()[I",
+    "(JFD)V",
+    "([[I[[Ljava/lang/String;)[[D",
     "(II)I",
     "(ZBCSIJFD)D",
     "([Ljava/lang/String;)V",
@@ -56,6 +81,14 @@ static HEAVY_FIELDS: LazyLock<Vec<Case>> = LazyLock::new(|| {
         ("long_object", object.clone(), true),
         ("array_255_dimensions", array.clone(), true),
         ("invalid_tag", "Q".to_owned(), false),
+        ("empty", String::new(), false),
+        ("void", "V".to_owned(), false),
+        ("empty_object_name", "L;".to_owned(), false),
+        (
+            "empty_name_component",
+            "Ljava//lang/String;".to_owned(),
+            false,
+        ),
         (
             "missing_semicolon",
             object.trim_end_matches(';').to_owned(),
@@ -94,6 +127,18 @@ static HEAVY_METHODS: LazyLock<Vec<Case>> = LazyLock::new(|| {
             format!("(){0}I", "[".repeat(255)),
             true,
         ),
+        ("empty", String::new(), false),
+        ("void_parameter", "(V)V".to_owned(), false),
+        (
+            "invalid_first_parameter",
+            format!("(Q{parameters})V"),
+            false,
+        ),
+        (
+            "truncated_object_parameter",
+            "(Ljava/lang/String)V".to_owned(),
+            false,
+        ),
         ("missing_open_paren", format!("{parameters})V"), false),
         ("missing_close_paren", format!("({parameters}"), false),
         ("invalid_last_parameter", format!("({parameters}V)V"), false),
@@ -112,86 +157,86 @@ static HEAVY_METHODS: LazyLock<Vec<Case>> = LazyLock::new(|| {
 
 mod field_type {
     use super::{
-        Bencher, BytesCount, Case, FIELD_DESCRIPTORS, FieldType, HEAVY_FIELDS, JavaString,
+        Bencher, Case, FIELD_DESCRIPTORS, FieldType, HEAVY_FIELDS, JavaString, bench_batch,
         black_box,
     };
 
     #[divan::bench(args = HEAVY_FIELDS.iter())]
-    fn heavy_from_str(bencher: Bencher, case: &Case) {
+    fn heavy_from_str_batched(bencher: Bencher, case: &Case) {
         assert_eq!(case.descriptor.parse::<FieldType>().is_ok(), case.valid);
-        bencher
-            .counter(BytesCount::of_str(&case.descriptor))
-            .bench(|| black_box(case.descriptor.as_str()).parse::<FieldType>());
+        bench_batch(bencher, case.descriptor.len(), || {
+            black_box(case.descriptor.as_str()).parse::<FieldType>()
+        });
     }
 
     #[divan::bench(args = HEAVY_FIELDS.iter())]
-    fn heavy_from_java_str(bencher: Bencher, case: &Case) {
+    fn heavy_from_java_str_batched(bencher: Bencher, case: &Case) {
         let encoded = JavaString::from(case.descriptor.clone());
         let descriptor = encoded.as_java_str();
         assert_eq!(FieldType::try_from(descriptor).is_ok(), case.valid);
-        bencher
-            .counter(BytesCount::new(descriptor.as_bytes().len()))
-            .bench(|| FieldType::try_from(black_box(descriptor)));
+        bench_batch(bencher, descriptor.as_bytes().len(), || {
+            FieldType::try_from(black_box(descriptor))
+        });
     }
 
     #[divan::bench(args = FIELD_DESCRIPTORS)]
-    fn from_str(bencher: Bencher, descriptor: &str) {
-        bencher
-            .counter(BytesCount::of_str(descriptor))
-            .bench(|| black_box(descriptor).parse::<FieldType>().unwrap());
+    fn from_str_batched(bencher: Bencher, descriptor: &str) {
+        bench_batch(bencher, descriptor.len(), || {
+            black_box(descriptor).parse::<FieldType>().unwrap()
+        });
     }
 
     #[divan::bench(args = FIELD_DESCRIPTORS)]
-    fn from_java_str(bencher: Bencher, descriptor: &str) {
+    fn from_java_str_batched(bencher: Bencher, descriptor: &str) {
         let encoded = JavaString::from(descriptor.to_owned());
         let descriptor = encoded.as_java_str();
-        bencher
-            .counter(BytesCount::new(descriptor.as_bytes().len()))
-            .bench(|| FieldType::try_from(black_box(descriptor)).unwrap());
+        bench_batch(bencher, descriptor.as_bytes().len(), || {
+            FieldType::try_from(black_box(descriptor)).unwrap()
+        });
     }
 }
 
 mod method_descriptor {
     use super::{
-        Bencher, BytesCount, Case, HEAVY_METHODS, JavaString, METHOD_DESCRIPTORS, MethodDescriptor,
-        black_box,
+        Bencher, Case, HEAVY_METHODS, JavaString, METHOD_DESCRIPTORS, MethodDescriptor,
+        bench_batch, black_box,
     };
 
     #[divan::bench(args = HEAVY_METHODS.iter())]
-    fn heavy_from_str(bencher: Bencher, case: &Case) {
+    fn heavy_from_str_batched(bencher: Bencher, case: &Case) {
         assert_eq!(
             case.descriptor.parse::<MethodDescriptor>().is_ok(),
             case.valid
         );
-        bencher
-            .counter(BytesCount::of_str(&case.descriptor))
-            .bench(|| black_box(case.descriptor.as_str()).parse::<MethodDescriptor>());
+        bench_batch(bencher, case.descriptor.len(), || {
+            black_box(case.descriptor.as_str()).parse::<MethodDescriptor>()
+        });
     }
 
     #[divan::bench(args = HEAVY_METHODS.iter())]
-    fn heavy_from_java_str(bencher: Bencher, case: &Case) {
+    fn heavy_from_java_str_batched(bencher: Bencher, case: &Case) {
         let encoded = JavaString::from(case.descriptor.clone());
         let descriptor = encoded.as_java_str();
         assert_eq!(MethodDescriptor::try_from(descriptor).is_ok(), case.valid);
-        bencher
-            .counter(BytesCount::new(descriptor.as_bytes().len()))
-            .bench(|| MethodDescriptor::try_from(black_box(descriptor)));
+        bench_batch(bencher, descriptor.as_bytes().len(), || {
+            MethodDescriptor::try_from(black_box(descriptor))
+        });
     }
 
     #[divan::bench(args = METHOD_DESCRIPTORS)]
-    fn from_str(bencher: Bencher, descriptor: &str) {
-        bencher
-            .counter(BytesCount::of_str(descriptor))
-            .bench(|| black_box(descriptor).parse::<MethodDescriptor>().unwrap());
+    fn from_str_batched(bencher: Bencher, descriptor: &str) {
+        bench_batch(bencher, descriptor.len(), || {
+            black_box(descriptor).parse::<MethodDescriptor>().unwrap()
+        });
     }
 
     #[divan::bench(args = METHOD_DESCRIPTORS)]
-    fn from_java_str(bencher: Bencher, descriptor: &str) {
+    fn from_java_str_batched(bencher: Bencher, descriptor: &str) {
         let encoded = JavaString::from(descriptor.to_owned());
         let descriptor = encoded.as_java_str();
-        bencher
-            .counter(BytesCount::new(descriptor.as_bytes().len()))
-            .bench(|| MethodDescriptor::try_from(black_box(descriptor)).unwrap());
+        bench_batch(bencher, descriptor.as_bytes().len(), || {
+            MethodDescriptor::try_from(black_box(descriptor)).unwrap()
+        });
     }
 }
 
@@ -200,12 +245,18 @@ fn main() {
 }
 
 mod primitive_type {
-    use super::{Bencher, BytesCount, Case, LazyLock, PrimitiveType, black_box};
+    use super::{Bencher, Case, LazyLock, PrimitiveType, bench_batch, black_box};
 
     static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
         [
             ("int", "I", true),
             ("double", "D", true),
+            ("boolean", "Z", true),
+            ("byte", "B", true),
+            ("char", "C", true),
+            ("short", "S", true),
+            ("long", "J", true),
+            ("float", "F", true),
             ("empty", "", false),
             ("void", "V", false),
             ("trailing_input", "II", false),
@@ -223,17 +274,17 @@ mod primitive_type {
     });
 
     #[divan::bench(args = CASES.iter())]
-    fn from_str(bencher: Bencher, case: &Case) {
+    fn from_str_batched(bencher: Bencher, case: &Case) {
         let descriptor = case.descriptor.as_str();
         assert_eq!(descriptor.parse::<PrimitiveType>().is_ok(), case.valid);
-        bencher
-            .counter(BytesCount::of_str(descriptor))
-            .bench(|| black_box(descriptor).parse::<PrimitiveType>());
+        bench_batch(bencher, descriptor.len(), || {
+            black_box(descriptor).parse::<PrimitiveType>()
+        });
     }
 }
 
 mod class_name {
-    use super::{Bencher, BytesCount, Case, ClassName, LazyLock, black_box};
+    use super::{Bencher, Case, ClassName, LazyLock, bench_batch, black_box};
 
     static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
         [
@@ -245,6 +296,10 @@ mod class_name {
                 format!("{}Type", "example/package/".repeat(64)),
                 true,
             ),
+            ("nested_class", "java/util/Map$Entry".to_owned(), true),
+            ("leading_separator", "/java/lang/String".to_owned(), false),
+            ("trailing_separator", "java/lang/String/".to_owned(), false),
+            ("empty_component", "java//lang/String".to_owned(), false),
             ("empty", String::new(), false),
             ("invalid_separator", "java.lang.String".to_owned(), false),
             (
@@ -263,16 +318,16 @@ mod class_name {
     });
 
     #[divan::bench(args = CASES.iter())]
-    fn from_str(bencher: Bencher, case: &Case) {
+    fn from_str_batched(bencher: Bencher, case: &Case) {
         assert_eq!(case.descriptor.parse::<ClassName>().is_ok(), case.valid);
-        bencher
-            .counter(BytesCount::of_str(&case.descriptor))
-            .bench(|| black_box(case.descriptor.as_str()).parse::<ClassName>());
+        bench_batch(bencher, case.descriptor.len(), || {
+            black_box(case.descriptor.as_str()).parse::<ClassName>()
+        });
     }
 }
 
 mod reference_type {
-    use super::{Bencher, BytesCount, Case, LazyLock, ReferenceType, black_box};
+    use super::{Bencher, Case, LazyLock, ReferenceType, bench_batch, black_box};
 
     static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
         [
@@ -281,6 +336,12 @@ mod reference_type {
             ("unicode", "Lexample/日本語;".to_owned(), true),
             ("supplementary", "Lexample/😀;".to_owned(), true),
             ("primitive_array", "[I".to_owned(), true),
+            ("object_array", "[Ljava/lang/String;".to_owned(), true),
+            ("multidimensional_primitive_array", "[[[D".to_owned(), true),
+            ("unicode_array", "[Lexample/日本語;".to_owned(), true),
+            ("supplementary_array", "[Lexample/😀;".to_owned(), true),
+            ("missing_array_element", "[".to_owned(), false),
+            ("array_trailing_input", "[II".to_owned(), false),
             (
                 "deep_array",
                 format!("{}Ljava/lang/String;", "[".repeat(255)),
@@ -300,10 +361,10 @@ mod reference_type {
     });
 
     #[divan::bench(args = CASES.iter())]
-    fn from_str(bencher: Bencher, case: &Case) {
+    fn from_str_batched(bencher: Bencher, case: &Case) {
         assert_eq!(case.descriptor.parse::<ReferenceType>().is_ok(), case.valid);
-        bencher
-            .counter(BytesCount::of_str(&case.descriptor))
-            .bench(|| black_box(case.descriptor.as_str()).parse::<ReferenceType>());
+        bench_batch(bencher, case.descriptor.len(), || {
+            black_box(case.descriptor.as_str()).parse::<ReferenceType>()
+        });
     }
 }
