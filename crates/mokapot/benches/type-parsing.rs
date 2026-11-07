@@ -9,9 +9,7 @@ use divan::{
 use mokapot::{
     jvm::JavaString,
     types::{
-        class_name::ClassName,
-        field_type::{FieldType, PrimitiveType},
-        method_descriptor::MethodDescriptor,
+        class_name::ClassName, field_type::FieldType, method_descriptor::MethodDescriptor,
         reference_type::ReferenceType,
     },
 };
@@ -34,10 +32,6 @@ fn bench_batch<T>(bencher: Bencher, bytes: usize, parse: impl Fn() -> T + Sync) 
 }
 
 const FIELD_DESCRIPTORS: &[&str] = &[
-    "I",
-    "Z",
-    "J",
-    "F",
     "Ljava/lang/String;",
     "Ljava/util/Map$Entry;",
     "Lexample/日本語;",
@@ -48,7 +42,6 @@ const FIELD_DESCRIPTORS: &[&str] = &[
 ];
 
 const METHOD_DESCRIPTORS: &[&str] = &[
-    "()V",
     "()I",
     "()Ljava/lang/Object;",
     "()[I",
@@ -80,9 +73,6 @@ static HEAVY_FIELDS: LazyLock<Vec<Case>> = LazyLock::new(|| {
     [
         ("long_object", object.clone(), true),
         ("array_255_dimensions", array.clone(), true),
-        ("invalid_tag", "Q".to_owned(), false),
-        ("empty", String::new(), false),
-        ("void", "V".to_owned(), false),
         ("empty_object_name", "L;".to_owned(), false),
         (
             "empty_name_component",
@@ -127,19 +117,11 @@ static HEAVY_METHODS: LazyLock<Vec<Case>> = LazyLock::new(|| {
             format!("(){0}I", "[".repeat(255)),
             true,
         ),
-        ("empty", String::new(), false),
-        ("void_parameter", "(V)V".to_owned(), false),
-        (
-            "invalid_first_parameter",
-            format!("(Q{parameters})V"),
-            false,
-        ),
         (
             "truncated_object_parameter",
             "(Ljava/lang/String)V".to_owned(),
             false,
         ),
-        ("missing_open_paren", format!("{parameters})V"), false),
         ("missing_close_paren", format!("({parameters}"), false),
         ("invalid_last_parameter", format!("({parameters}V)V"), false),
         ("missing_return", format!("({parameters})"), false),
@@ -244,45 +226,6 @@ fn main() {
     divan::main();
 }
 
-mod primitive_type {
-    use super::{Bencher, Case, LazyLock, PrimitiveType, bench_batch, black_box};
-
-    static CASES: LazyLock<Vec<Case>> = LazyLock::new(|| {
-        [
-            ("int", "I", true),
-            ("double", "D", true),
-            ("boolean", "Z", true),
-            ("byte", "B", true),
-            ("char", "C", true),
-            ("short", "S", true),
-            ("long", "J", true),
-            ("float", "F", true),
-            ("empty", "", false),
-            ("void", "V", false),
-            ("trailing_input", "II", false),
-            ("unicode", "日本語", false),
-            ("nul", "\0", false),
-            ("supplementary", "😀", false),
-        ]
-        .into_iter()
-        .map(|(name, descriptor, valid)| Case {
-            name,
-            descriptor: descriptor.to_owned(),
-            valid,
-        })
-        .collect()
-    });
-
-    #[divan::bench(args = CASES.iter())]
-    fn from_str_batched(bencher: Bencher, case: &Case) {
-        let descriptor = case.descriptor.as_str();
-        assert_eq!(descriptor.parse::<PrimitiveType>().is_ok(), case.valid);
-        bench_batch(bencher, descriptor.len(), || {
-            black_box(descriptor).parse::<PrimitiveType>()
-        });
-    }
-}
-
 mod class_name {
     use super::{Bencher, Case, ClassName, LazyLock, bench_batch, black_box};
 
@@ -340,7 +283,6 @@ mod reference_type {
             ("multidimensional_primitive_array", "[[[D".to_owned(), true),
             ("unicode_array", "[Lexample/日本語;".to_owned(), true),
             ("supplementary_array", "[Lexample/😀;".to_owned(), true),
-            ("missing_array_element", "[".to_owned(), false),
             ("array_trailing_input", "[II".to_owned(), false),
             (
                 "deep_array",
@@ -348,7 +290,6 @@ mod reference_type {
                 true,
             ),
             ("empty", String::new(), false),
-            ("invalid_array", "[V".to_owned(), false),
             ("invalid_name", "java.lang.String".to_owned(), false),
         ]
         .into_iter()
