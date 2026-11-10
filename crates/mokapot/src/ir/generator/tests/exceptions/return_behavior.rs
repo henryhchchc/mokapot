@@ -51,7 +51,7 @@ fn synchronized_return_has_only_exceptional_successors() {
 
     assert_eq!(exceptional.len(), 2);
     assert!(
-        matches!(exceptional[0].transfer(), Some(ControlTransfer::Exception(Some(it))) if it == &illegal)
+        matches!(exceptional[0].transfer(), Some(ControlTransfer::Exception(Some(it))) if *it == &illegal)
     );
     assert_eq!(exceptional[1].transfer(), None);
     assert!(

@@ -1,4 +1,8 @@
-use std::{fmt, ops::RangeBounds, slice};
+use std::{
+    fmt,
+    ops::{Range, RangeBounds},
+    slice,
+};
 
 use super::{Instruction, InstructionData, InstructionStorage, ProgramCounter};
 use crate::jvm::ConstantPool;
@@ -24,6 +28,13 @@ impl<'class> InstructionList<'class> {
         InstructionIter {
             pool: self.pool,
             inner: self.data.as_slice().iter(),
+        }
+    }
+
+    pub(crate) fn index_range(self, range: Range<usize>) -> InstructionIter<'class> {
+        InstructionIter {
+            pool: self.pool,
+            inner: self.data.as_slice()[range].iter(),
         }
     }
 

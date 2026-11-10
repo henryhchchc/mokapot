@@ -10,44 +10,15 @@ use crate::{
 };
 
 /// Builds `method` into [`MokaIRMethod`].
-pub(crate) fn build(method: &TestMethod) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(crate) fn build(method: &TestMethod) -> Result<MokaIRMethod<'_>, MokaIRBuildError> {
     MokaIRMethod::from_method(method.as_method())
 }
 
-/// Lifts `instructions` into IR, panicking on a build failure.
-pub(crate) fn lift<I, PC>(
-    instructions: I,
-    descriptor: &str,
-    exception_table: Vec<TestExceptionHandler>,
-) -> MokaIRMethod
-where
-    I: IntoIterator<Item = (PC, InstructionData)>,
-    PC: Into<ProgramCounter>,
-{
-    build(&method(instructions, descriptor, exception_table)).unwrap()
-}
-
-pub(crate) fn lift_with_pool<I, PC>(
-    constant_pool: ConstantPool,
-    instructions: I,
-    descriptor: &str,
-    exception_table: Vec<TestExceptionHandler>,
-) -> MokaIRMethod
-where
-    I: IntoIterator<Item = (PC, InstructionData)>,
-    PC: Into<ProgramCounter>,
-{
-    build(&method_with_pool(
-        constant_pool,
-        instructions,
-        descriptor,
-        exception_table,
-    ))
-    .unwrap()
-}
-
 /// The terminator whose source instruction is `pc`.
-pub(crate) fn terminator_at(ir: &MokaIRMethod, pc: ProgramCounter) -> &Terminator {
+pub(crate) fn terminator_at<'ir, 'class>(
+    ir: &'ir MokaIRMethod<'class>,
+    pc: ProgramCounter,
+) -> &'ir Terminator<'class> {
     ir.source_map
         .instructions_at(pc)
         .find_map(|it| match ir.instruction(it) {

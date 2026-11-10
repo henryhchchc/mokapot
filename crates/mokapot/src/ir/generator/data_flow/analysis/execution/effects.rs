@@ -1,13 +1,11 @@
 //! Dataflow effects of a structural block's final instruction.
 
-use std::collections::BTreeMap;
-
 use ValueCategory::{Category1, Category2};
 
 use super::Frame;
 use crate::{
     ir::{
-        BlockId, BranchGuard, ControlTransfer, ValueId,
+        BranchGuard, ControlTransfer, ValueId,
         expression::{BooleanVariable, PathValue, Predicate},
         generator::data_flow::FrameError,
     },
@@ -20,7 +18,7 @@ use crate::{
 pub(super) fn branch_transfers(
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<(ControlTransfer, ControlTransfer), FrameError> {
+) -> Result<(ControlTransfer<'static>, ControlTransfer<'static>), FrameError> {
     let condition: BooleanVariable<Predicate> = pop_condition(frame, instruction)?.into();
     Ok((
         ControlTransfer::Conditional(BranchGuard::from_literal(condition.clone())),
@@ -34,17 +32,19 @@ pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, FrameError> 
 }
 
 /// The transfer selected when `selector` matches `case`.
-pub(super) fn case_guard(selector: ValueId, case: i32) -> ControlTransfer {
+pub(super) fn case_guard(selector: ValueId, case: i32) -> ControlTransfer<'static> {
     ControlTransfer::Conditional(BranchGuard::from_literal(BooleanVariable::Positive(equal(
         selector, case,
     ))))
 }
 
 /// The transfer covering every value `selector` can hold when no case matches.
-pub(super) fn default_guard(selector: ValueId, cases: &BTreeMap<i32, BlockId>) -> ControlTransfer {
+pub(super) fn default_guard(
+    selector: ValueId,
+    cases: impl Iterator<Item = i32>,
+) -> ControlTransfer<'static> {
     let branches = cases
-        .keys()
-        .map(|&case| BooleanVariable::Negative(equal(selector, case)))
+        .map(|case| BooleanVariable::Negative(equal(selector, case)))
         .collect();
     ControlTransfer::Conditional(branches)
 }
@@ -83,7 +83,10 @@ pub(super) fn throw_operand(
     }
 }
 
-fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predicate, FrameError> {
+pub(super) fn pop_condition(
+    frame: &mut Frame,
+    instruction: &Instruction,
+) -> Result<Predicate, FrameError> {
     let unary = |frame: &mut Frame| frame.stack.pop(Category1).map(Into::into);
     let binary = |frame: &mut Frame| {
         let rhs = frame.stack.pop(Category1)?.into();

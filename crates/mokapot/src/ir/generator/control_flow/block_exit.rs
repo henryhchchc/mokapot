@@ -2,21 +2,21 @@
 
 use crate::types::class_name::ClassName;
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use super::fallibility::fallthrough_may_throw;
 use crate::{
     ir::generator::error::ErrorKind,
-    jvm::code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
+    jvm::code::{Instruction, ProgramCounter, WideInstruction},
     types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
 /// The structural exit of one decoded instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BlockExit<T> {
+pub(crate) enum BlockExit<'class, T> {
     Continue {
         next: T,
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: Arc<[ExceptionArm<'class, T>]>,
     },
     Goto {
         target: T,
@@ -30,30 +30,30 @@ pub(crate) enum BlockExit<T> {
         default: T,
     },
     Return {
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: Arc<[ExceptionArm<'class, T>]>,
     },
     Throw {
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: Arc<[ExceptionArm<'class, T>]>,
     },
 }
 
-impl<T> BlockExit<T> {
+impl<T> BlockExit<'_, T> {
     /// Whether this exit forces the following instruction into a new block.
     ///
     /// A continuation without exception arms proceeds into the next instruction
     /// without its own terminator.
-    pub(crate) const fn forces_block_boundary(&self) -> bool {
+    pub(crate) fn forces_block_boundary(&self) -> bool {
         !matches!(self, Self::Continue { exception_arms, .. } if exception_arms.is_empty())
     }
 }
 
 /// One ordered exception arm of a throwing instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExceptionArm<T> {
+pub(crate) struct ExceptionArm<'class, T> {
     /// Where the exception transfers.
     pub target: ExceptionTarget<T>,
     /// The caught type, or `None` for catch-all.
-    pub catch_type: Option<ClassName>,
+    pub catch_type: Option<&'class ClassName>,
 }
 
 /// An exception successor destination.
@@ -84,22 +84,19 @@ pub(crate) enum ArmKey {
     Exception(usize),
 }
 
-impl BlockExit<ProgramCounter> {
-    /// Classifies the control transfer of `instruction` at `pc` within `body`.
+impl<'class> BlockExit<'class, ProgramCounter> {
+    /// Classifies and validates instruction-local structure.
     pub(super) fn of(
-        body: MethodBody<'_>,
-        pc: ProgramCounter,
-        instruction: &Instruction,
+        instruction: &Instruction<'_>,
+        next: Option<ProgramCounter>,
+        empty: &Arc<[ExceptionArm<'class, ProgramCounter>]>,
+        unwind: &Arc<[ExceptionArm<'class, ProgramCounter>]>,
     ) -> Result<Self, ErrorKind> {
         use Instruction::{
             AReturn, AThrow, DReturn, FReturn, Goto, GotoW, IReturn, IfACmpEq, IfACmpNe, IfEq,
             IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
-            IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
-        };
-        let next = || {
-            body.instructions()
-                .next_pc_of(&pc)
-                .ok_or(ErrorKind::MissingFallthrough)
+            IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, LookupSwitch, Ret, Return, TableSwitch,
+            Wide,
         };
         if let Instruction::MultiANewArray(array_type, dimensions) = instruction
             && !valid_multi_array_dimensions(array_type, *dimensions)
@@ -107,11 +104,14 @@ impl BlockExit<ProgramCounter> {
             return Err(ErrorKind::InvalidMultiArrayDimensions);
         }
         Ok(match instruction {
+            Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
+                return Err(ErrorKind::UnsupportedLegacySubroutine);
+            }
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {
-                exception_arms: exception_arms(body, pc),
+                exception_arms: Arc::clone(unwind),
             },
             AThrow => Self::Throw {
-                exception_arms: exception_arms(body, pc),
+                exception_arms: Arc::clone(unwind),
             },
             Goto(target) | GotoW(target) => Self::Goto { target: *target },
             IfEq(target) | IfNe(target) | IfLt(target) | IfGe(target) | IfGt(target)
@@ -119,25 +119,21 @@ impl BlockExit<ProgramCounter> {
             | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
             | IfACmpNe(target) | IfNull(target) | IfNonNull(target) => Self::Branch {
                 taken: *target,
-                otherwise: next()?,
+                otherwise: next.ok_or(ErrorKind::MissingFallthrough)?,
             },
-            Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
-                return Err(ErrorKind::UnsupportedLegacySubroutine);
-            }
-            Instruction::TableSwitch {
+            TableSwitch {
                 low,
-                jump_targets: targets,
+                jump_targets,
                 default,
             } => {
-                let high = Instruction::tableswitch_high(*low, targets.len())
+                let high = Instruction::tableswitch_high(*low, jump_targets.len())
                     .ok_or(ErrorKind::InvalidTableSwitchRange)?;
-                let cases = (*low..=high).zip(targets.iter().copied()).collect();
                 Self::Switch {
-                    cases,
+                    cases: (*low..=high).zip(jump_targets.iter().copied()).collect(),
                     default: *default,
                 }
             }
-            Instruction::LookupSwitch {
+            LookupSwitch {
                 match_targets,
                 default,
             } => Self::Switch {
@@ -145,14 +141,25 @@ impl BlockExit<ProgramCounter> {
                 default: *default,
             },
             _ => Self::Continue {
-                next: next()?,
-                exception_arms: if fallthrough_may_throw(instruction) {
-                    exception_arms(body, pc)
+                next: next.ok_or(ErrorKind::MissingFallthrough)?,
+                exception_arms: Arc::clone(if fallthrough_may_throw(instruction) {
+                    unwind
                 } else {
-                    Vec::new()
-                },
+                    empty
+                }),
             },
         })
+    }
+
+    pub(super) fn collect_targets(&self, leaders: &mut Vec<ProgramCounter>) {
+        match self {
+            Self::Goto { target } | Self::Branch { taken: target, .. } => leaders.push(*target),
+            Self::Switch { cases, default } => {
+                leaders.extend(cases.values());
+                leaders.push(*default);
+            }
+            Self::Continue { .. } | Self::Return { .. } | Self::Throw { .. } => {}
+        }
     }
 }
 
@@ -173,32 +180,46 @@ fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> b
     true
 }
 
-/// The ordered exception arms of the instruction at `pc`.
-///
-/// Selection walks the table in order, so the first catch-all shadows later
-/// entries and an escaping exception unwinds.
-fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
-    let mut exception_arms = Vec::new();
-    for entry in body.exception_table().filter(|entry| entry.covers(pc)) {
-        exception_arms.push(ExceptionArm {
-            target: ExceptionTarget::Handler(entry.handler_pc()),
-            catch_type: entry.catch_type().cloned(),
-        });
-        if entry.catches_all() {
-            return exception_arms;
-        }
-    }
-    exception_arms.push(ExceptionArm {
-        target: ExceptionTarget::Unwind,
-        catch_type: None,
-    });
-    exception_arms
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ir::test::prelude::*;
+
+    fn classify(
+        instruction: &Instruction<'_>,
+        next: Option<ProgramCounter>,
+    ) -> Result<BlockExit<'static, ProgramCounter>, ErrorKind> {
+        BlockExit::of(
+            instruction,
+            next,
+            &Arc::from([]),
+            &Arc::from([ExceptionArm {
+                target: ExceptionTarget::Unwind,
+                catch_type: None,
+            }]),
+        )
+    }
+
+    #[test]
+    fn switch_encodings_normalize_to_the_same_cases_and_default() {
+        let targets = [10.into(), 20.into()];
+        let pairs = [(3, targets[0]), (4, targets[1])];
+        let table = Instruction::TableSwitch {
+            low: 3,
+            jump_targets: &targets,
+            default: 30.into(),
+        };
+        let lookup = Instruction::LookupSwitch {
+            match_targets: &pairs,
+            default: 30.into(),
+        };
+        let expected = BlockExit::Switch {
+            cases: BTreeMap::from(pairs),
+            default: 30.into(),
+        };
+        assert_eq!(classify(&table, None).unwrap(), expected);
+        assert_eq!(classify(&lookup, None).unwrap(), expected);
+    }
 
     #[test]
     fn rejects_invalid_tableswitch_ranges() {
@@ -213,7 +234,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
+                classify(&instruction, body.instructions().next_pc_of(&0.into())).map(|_| ()),
                 Err(ErrorKind::InvalidTableSwitchRange)
             );
         }
@@ -232,7 +253,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
+                classify(&instruction, body.instructions().next_pc_of(&0.into())).map(|_| ()),
                 Err(ErrorKind::InvalidMultiArrayDimensions)
             );
         }
@@ -251,7 +272,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let view = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &view),
+                classify(&view, body.instructions().next_pc_of(&0.into())).map(|_| ()),
                 Err(ErrorKind::UnsupportedLegacySubroutine)
             );
         }
@@ -259,10 +280,8 @@ mod tests {
 
     #[test]
     fn rejects_missing_fallthrough() {
-        let method = method([(4, InstructionData::Nop)], "()V", vec![]);
-        let body = method.as_method().body().unwrap();
         assert_eq!(
-            BlockExit::of(body, 4.into(), &Instruction::Nop),
+            classify(&Instruction::Nop, None).map(|_| ()),
             Err(ErrorKind::MissingFallthrough)
         );
     }

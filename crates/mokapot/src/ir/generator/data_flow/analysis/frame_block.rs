@@ -15,16 +15,16 @@ pub(crate) enum FrameSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct FrameBlock {
+pub(crate) struct FrameBlock<'class> {
     pub kind: BlockKind,
-    pub operations: Vec<(ProgramCounter, Operation)>,
-    pub terminator: FrameTerminator,
+    pub operations: Vec<(ProgramCounter, Operation<'class>)>,
+    pub terminator: FrameTerminator<'class>,
     pub terminator_source: Option<ProgramCounter>,
 }
 
 /// One analyzed outgoing arm of a frame-carrying terminator.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum FrameArm {
+pub(crate) enum FrameArm<'class> {
     /// A continuation into `target`, carrying the frame delivered there.
     Block {
         /// The arm's structural identity within its source.
@@ -32,7 +32,7 @@ pub(crate) enum FrameArm {
         /// The destination block.
         target: BlockId,
         /// The state transfer associated with this arm.
-        transfer: ControlTransfer,
+        transfer: ControlTransfer<'class>,
         /// The frame delivered to the destination.
         frame: Frame,
     },
@@ -43,12 +43,12 @@ pub(crate) enum FrameArm {
     },
 }
 
-impl FrameArm {
+impl<'class> FrameArm<'class> {
     /// Builds a continuation into `target` carrying `frame`.
     pub(super) const fn block(
         arm: ArmKey,
         target: BlockId,
-        transfer: ControlTransfer,
+        transfer: ControlTransfer<'class>,
         frame: Frame,
     ) -> Self {
         Self::Block {
@@ -60,9 +60,9 @@ impl FrameArm {
     }
 }
 
-pub(super) type FrameTerminator = Terminator<FrameArm>;
+pub(super) type FrameTerminator<'class> = Terminator<'class, FrameArm<'class>>;
 
-impl FrameBlock {
+impl FrameBlock<'_> {
     /// The frames this block sends to its successors.
     pub(crate) fn outgoing_frames(
         &self,

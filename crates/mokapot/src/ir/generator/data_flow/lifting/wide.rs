@@ -7,7 +7,7 @@ impl LiftContext<'_, '_> {
     pub fn lift_wide(
         &mut self,
         instruction: WideInstruction,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'static>>, FrameError> {
         #[allow(clippy::enum_glob_use, reason = "exhaustive dispatch")]
         use WideInstruction::*;
         match instruction {

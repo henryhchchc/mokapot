@@ -39,6 +39,22 @@ pub(super) struct Frame {
     pub stack: OperandStack,
 }
 
+/// The pre-instruction locals used to enter exception handlers.
+#[derive(Debug, Clone)]
+pub(super) struct ExceptionSnapshot {
+    locals: LocalVariables,
+    max_stack: u16,
+}
+
+impl ExceptionSnapshot {
+    pub(super) fn handler_frame(&self, caught: ValueId) -> Result<Frame, FrameError> {
+        Ok(Frame {
+            locals: self.locals.clone(),
+            stack: OperandStack::for_handler(self.max_stack, caught)?,
+        })
+    }
+}
+
 impl Frame {
     pub(super) fn value_at(&self, position: Position) -> Option<&ValueId> {
         match position {
@@ -87,11 +103,10 @@ impl Frame {
         Ok(Self { locals, stack })
     }
 
-    pub(super) fn exception_handler_frame(&self, caught: ValueId) -> Result<Self, FrameError> {
-        let locals = self.locals.clone();
-        let stack = OperandStack::with_max_slots(self.stack.max_slots());
-        let mut frame = Self { locals, stack };
-        frame.stack.push(caught, ValueCategory::Category1)?;
-        Ok(frame)
+    pub(super) fn exception_snapshot(&self) -> ExceptionSnapshot {
+        ExceptionSnapshot {
+            locals: self.locals.clone(),
+            max_stack: self.stack.max_slots(),
+        }
     }
 }

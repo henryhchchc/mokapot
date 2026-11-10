@@ -2,7 +2,10 @@
 
 use crate::types::class_name::ClassName;
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::LazyLock,
+};
 
 pub(crate) use crate::jvm::ConstantPool;
 pub(crate) use crate::jvm::code::InstructionData;
@@ -137,12 +140,12 @@ pub(crate) fn method_ref(name: &str, descriptor: &str) -> MethodReference {
 /// A call with the given dispatch kind, symbolic method, and arguments.
 pub(crate) fn call(
     kind: InvocationKind,
-    method: MethodReference,
+    method: &MethodReference,
     args: impl IntoIterator<Item = ValueId>,
-) -> Expression {
+) -> Expression<'_> {
     Expression::Call {
         kind,
-        method,
+        method: method.as_borrowed(),
         args: args.into_iter().collect(),
     }
 }
@@ -159,12 +162,18 @@ pub(crate) fn method_entry(
 }
 
 /// A `MokaIRMethod` over `blocks` entering at `entry`.
-pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) -> MokaIRMethod {
+pub(crate) fn ir_method(
+    entry: BlockId,
+    blocks: HashMap<BlockId, BasicBlock<'_>>,
+) -> MokaIRMethod<'_> {
+    static METHOD: LazyLock<TestMethod> =
+        LazyLock::new(|| method([(0, InstructionData::Return)], "()V", Vec::new()));
+    let metadata = METHOD.as_method();
     MokaIRMethod {
-        access_flags: AccessFlags::PUBLIC | AccessFlags::STATIC,
-        name: "test".to_owned().into(),
-        descriptor: "()V".parse().expect("a valid descriptor"),
-        owner: cls_name("java/lang/Object"),
+        access_flags: metadata.access_flags(),
+        name: metadata.name(),
+        descriptor: metadata.descriptor(),
+        owner: metadata.owner().name(),
         entry: method_entry(entry, []),
         blocks,
         source_map: SourceMap::new(),
@@ -174,12 +183,12 @@ pub(crate) fn ir_method(entry: BlockId, blocks: HashMap<BlockId, BasicBlock>) ->
 }
 
 /// A `Code` block keyed by `id`, with `params` and `ops`.
-pub(crate) fn bb(
+pub(crate) fn bb<'class>(
     id: BlockId,
     params: impl IntoIterator<Item = ValueId>,
-    ops: &[Operation],
-    term: Terminator,
-) -> (BlockId, BasicBlock) {
+    ops: &[Operation<'class>],
+    term: Terminator<'class>,
+) -> (BlockId, BasicBlock<'class>) {
     let block = BasicBlock {
         kind: BlockKind::Code,
         parameters: params
@@ -193,7 +202,7 @@ pub(crate) fn bb(
 }
 
 /// A `Block` arm to `target` carrying `args` under `transfer`.
-pub(crate) fn arm<I>(target: BlockId, args: I, transfer: ControlTransfer) -> Successor
+pub(crate) fn arm<I>(target: BlockId, args: I, transfer: ControlTransfer<'_>) -> Successor<'_>
 where
     I: IntoIterator<Item = ValueId>,
 {
@@ -205,17 +214,23 @@ where
 }
 
 /// A parameterless, operationless `Code` block keyed by `id`.
-pub(crate) fn code(id: BlockId, term: Terminator) -> (BlockId, BasicBlock) {
+pub(crate) fn code(id: BlockId, term: Terminator<'_>) -> (BlockId, BasicBlock<'_>) {
     bb(id, [], &[], term)
 }
 
 /// An unconditional `Block` arm to `target`.
-pub(crate) fn edge(target: BlockId, args: impl IntoIterator<Item = ValueId>) -> Successor {
+pub(crate) fn edge<'class>(
+    target: BlockId,
+    args: impl IntoIterator<Item = ValueId>,
+) -> Successor<'class> {
     arm(target, args, ControlTransfer::Unconditional)
 }
 
 /// A `goto` to `target`.
-pub(crate) fn goto(target: BlockId, args: impl IntoIterator<Item = ValueId>) -> Terminator {
+pub(crate) fn goto<'class>(
+    target: BlockId,
+    args: impl IntoIterator<Item = ValueId>,
+) -> Terminator<'class> {
     goto_with(target, args, ControlTransfer::Unconditional)
 }
 
@@ -223,20 +238,27 @@ pub(crate) fn goto(target: BlockId, args: impl IntoIterator<Item = ValueId>) -> 
 pub(crate) fn goto_with(
     target: BlockId,
     args: impl IntoIterator<Item = ValueId>,
-    transfer: ControlTransfer,
-) -> Terminator {
+    transfer: ControlTransfer<'_>,
+) -> Terminator<'_> {
     Terminator::Goto {
         target: arm(target, args, transfer),
     }
 }
 
 /// A two-way `branch` selecting between `taken` and `otherwise`.
-pub(crate) fn branch(taken: Successor, otherwise: Successor) -> Terminator {
+pub(crate) fn branch<'class>(
+    taken: Successor<'class>,
+    otherwise: Successor<'class>,
+) -> Terminator<'class> {
     Terminator::Branch { taken, otherwise }
 }
 
 /// A `try` of `op` with `normal` and `exceptional` outcomes.
-pub(crate) fn try_op(op: Operation, normal: Successor, exceptional: Vec<Successor>) -> Terminator {
+pub(crate) fn try_op<'class>(
+    op: Operation<'class>,
+    normal: Successor<'class>,
+    exceptional: Vec<Successor<'class>>,
+) -> Terminator<'class> {
     Terminator::Try {
         operation: op,
         normal,
@@ -245,7 +267,7 @@ pub(crate) fn try_op(op: Operation, normal: Successor, exceptional: Vec<Successo
 }
 
 /// A `return` of `value`, which may unwind.
-pub(crate) fn ret(value: ValueId) -> Terminator {
+pub(crate) fn ret<'class>(value: ValueId) -> Terminator<'class> {
     Terminator::Return {
         value: Some(value),
         exceptional: vec![Successor::Unwind],
@@ -253,7 +275,7 @@ pub(crate) fn ret(value: ValueId) -> Terminator {
 }
 
 /// A `void` return, which may unwind.
-pub(crate) fn void() -> Terminator {
+pub(crate) fn void<'class>() -> Terminator<'class> {
     Terminator::Return {
         value: None,
         exceptional: vec![Successor::Unwind],
@@ -261,12 +283,15 @@ pub(crate) fn void() -> Terminator {
 }
 
 /// An operation evaluated only for its effects.
-pub(crate) fn effect(expr: impl Into<Expression>) -> Operation {
+pub(crate) fn effect<'class>(expr: impl Into<Expression<'class>>) -> Operation<'class> {
     Operation::Effect { expr: expr.into() }
 }
 
 /// An operation defining `value` from `expr`.
-pub(crate) fn def(value: ValueId, expr: impl Into<Expression>) -> Operation {
+pub(crate) fn def<'class>(
+    value: ValueId,
+    expr: impl Into<Expression<'class>>,
+) -> Operation<'class> {
     Operation::Definition {
         value,
         expr: expr.into(),
@@ -274,7 +299,7 @@ pub(crate) fn def(value: ValueId, expr: impl Into<Expression>) -> Operation {
 }
 
 /// The JVM origin of `ir`'s entry terminator.
-pub(crate) fn entry_origin(ir: &MokaIRMethod) -> Option<ProgramCounter> {
+pub(crate) fn entry_origin(ir: &MokaIRMethod<'_>) -> Option<ProgramCounter> {
     ir.source_map.origin_of(InstructionLocation::Terminator {
         block: ir.entry.block,
     })

@@ -20,7 +20,7 @@ use crate::{
 pub(crate) struct DataflowSolver<'method, 'cfg> {
     interpreter: BlockInterpreter<'method, 'cfg>,
     values: ValueContext,
-    blocks: HashMap<BlockId, BlockState>,
+    blocks: HashMap<BlockId, BlockState<'method>>,
 }
 
 impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
@@ -36,7 +36,7 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
         })
     }
 
-    pub(crate) fn solve(mut self) -> Result<DataflowParts, Error> {
+    pub(crate) fn solve(mut self) -> Result<DataflowParts<'method>, Error> {
         let entry = self.interpreter.entry_block();
         let mut worklist = Worklist::default();
         worklist.schedule(entry);

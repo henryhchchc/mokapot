@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use super::ValueId;
 use crate::{
-    jvm::{ConstantValue, JavaString, references::MethodReference},
+    jvm::{ConstantVal, JavaStr, references::MethodRef},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -32,49 +32,49 @@ pub use predicate::{PathValue, Predicate};
 
 /// An expression over method-local SSA values.
 #[derive(Debug, Clone, PartialEq, Eq, From)]
-pub enum Expression {
+pub enum Expression<'class> {
     /// A constant value.
-    Const(ConstantValue),
+    Const(ConstantVal<'class>),
     /// A function call.
     Call {
         /// The invocation opcode's dispatch semantics and receiver.
         kind: InvocationKind,
         /// The unresolved symbolic method reference.
-        method: MethodReference,
+        method: MethodRef<'class>,
         /// The arguments.
         args: Vec<ValueId>,
     },
     /// A call to a bootstrap method to create a closure.
     Closure {
         /// The name of the closure.
-        name: JavaString,
+        name: &'class JavaStr,
         /// The values captured by the closure.
         captures: Vec<ValueId>,
         /// The index of the bootstrap method.
         bootstrap_method_index: u16,
         /// The descriptor of the closure generation.
-        closure_descriptor: MethodDescriptor,
+        closure_descriptor: &'class MethodDescriptor,
     },
     /// A mathematical operation.
     Math(#[from] MathOperation),
     /// A field access.
-    Field(#[from] FieldAccess),
+    Field(#[from] FieldAccess<'class>),
     /// An array operation.
     Array(#[from] ArrayOperation),
     /// A type conversion.
-    Conversion(#[from] Conversion),
+    Conversion(#[from] Conversion<'class>),
     /// An operation on a monitor.
     Synchronization(#[from] LockOperation),
     /// Creates a new object.
-    New(ClassName),
+    New(&'class ClassName),
 }
 
-impl fmt::Display for Expression {
+impl fmt::Display for Expression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Const(value) => value.fmt(f),
             Self::Call { kind, method, args } => {
-                write!(f, "call {kind} {} ", method.descriptor.return_type)?;
+                write!(f, "call {kind} {} ", method.descriptor().return_type)?;
                 match kind {
                     InvocationKind::Static => {}
                     InvocationKind::Virtual { this }
@@ -84,8 +84,8 @@ impl fmt::Display for Expression {
                 write!(
                     f,
                     "{}::{}({})",
-                    method.owner,
-                    method.name,
+                    method.owner(),
+                    method.name(),
                     args.iter().format(", ")
                 )
             }

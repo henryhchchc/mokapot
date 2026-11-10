@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::{FrameError, FrameValue};
 use crate::{
     intrinsics::see_jvm_spec,
@@ -38,26 +40,26 @@ impl LocalSlot {
 #[doc = see_jvm_spec!(2, 6, 1)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LocalVariables {
-    slots: Box<[LocalSlot]>,
+    slots: Rc<[LocalSlot]>,
 }
 
 impl LocalVariables {
-    fn invalidate_overlapping_category_2(&mut self, index: usize) {
+    fn invalidate_overlapping_category_2(slots: &mut [LocalSlot], index: usize) {
         if index > 0
-            && matches!(self.slots[index], LocalSlot::Reserved)
+            && matches!(slots[index], LocalSlot::Reserved)
             && matches!(
-                &self.slots[index - 1],
+                &slots[index - 1],
                 LocalSlot::Value(previous) if previous.category == ValueCategory::Category2
             )
         {
-            self.slots[index - 1] = LocalSlot::Unavailable;
+            slots[index - 1] = LocalSlot::Unavailable;
         }
         if matches!(
-            &self.slots[index],
+            &slots[index],
             LocalSlot::Value(previous) if previous.category == ValueCategory::Category2
-        ) && matches!(self.slots.get(index + 1), Some(LocalSlot::Reserved))
+        ) && matches!(slots.get(index + 1), Some(LocalSlot::Reserved))
         {
-            self.slots[index + 1] = LocalSlot::Unavailable;
+            slots[index + 1] = LocalSlot::Unavailable;
         }
     }
 
@@ -89,13 +91,14 @@ impl LocalVariables {
             return Err(FrameError::LocalIndexOutOfBounds);
         }
 
+        let slots = Rc::make_mut(&mut self.slots);
         for overwritten in index..end {
-            self.invalidate_overlapping_category_2(overwritten);
+            Self::invalidate_overlapping_category_2(slots, overwritten);
         }
 
-        self.slots[index] = LocalSlot::Value(FrameValue { value, category });
+        slots[index] = LocalSlot::Value(FrameValue { value, category });
         if category == ValueCategory::Category2 {
-            self.slots[index + 1] = LocalSlot::Reserved;
+            slots[index + 1] = LocalSlot::Reserved;
         }
         Ok(())
     }
@@ -109,7 +112,7 @@ impl LocalVariables {
     ) -> Result<Self, FrameError> {
         assert_eq!(parameters.len(), descriptor.parameters_types.len());
         let mut locals = Self {
-            slots: vec![LocalSlot::Unset; max_slots.into()].into_boxed_slice(),
+            slots: vec![LocalSlot::Unset; max_slots.into()].into(),
         };
         let params = descriptor
             .parameters_types
@@ -134,7 +137,11 @@ impl LocalVariables {
         other: &Self,
         mut merge_values: impl FnMut(usize, &mut ValueId, ValueId),
     ) {
-        for (index, (lhs, rhs)) in self.slots.iter_mut().zip(other.slots.iter()).enumerate() {
+        for (index, (lhs, rhs)) in Rc::make_mut(&mut self.slots)
+            .iter_mut()
+            .zip(other.slots.iter())
+            .enumerate()
+        {
             lhs.merge_from_with(rhs, |lhs, rhs| merge_values(index, lhs, rhs));
         }
     }
@@ -202,7 +209,7 @@ mod tests {
     /// A table of `slot_count` variables, none of them written.
     fn empty_locals(slot_count: usize) -> LocalVariables {
         LocalVariables {
-            slots: vec![LocalSlot::Unset; slot_count].into_boxed_slice(),
+            slots: vec![LocalSlot::Unset; slot_count].into(),
         }
     }
 

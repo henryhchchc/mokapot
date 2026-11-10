@@ -3,21 +3,15 @@
 use std::{env, hint::black_box, sync::LazyLock};
 
 use divan::{Bencher, counter::ItemsCount};
-use mokapot::jvm::{Class, Method};
+use mokapot::jvm::Method;
 
 #[path = "support/jdk_corpus.rs"]
 mod jdk_corpus;
 #[path = "support/jdk_methods.rs"]
 mod jdk_methods;
 
-static CLASSES: LazyLock<Vec<Class>> = LazyLock::new(jdk_methods::parse_classes);
 static METHODS: LazyLock<Vec<Method<'static>>> = LazyLock::new(|| {
-    let classes: &'static [Class] = CLASSES.as_slice();
-    let methods: Vec<_> = classes
-        .iter()
-        .flat_map(Class::methods)
-        .filter(|method| method.body().is_some())
-        .collect();
+    let methods: Vec<_> = jdk_methods::methods().collect();
     assert!(
         !methods.is_empty(),
         "JDK shard contains no methods with bodies"

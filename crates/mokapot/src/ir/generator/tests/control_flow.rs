@@ -16,7 +16,8 @@ fn branch_preserves_taken_then_fallthrough_guards() {
         (2, InstructionData::Return),
         (5, InstructionData::Return),
     ];
-    let ir = lift(body, "(I)V", vec![]);
+    let fixture = method(body, "(I)V", vec![]);
+    let ir = build(&fixture).unwrap();
     let branch = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_matches!(branch, Terminator::Branch { .. });
@@ -40,7 +41,8 @@ fn comparison_branch_preserves_operand_order() {
         (5, InstructionData::Return),
         (6, InstructionData::Return),
     ];
-    let ir = lift(body, "(II)V", vec![]);
+    let fixture = method(body, "(II)V", vec![]);
+    let ir = build(&fixture).unwrap();
     let branch = &ir.block(ir.entry.block).unwrap().terminator;
 
     let (lhs, rhs) = (
@@ -71,7 +73,8 @@ fn switches_preserve_ordered_parallel_arms_and_case_guards() {
             (1, instruction),
             (10, InstructionData::Return),
         ];
-        let ir = lift(body, "(I)V", vec![]);
+        let fixture = method(body, "(I)V", vec![]);
+        let ir = build(&fixture).unwrap();
         let switch = &ir.block(ir.entry.block).unwrap().terminator;
         let match_value = PathValue::Variable(ir.parameters[0]);
         let case_guard = |it| {
@@ -106,7 +109,8 @@ fn empty_switch_transfers_only_to_the_default_without_using_match_value() {
         (1, instruction),
         (10, InstructionData::Return),
     ];
-    let ir = lift(body, "(I)V", vec![]);
+    let fixture = method(body, "(I)V", vec![]);
+    let ir = build(&fixture).unwrap();
     let terminator = &ir.block(ir.entry.block).unwrap().terminator;
 
     let successors = terminator.successors().collect::<Vec<_>>();
@@ -145,7 +149,8 @@ fn fallible_exit_keeps_normal_then_ordered_handler_arms() {
         (20, InstructionData::AStore0),
         (21, InstructionData::Return),
     ];
-    let ir = lift_with_pool(pool, body, "()V", table);
+    let fixture = method_with_pool(pool, body, "()V", table);
+    let ir = build(&fixture).unwrap();
     let fallible = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_matches!(fallible, Terminator::Try { .. });

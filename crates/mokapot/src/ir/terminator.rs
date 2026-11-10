@@ -19,7 +19,7 @@ use crate::{
 
 /// One outgoing arm of a terminator.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Successor {
+pub enum Successor<'class> {
     /// Continues execution in a basic block.
     Block {
         /// The destination block.
@@ -27,13 +27,13 @@ pub enum Successor {
         /// Values supplied to the target block's parameters.
         arguments: Vec<ValueId>,
         /// The state transfer associated with this arm.
-        transfer: ControlTransfer,
+        transfer: ControlTransfer<'class>,
     },
     /// Propagates an exception out of the method.
     Unwind,
 }
 
-impl Successor {
+impl<'class> Successor<'class> {
     /// Returns the target block, or `None` when this arm exits by unwinding.
     #[must_use]
     pub const fn block_target(&self) -> Option<BlockId> {
@@ -54,7 +54,7 @@ impl Successor {
     ///
     /// Unwind arms have no block transfer.
     #[must_use]
-    pub const fn transfer(&self) -> Option<&ControlTransfer> {
+    pub const fn transfer(&self) -> Option<&ControlTransfer<'class>> {
         match self {
             Self::Block { transfer, .. } => Some(transfer),
             Self::Unwind => None,
@@ -66,7 +66,7 @@ impl Successor {
 ///
 /// The outgoing arm type is a parameter defaulting to [`Successor`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Terminator<Arm = Successor> {
+pub enum Terminator<'class, Arm = Successor<'class>> {
     /// Transfers control to one successor.
     Goto {
         /// The sole continuation.
@@ -93,7 +93,7 @@ pub enum Terminator<Arm = Successor> {
     /// Selects the normal or an exceptional outcome of a fallible operation.
     Try {
         /// The operation attempted by this terminator.
-        operation: Operation,
+        operation: Operation<'class>,
         /// The continuation taken after successful completion.
         normal: Arm,
         /// Ordered exceptional outcomes.
@@ -115,12 +115,12 @@ pub enum Terminator<Arm = Successor> {
     },
 }
 
-impl<Arm> Terminator<Arm> {
+impl<'class, Arm> Terminator<'class, Arm> {
     /// Maps every outgoing arm while preserving the terminator's structure.
     pub(super) fn map_arms<MappedArm>(
         self,
         mut map: impl FnMut(Arm) -> MappedArm,
-    ) -> Terminator<MappedArm> {
+    ) -> Terminator<'class, MappedArm> {
         let Ok(term) = self.try_map_arms(|arm| Ok::<_, !>(map(arm)));
         term
     }
@@ -130,7 +130,7 @@ impl<Arm> Terminator<Arm> {
     pub(super) fn try_map_arms<MappedArm, E>(
         self,
         mut map: impl FnMut(Arm) -> Result<MappedArm, E>,
-    ) -> Result<Terminator<MappedArm>, E> {
+    ) -> Result<Terminator<'class, MappedArm>, E> {
         Ok(match self {
             Self::Goto { target } => Terminator::Goto {
                 target: map(target)?,
@@ -213,15 +213,15 @@ impl<Arm> Terminator<Arm> {
     }
 }
 
-impl Terminator<Successor> {
+impl<'class> Terminator<'class, Successor<'class>> {
     /// Iterates over outgoing arms in semantic order.
-    pub fn successors(&self) -> impl Iterator<Item = &Successor> {
+    pub fn successors(&self) -> impl Iterator<Item = &Successor<'class>> {
         self.arms()
     }
 
     /// Returns the operation attempted by this terminator, if any.
     #[must_use]
-    pub const fn operation(&self) -> Option<&Operation> {
+    pub const fn operation(&self) -> Option<&Operation<'class>> {
         match self {
             Self::Try { operation, .. } => Some(operation),
             _ => None,
@@ -229,7 +229,7 @@ impl Terminator<Successor> {
     }
 }
 
-impl<Arm> fmt::Display for Terminator<Arm> {
+impl<Arm> fmt::Display for Terminator<'_, Arm> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Goto { .. } => f.write_str("goto"),
@@ -250,7 +250,7 @@ impl<Arm> fmt::Display for Terminator<Arm> {
 /// An exceptional arm always begins a new block, so an operation that can raise
 /// never coalesces with the block its unguarded arm continues into.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ControlTransfer {
+pub enum ControlTransfer<'class> {
     /// An unguarded transfer that always reaches its target.
     Unconditional,
     /// A conditional transfer guarded by a conjunction of literals.
@@ -259,7 +259,7 @@ pub enum ControlTransfer {
     ///
     /// `None` denotes a catch-all exception-table entry. Arm order retains
     /// JVM exception-handler precedence.
-    Exception(Option<ClassName>),
+    Exception(Option<&'class ClassName>),
 }
 
 /// A conjunction of literals carried by a conditional CFG edge.

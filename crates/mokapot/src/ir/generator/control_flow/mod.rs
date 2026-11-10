@@ -8,7 +8,7 @@ mod builder;
 mod fallibility;
 mod layout;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Range};
 
 pub(super) use block_exit::{ArmKey, BlockExit, ExceptionArm, ExceptionTarget};
 
@@ -32,7 +32,7 @@ pub(crate) struct Cfg<'method> {
     method: Method<'method>,
     body: MethodBody<'method>,
     entry: BlockId,
-    blocks: HashMap<BlockId, CfgNode>,
+    blocks: HashMap<BlockId, CfgNode<'method>>,
 }
 
 impl<'method> Cfg<'method> {
@@ -51,27 +51,34 @@ impl<'method> Cfg<'method> {
     /// # Panics
     ///
     /// Panics unless `id` was allocated by this graph.
-    pub fn block(&self, id: BlockId) -> &CfgNode {
+    pub fn block(&self, id: BlockId) -> &CfgNode<'method> {
         self.blocks
             .get(&id)
             .expect("a CFG block identity belongs to its graph")
     }
 
-    pub fn instructions_in(
+    pub fn instructions_for(
         &self,
-        start: ProgramCounter,
-        end: ProgramCounter,
+        block: BlockId,
     ) -> impl DoubleEndedIterator<Item = (ProgramCounter, Instruction<'method>)> {
-        self.body().instructions().range(start..=end)
+        let CfgNode::Code {
+            instruction_range, ..
+        } = self.block(block)
+        else {
+            panic!("a landing pad has no bytecode instructions");
+        };
+        self.body
+            .instructions()
+            .index_range(instruction_range.clone())
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum CfgNode {
+pub(crate) enum CfgNode<'class> {
     Code {
         start_pc: ProgramCounter,
-        end_pc: ProgramCounter,
-        exit: BlockExit<BlockId>,
+        instruction_range: Range<usize>,
+        exit: BlockExit<'class, BlockId>,
     },
     LandingPad {
         successor: BlockId,

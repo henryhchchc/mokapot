@@ -7,21 +7,21 @@ use crate::{
         ControlTransfer, Operation, ValueId,
         expression::{BooleanVariable, Expression, PathValue},
     },
-    jvm::ConstantValue,
+    jvm::{ConstantVal, ConstantValue},
 };
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
-pub(super) struct PathConditionProblem<'method> {
-    method: &'method MokaIRMethod,
-    constants: HashMap<ValueId, &'method ConstantValue>,
+pub(super) struct PathConditionProblem<'method, 'class> {
+    method: &'method MokaIRMethod<'class>,
+    constants: HashMap<ValueId, &'method ConstantVal<'class>>,
     budget: SolvingBudget,
 }
 
-impl<'method> PathConditionProblem<'method> {
+impl<'method, 'class> PathConditionProblem<'method, 'class> {
     /// Creates a path-condition analysis over the given method.
     #[must_use]
-    pub(super) fn new(method: &'method MokaIRMethod, budget: SolvingBudget) -> Self {
+    pub(super) fn new(method: &'method MokaIRMethod<'class>, budget: SolvingBudget) -> Self {
         let constants = method
             .blocks
             .values()
@@ -69,7 +69,7 @@ impl<'method> PathConditionProblem<'method> {
         let value = |value: &PathValue| match value {
             PathValue::Variable(id) => self.constants.get(id).map_or_else(
                 || value.clone(),
-                |constant| PathValue::Constant((*constant).clone()),
+                |constant| PathValue::Constant(constant.into_owned()),
             ),
             PathValue::Constant(_) => value.clone(),
         };
@@ -129,7 +129,7 @@ fn evaluate_atom(predicate: &Predicate) -> Option<bool> {
     }
 }
 
-impl DataflowProblem for PathConditionProblem<'_> {
+impl DataflowProblem for PathConditionProblem<'_, '_> {
     type Location = BlockId;
 
     type Fact = PathConditionFact;
