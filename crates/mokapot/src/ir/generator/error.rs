@@ -51,7 +51,7 @@ pub enum ErrorKind {
 
 /// An error that occurs when generating Moka IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[error("{kind}{}", pc.map(|pc| format!(" at {pc}")).unwrap_or_default())]
+#[error("{kind}{}", pc.map_or_default(|pc| format!(" at {pc}")))]
 pub struct Error {
     /// The relevant bytecode location, such as an instruction, branch target,
     /// or block entry. `None` covers method initialization and synthetic blocks
