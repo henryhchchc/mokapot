@@ -6,68 +6,83 @@ use crate::{
     types::field_type::{FieldType, ValueCategory},
 };
 
-impl LiftContext<'_, '_> {
-    pub fn array_read(&mut self, category: ValueCategory) -> Result<Option<Operation>, FrameError> {
+impl<'class> LiftContext<'_, '_> {
+    pub fn array_read(
+        &mut self,
+        category: ValueCategory,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, category)?;
-        let expr = ArrayOperation::Read { array_ref, index }.into();
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: ArrayOperation::Read { array_ref, index }.into(),
+        }))
     }
 
     pub fn array_write(
         &mut self,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.frame.stack.pop(category)?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
-        let expr = ArrayOperation::Write {
-            array_ref,
-            index,
-            value,
-        }
-        .into();
-        Ok(Some(Operation::Effect { expr }))
+        Ok(Some(Operation::Effect {
+            expr: ArrayOperation::Write {
+                array_ref,
+                index,
+                value,
+            }
+            .into(),
+        }))
     }
 
-    pub fn new_array(&mut self, element_type: FieldType) -> Result<Option<Operation>, FrameError> {
+    pub fn new_array(
+        &mut self,
+        element_type: FieldType,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let length = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
-        let expr = ArrayOperation::New {
-            element_type,
-            length,
-        }
-        .into();
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: ArrayOperation::New {
+                element_type,
+                length,
+            }
+            .into(),
+        }))
     }
 
     pub fn new_multi_array(
         &mut self,
         element_type: FieldType,
         dimension: u8,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
-        let mut dimensions: Vec<_> = (0..dimension)
+        let mut dimensions = (0..dimension)
             .map(|_| self.frame.stack.pop(Category1))
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         dimensions.reverse();
         self.frame.stack.push(value, Category1)?;
-        let expr = ArrayOperation::NewMultiDim {
-            element_type,
-            dimensions,
-        }
-        .into();
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: ArrayOperation::NewMultiDim {
+                element_type,
+                dimensions,
+            }
+            .into(),
+        }))
     }
 
-    pub fn array_length(&mut self) -> Result<Option<Operation>, FrameError> {
+    pub fn array_length(&mut self) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
-        let expr = ArrayOperation::Length { array_ref }.into();
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: ArrayOperation::Length { array_ref }.into(),
+        }))
     }
 }

@@ -13,15 +13,15 @@ pub struct BlockParameter {
 /// order, and its single terminator defines every outgoing control-flow arm
 /// and may define a result available only after successful completion.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BasicBlock {
+pub struct BasicBlock<'class> {
     /// The semantic role of this block.
     pub kind: BlockKind,
     /// The scalar parameters bound at block entry.
     pub parameters: Vec<BlockParameter>,
     /// The ordinary operations in execution order.
-    pub operations: Vec<Operation>,
+    pub operations: Vec<Operation<'class>>,
     /// The block terminator.
-    pub terminator: Terminator,
+    pub terminator: Terminator<'class>,
 }
 
 /// The semantic role of a basic block.

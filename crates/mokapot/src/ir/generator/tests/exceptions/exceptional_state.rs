@@ -13,7 +13,8 @@ fn exceptional_state_excludes_the_fallible_result() {
         (12, InstructionData::AReturn),
     ];
     let table = vec![handler(1.into()..2.into(), 10.into(), None)];
-    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
+    let fixture = method_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
+    let ir = build(&fixture).unwrap();
     let attempted = terminator_at(&ir, 1.into()).operation().unwrap();
     let Operation::Definition { value: result, .. } = attempted else {
         panic!("checkcast must define a result");

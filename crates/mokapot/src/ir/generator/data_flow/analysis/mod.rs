@@ -14,9 +14,9 @@ pub(super) use solver::DataflowSolver;
 use super::{Frame, Position, lifting, values::ValueContext};
 use crate::ir::{BlockId, ValueId};
 
-pub(super) struct DataflowParts {
+pub(super) struct DataflowParts<'class> {
     pub(super) entry: BlockId,
-    pub(super) blocks: HashMap<BlockId, BlockSolution>,
+    pub(super) blocks: HashMap<BlockId, BlockSolution<'class>>,
     pub(super) this_value: Option<ValueId>,
     pub(super) parameter_values: Vec<ValueId>,
 }

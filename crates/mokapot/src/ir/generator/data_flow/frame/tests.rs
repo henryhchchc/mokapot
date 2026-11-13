@@ -61,6 +61,58 @@ fn frame_with(
 /// The local variable table length the merge tests use.
 const MERGE_LOCALS: u16 = 8;
 
+#[test]
+fn cloned_frames_isolate_local_and_stack_mutations() {
+    use ValueCategory::{Category1, Category2};
+
+    let mut ids = IdAllocator::default();
+    let local = ids.new_id();
+    let replacement = ids.new_id();
+    let mut frame = frame_with(&[(local, Category2)], 2, &[Category1], 2, &mut ids);
+    let saved = frame.clone();
+    let operand = *saved.stack.single_value(Category1).unwrap();
+
+    frame.locals.set(1, replacement, Category1).unwrap();
+    frame.stack.apply(StackOperation::Dup).unwrap();
+    assert_eq!(frame.stack.pop(Category1), Ok(operand));
+    frame.stack.push(replacement, Category1).unwrap();
+
+    assert_eq!(saved.locals.get(0, Category2), Ok(&local));
+    assert_eq!(saved.stack.single_value(Category1), Ok(&operand));
+    assert_eq!(
+        frame.locals.get(0, Category2),
+        Err(FrameError::UnavailableLocal)
+    );
+    assert_eq!(frame.locals.get(1, Category1), Ok(&replacement));
+    assert_eq!(frame.stack.pop(Category1), Ok(replacement));
+}
+
+#[test]
+fn exception_snapshots_preserve_locals_and_isolate_handler_stacks() {
+    use ValueCategory::Category1;
+
+    let mut ids = IdAllocator::default();
+    let local = ids.new_id();
+    let replacement = ids.new_id();
+    let caught = ids.new_id();
+    let mut frame = frame_with(&[(local, Category1)], 1, &[Category1], 1, &mut ids);
+    let snapshot = frame.exception_snapshot();
+    frame.locals.set(0, replacement, Category1).unwrap();
+    frame.stack.pop(Category1).unwrap();
+
+    let mut first = snapshot.handler_frame(caught).unwrap();
+    let second = snapshot.handler_frame(caught).unwrap();
+    first.locals.set(0, replacement, Category1).unwrap();
+    first.stack.pop(Category1).unwrap();
+    first.stack.push(replacement, Category1).unwrap();
+
+    assert_eq!(second.locals.get(0, Category1), Ok(&local));
+    assert_eq!(second.stack.single_value(Category1), Ok(&caught));
+    assert_eq!(second.stack.max_slots(), frame.stack.max_slots());
+    assert_eq!(frame.stack.slot_values().count(), 0);
+    assert_eq!(first.stack.single_value(Category1), Ok(&replacement));
+}
+
 proptest! {
     /// A merge visits every value of the merged frame once, reads the receiving frame's own value,
     /// and leaves a frame merged with itself unchanged.

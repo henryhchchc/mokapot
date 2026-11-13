@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::Arc,
+};
 
 use super::{
     BlockExit, Cfg, CfgNode, Error, ExceptionArm, ExceptionTarget,
@@ -12,10 +15,10 @@ use crate::{
 /// Builds the reachable control-flow graph of one method.
 pub(super) fn build(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     let body = method.body().ok_or(ErrorKind::MissingOrEmptyBody)?;
-    let mut layout = BlockLayout::of(body)?;
+    let layout = BlockLayout::of(body)?;
     let reachable = ReachableNodes::discover(&layout);
     let ids = NodeIds::allocate(&reachable);
-    let blocks = materialize(&mut layout, &reachable, &ids);
+    let blocks = materialize(&layout, &reachable, &ids);
 
     Ok(Cfg {
         method,
@@ -51,7 +54,7 @@ impl ReachableNodes {
     }
 }
 
-/// Dense identities assigned after the reachable topology is fixed.
+/// Opaque identities assigned after the reachable topology is fixed.
 struct NodeIds {
     entry: BlockId,
     by_key: HashMap<NodeKey, BlockId>,
@@ -76,11 +79,11 @@ impl NodeIds {
 }
 
 /// Materializes reachable nodes now that every target identity is known.
-fn materialize(
-    layout: &mut BlockLayout,
+fn materialize<'class>(
+    layout: &BlockLayout<'class>,
     reachable: &ReachableNodes,
     ids: &NodeIds,
-) -> HashMap<BlockId, CfgNode> {
+) -> HashMap<BlockId, CfgNode<'class>> {
     reachable
         .order
         .iter()
@@ -89,10 +92,13 @@ fn materialize(
             let id = ids.get(node);
             let block = match node {
                 NodeKey::Code(pc) => {
-                    let BlockShape { end_pc, exit } = layout.take(pc);
+                    let BlockShape {
+                        instruction_range,
+                        exit,
+                    } = layout.block(pc);
                     CfgNode::Code {
                         start_pc: pc,
-                        end_pc,
+                        instruction_range: instruction_range.clone(),
                         exit: link_exit(exit, ids),
                     }
                 }
@@ -106,29 +112,32 @@ fn materialize(
 }
 
 /// Links a block exit without changing graph topology.
-fn link_exit(exit: BlockExit<ProgramCounter>, ids: &NodeIds) -> BlockExit<BlockId> {
+fn link_exit<'class>(
+    exit: &BlockExit<'class, ProgramCounter>,
+    ids: &NodeIds,
+) -> BlockExit<'class, BlockId> {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
     match exit {
         Continue {
             next,
             exception_arms,
         } => Continue {
-            next: ids.get(NodeKey::Code(next)),
+            next: ids.get(NodeKey::Code(*next)),
             exception_arms: link_exception_arms(exception_arms, ids),
         },
         Goto { target } => Goto {
-            target: ids.get(NodeKey::Code(target)),
+            target: ids.get(NodeKey::Code(*target)),
         },
         Branch { taken, otherwise } => Branch {
-            taken: ids.get(NodeKey::Code(taken)),
-            otherwise: ids.get(NodeKey::Code(otherwise)),
+            taken: ids.get(NodeKey::Code(*taken)),
+            otherwise: ids.get(NodeKey::Code(*otherwise)),
         },
         Switch { cases, default } => Switch {
             cases: cases
-                .into_iter()
-                .map(|(value, target)| (value, ids.get(NodeKey::Code(target))))
+                .iter()
+                .map(|(&case, &target)| (case, ids.get(NodeKey::Code(target))))
                 .collect(),
-            default: ids.get(NodeKey::Code(default)),
+            default: ids.get(NodeKey::Code(*default)),
         },
         Return { exception_arms } => Return {
             exception_arms: link_exception_arms(exception_arms, ids),
@@ -139,12 +148,12 @@ fn link_exit(exit: BlockExit<ProgramCounter>, ids: &NodeIds) -> BlockExit<BlockI
     }
 }
 
-fn link_exception_arms(
-    exception_arms: Vec<ExceptionArm<ProgramCounter>>,
+fn link_exception_arms<'class>(
+    exception_arms: &[ExceptionArm<'class, ProgramCounter>],
     ids: &NodeIds,
-) -> Vec<ExceptionArm<BlockId>> {
+) -> Arc<[ExceptionArm<'class, BlockId>]> {
     exception_arms
-        .into_iter()
+        .iter()
         .map(|arm| ExceptionArm {
             target: match arm.target {
                 ExceptionTarget::Handler(pc) => {
@@ -176,7 +185,7 @@ impl NodeKey {
     }
 }
 
-fn visit_exit_successors(exit: &BlockExit<ProgramCounter>, mut visit: impl FnMut(NodeKey)) {
+fn visit_exit_successors(exit: &BlockExit<'_, ProgramCounter>, mut visit: impl FnMut(NodeKey)) {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
     match exit {
@@ -205,7 +214,7 @@ fn visit_exit_successors(exit: &BlockExit<ProgramCounter>, mut visit: impl FnMut
 }
 
 fn visit_exception_successors(
-    arms: &[ExceptionArm<ProgramCounter>],
+    arms: &[ExceptionArm<'_, ProgramCounter>],
     visit: &mut impl FnMut(NodeKey),
 ) {
     for arm in arms {

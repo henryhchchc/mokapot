@@ -40,7 +40,7 @@ pub use source_map::SourceMap;
 pub use terminator::{BranchGuard, ControlTransfer, Successor, Terminator};
 
 use crate::{
-    jvm::{JavaString, method},
+    jvm::{JavaStr, method},
     types::method_descriptor::MethodDescriptor,
 };
 
@@ -53,15 +53,15 @@ use id_allocation::{IdAllocator, NumericalId};
 /// are addressed by structural locations, and block terminators are the sole
 /// source of control-flow edges.
 #[derive(Debug, Clone)]
-pub struct MokaIRMethod {
+pub struct MokaIRMethod<'class> {
     /// The access flags of the method.
     pub access_flags: method::AccessFlags,
     /// The name of the method.
-    pub name: JavaString,
+    pub name: &'class JavaStr,
     /// The descriptor of the method.
-    pub descriptor: MethodDescriptor,
+    pub descriptor: &'class MethodDescriptor,
     /// The class that owns the method.
-    pub owner: ClassName,
+    pub owner: &'class ClassName,
     /// The invocation of the entry block.
     pub entry: MethodEntry,
     /// The mapping between JVM bytecode and the IR.
@@ -70,18 +70,18 @@ pub struct MokaIRMethod {
     pub this: Option<ValueId>,
     /// The values representing the method parameters.
     pub parameters: Vec<ValueId>,
-    blocks: HashMap<BlockId, BasicBlock>,
+    blocks: HashMap<BlockId, BasicBlock<'class>>,
 }
 
 /// A borrowed IR instruction resolved from an [`InstructionLocation`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InstructionRef<'method> {
+pub enum InstructionRef<'method, 'class> {
     /// A parameter bound on block entry.
     BlockParameter(&'method BlockParameter),
     /// An ordinary operation.
-    Operation(&'method Operation),
+    Operation(&'method Operation<'class>),
     /// A block terminator.
-    Terminator(&'method Terminator),
+    Terminator(&'method Terminator<'class>),
 }
 
 /// The invocation boundary that supplies arguments to the method's entry block.

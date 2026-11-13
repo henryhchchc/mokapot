@@ -6,11 +6,6 @@ use crate::ir::test::prelude::{InstructionData, MokaIRMethod, method};
 mod path_condition_corpus;
 use path_condition_corpus::{PathCorpus, predicate_limit};
 
-fn ir(instructions: impl IntoIterator<Item = (u16, InstructionData)>) -> MokaIRMethod {
-    let fixture = method(instructions, "(I)V", Vec::new());
-    MokaIRMethod::from_method(fixture.as_method()).unwrap()
-}
-
 #[test]
 fn predicate_limit_configuration() {
     assert_eq!(predicate_limit(None).unwrap(), 16);
@@ -23,13 +18,19 @@ fn predicate_limit_configuration() {
 
 #[test]
 fn path_benchmarks_group_methods_and_apply_the_inclusive_limit() {
-    let straight_line = ir([(0, InstructionData::Return)]);
-    let loop_method = ir([
-        (0, InstructionData::ILoad0),
-        (1, InstructionData::IfEq(7.into())),
-        (4, InstructionData::Goto(0.into())),
-        (7, InstructionData::Return),
-    ]);
+    let straight_fixture = method([(0, InstructionData::Return)], "(I)V", Vec::new());
+    let straight_line = MokaIRMethod::from_method(straight_fixture.as_method()).unwrap();
+    let loop_fixture = method(
+        [
+            (0, InstructionData::ILoad0),
+            (1, InstructionData::IfEq(7.into())),
+            (4, InstructionData::Goto(0.into())),
+            (7, InstructionData::Return),
+        ],
+        "(I)V",
+        Vec::new(),
+    );
+    let loop_method = MokaIRMethod::from_method(loop_fixture.as_method()).unwrap();
 
     for (limit, excluded) in [(0, 1), (1, 1), (2, 0)] {
         let mut corpus = PathCorpus::default();

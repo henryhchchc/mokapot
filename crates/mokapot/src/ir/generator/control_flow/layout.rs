@@ -1,135 +1,129 @@
 //! The static partition of a decoded body into leader-delimited blocks.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Bound,
-};
+use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
-use super::BlockExit;
+use super::{BlockExit, ExceptionArm, ExceptionTarget};
 use crate::{
     ir::generator::error::{Error, ErrorKind, ResultExt},
     jvm::code::{ExceptionTableEntry, MethodBody, ProgramCounter as PC},
 };
 
-pub(super) struct BlockLayout {
+pub(super) struct BlockLayout<'class> {
     entry: PC,
-    blocks: BTreeMap<PC, BlockShape>,
+    blocks: BTreeMap<PC, BlockShape<'class>>,
 }
 
-pub(super) struct BlockShape {
-    pub end_pc: PC,
-    pub exit: BlockExit<PC>,
+pub(super) struct BlockShape<'class> {
+    pub instruction_range: Range<usize>,
+    pub exit: BlockExit<'class, PC>,
 }
 
-impl BlockLayout {
-    /// Partitions `body`, validating every decoded instruction and leader.
-    pub(super) fn of(body: MethodBody<'_>) -> Result<Self, Error> {
-        let entry = body
-            .instructions()
-            .entry_point()
-            .map(|(pc, _)| pc)
-            .ok_or(ErrorKind::MissingOrEmptyBody)?;
-        let mut exits = body
-            .instructions()
-            .iter()
-            .map(|(pc, instruction)| {
-                BlockExit::of(body, pc, &instruction)
-                    .at_pc(pc)
-                    .map(|exit| (pc, exit))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
-        let leaders = leaders(body, entry, &exits)?;
-        let last_pc = exits
-            .last_key_value()
+impl<'class> BlockLayout<'class> {
+    /// Validates every instruction before forming leader-delimited spans.
+    pub(super) fn of(body: MethodBody<'class>) -> Result<Self, Error> {
+        let instructions = body.instructions();
+        let mut iter = instructions.iter().peekable();
+        let entry = iter
+            .peek()
             .map(|(pc, _)| *pc)
-            .expect("a body with an entry point has instructions");
-
-        let blocks = leaders
+            .ok_or(ErrorKind::MissingOrEmptyBody)?;
+        let mut leaders = vec![entry];
+        leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
+        let no_exceptions = Arc::from([]);
+        let unwind = Arc::from([ExceptionArm {
+            target: ExceptionTarget::Unwind,
+            catch_type: None,
+        }]);
+        let mut pcs = Vec::with_capacity(instructions.len());
+        while let Some((pc, instruction)) = iter.next() {
+            let next = iter.peek().map(|(pc, _)| *pc);
+            let exit = BlockExit::of(&instruction, next, &no_exceptions, &unwind).at_pc(pc)?;
+            pcs.push(pc);
+            exit.collect_targets(&mut leaders);
+            if exit.forces_block_boundary() {
+                leaders.extend(next);
+            }
+        }
+        leaders.sort_unstable();
+        leaders.dedup();
+        let mut positions = pcs.iter().enumerate().peekable();
+        let mut starts = Vec::with_capacity(leaders.len());
+        for pc in leaders {
+            while positions
+                .peek()
+                .is_some_and(|(_, instruction_pc)| **instruction_pc < pc)
+            {
+                positions.next();
+            }
+            match positions.peek() {
+                Some((index, instruction_pc)) if **instruction_pc == pc => {
+                    starts.push((pc, *index));
+                }
+                _ => return Err(ErrorKind::MissingInstruction).at_pc(pc),
+            }
+        }
+        let blocks = starts
             .iter()
-            .copied()
-            .map(|start_pc| {
-                let end_pc = block_end(body, &leaders, last_pc, start_pc);
-                let exit = exits
-                    .remove(&end_pc)
-                    .expect("a block's final instruction is decoded");
-                (start_pc, BlockShape { end_pc, exit })
+            .enumerate()
+            .map(|(index, &(start_pc, start))| {
+                let end = starts.get(index + 1).map_or(pcs.len(), |(_, index)| *index);
+                let instruction_range = start..end;
+                let (end_pc, instruction) = instructions
+                    .index_range(instruction_range.clone())
+                    .next_back()
+                    .expect("a leader span is nonempty");
+                let mut exit =
+                    BlockExit::of(&instruction, pcs.get(end).copied(), &no_exceptions, &unwind)
+                        .expect("every instruction was validated before partitioning");
+                match &mut exit {
+                    BlockExit::Continue { exception_arms, .. } if exception_arms.is_empty() => {}
+                    BlockExit::Continue { exception_arms, .. }
+                    | BlockExit::Return { exception_arms }
+                    | BlockExit::Throw { exception_arms } => {
+                        *exception_arms = handlers_at(body, end_pc);
+                    }
+                    _ => {}
+                }
+                (
+                    start_pc,
+                    BlockShape {
+                        instruction_range,
+                        exit,
+                    },
+                )
             })
             .collect();
         Ok(Self { entry, blocks })
     }
 
-    /// The leader of the entry block.
     pub(super) const fn entry(&self) -> PC {
         self.entry
     }
 
-    /// Returns the block starting at `start_pc`.
-    pub(super) fn block(&self, start_pc: PC) -> &BlockShape {
+    pub(super) fn block(&self, start_pc: PC) -> &BlockShape<'class> {
         self.blocks
             .get(&start_pc)
             .expect("a discovered block starts at a leader")
     }
-
-    /// Takes the block starting at `start_pc`.
-    pub(super) fn take(&mut self, start_pc: PC) -> BlockShape {
-        self.blocks
-            .remove(&start_pc)
-            .expect("a discovered block starts at a leader")
-    }
 }
 
-/// Collects every block leader, checking each names a decoded instruction.
-fn leaders(
-    body: MethodBody<'_>,
-    entry: PC,
-    exits: &BTreeMap<PC, BlockExit<PC>>,
-) -> Result<BTreeSet<PC>, Error> {
-    use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
-
-    let mut leaders = BTreeSet::from([entry]);
-    leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
-
-    for (&pc, exit) in exits {
-        match exit {
-            Continue { .. } | Return { .. } | Throw { .. } => {}
-            Goto { target } => {
-                leaders.insert(*target);
-            }
-            Branch { taken, otherwise } => {
-                leaders.insert(*taken);
-                leaders.insert(*otherwise);
-            }
-            Switch { cases, default } => {
-                leaders.extend(cases.values());
-                leaders.insert(*default);
-            }
-        }
-        if exit.forces_block_boundary() {
-            leaders.extend(body.instructions().next_pc_of(&pc));
+/// Selects handlers in exception-table order, stopping at the first catch-all.
+fn handlers_at(body: MethodBody<'_>, pc: PC) -> Arc<[ExceptionArm<'_, PC>]> {
+    let mut arms = Vec::new();
+    for entry in body.exception_table().filter(|entry| entry.covers(pc)) {
+        arms.push(ExceptionArm {
+            target: ExceptionTarget::Handler(entry.handler_pc()),
+            catch_type: entry.catch_type(),
+        });
+        if entry.catches_all() {
+            return arms.into();
         }
     }
-
-    if let Some(&pc) = leaders
-        .iter()
-        .find(|pc| body.instruction_at(**pc).is_none())
-    {
-        return Err(ErrorKind::MissingInstruction).at_pc(pc);
-    }
-    Ok(leaders)
-}
-
-/// The final instruction of the block starting at `start_pc`.
-///
-/// A block spans from its leader up to the instruction before the next leader.
-fn block_end(body: MethodBody<'_>, leaders: &BTreeSet<PC>, last_pc: PC, start_pc: PC) -> PC {
-    leaders
-        .range((Bound::Excluded(start_pc), Bound::Unbounded))
-        .next()
-        .map_or(last_pc, |&next| {
-            body.instructions()
-                .prev_pc_of(&next)
-                .expect("a later leader is preceded by the previous leader")
-        })
+    arms.push(ExceptionArm {
+        target: ExceptionTarget::Unwind,
+        catch_type: None,
+    });
+    arms.into()
 }
 
 #[cfg(test)]

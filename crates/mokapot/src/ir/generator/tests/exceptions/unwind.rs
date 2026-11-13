@@ -13,7 +13,8 @@ fn unhandled_exceptions_target_the_method_unwind_exit() {
         (4, InstructionData::CheckCast(integer_type)),
         (5, InstructionData::AReturn),
     ];
-    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
+    let fixture = method_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", vec![]);
+    let ir = build(&fixture).unwrap();
     for pc in [1, 4] {
         assert_matches!(
             terminator_at(&ir, pc.into()),
@@ -36,7 +37,8 @@ fn throw_has_only_ordered_exceptional_outcomes() {
         10.into(),
         Some(runtime.clone()),
     )];
-    let ir = lift(body, "(Ljava/lang/Throwable;)V", table);
+    let fixture = method(body, "(Ljava/lang/Throwable;)V", table);
+    let ir = build(&fixture).unwrap();
     let throw = terminator_at(&ir, 1.into());
     let transfers = throw
         .successors()
@@ -45,6 +47,6 @@ fn throw_has_only_ordered_exceptional_outcomes() {
 
     assert_matches!(throw, Terminator::Throw { value, .. } if *value == ir.parameters[0]);
     assert_eq!(entry_origin(&ir), Some(1.into()));
-    let caught = ControlTransfer::Exception(Some(runtime));
+    let caught = ControlTransfer::Exception(Some(&runtime));
     assert_eq!(transfers, [Some(&caught), None]);
 }

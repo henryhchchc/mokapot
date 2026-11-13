@@ -8,35 +8,43 @@ use crate::{
         Operation,
         expression::{Expression, MathOperation},
     },
-    jvm::ConstantValue,
+    jvm::ConstantVal,
     types::field_type::ValueCategory,
 };
 
-impl LiftContext<'_, '_> {
+impl<'class> LiftContext<'_, '_> {
     pub fn constant(
         &mut self,
-        constant: ConstantValue,
+        constant: ConstantVal<'class>,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         self.frame.stack.push(value, category)?;
-        let expr = Expression::Const(constant);
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: Expression::Const(constant),
+        }))
     }
 
-    pub fn increment(&mut self, idx: u16, constant: i32) -> Result<Option<Operation>, FrameError> {
+    pub fn increment(
+        &mut self,
+        idx: u16,
+        constant: i32,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let base = *self.frame.locals.get(idx, Category1)?;
         self.frame.locals.set(idx, value, Category1)?;
-        let expr = MathOperation::Increment(base, constant).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: MathOperation::Increment(base, constant).into(),
+        }))
     }
 
     pub fn load(
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = *self.frame.locals.get(idx, category)?;
         self.frame.stack.push(value, category)?;
         Ok(None)
@@ -46,16 +54,21 @@ impl LiftContext<'_, '_> {
         &mut self,
         idx: u16,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.frame.stack.pop(category)?;
         self.frame.locals.set(idx, value, category)?;
         Ok(None)
     }
 
-    pub fn new_object(&mut self, class_name: &ClassName) -> Result<Option<Operation>, FrameError> {
+    pub fn new_object(
+        &mut self,
+        class_name: &'class ClassName,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         self.frame.stack.push(value, Category1)?;
-        let expr = Expression::New(class_name.clone());
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition {
+            value,
+            expr: Expression::New(class_name),
+        }))
     }
 }

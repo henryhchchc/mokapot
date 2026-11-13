@@ -1,4 +1,4 @@
-//! Propagates JVM frames through reachable blocks, constructing provisional SSA.
+//! Solves reachable JVM frames, then emits provisional SSA once.
 
 mod analysis;
 mod frame;
@@ -15,7 +15,9 @@ use crate::ir::{BasicBlock, BlockId, MethodEntry, SourceMap, ValueId};
 pub(super) use frame::FrameError;
 use frame::{Frame, Position, StackOperation};
 
-pub(super) fn analyze(cfg: &super::control_flow::Cfg<'_>) -> Result<IrParts, Error> {
+pub(super) fn analyze<'class>(
+    cfg: &super::control_flow::Cfg<'class>,
+) -> Result<IrParts<'class>, Error> {
     let analysis::DataflowParts {
         entry,
         blocks,
@@ -39,9 +41,9 @@ pub(super) fn analyze(cfg: &super::control_flow::Cfg<'_>) -> Result<IrParts, Err
     Ok(parts_method)
 }
 
-pub(super) struct IrParts {
+pub(super) struct IrParts<'class> {
     pub entry: MethodEntry,
-    pub blocks: HashMap<BlockId, BasicBlock>,
+    pub blocks: HashMap<BlockId, BasicBlock<'class>>,
     pub this: Option<ValueId>,
     pub parameters: Vec<ValueId>,
     pub source_map: SourceMap,

@@ -121,8 +121,44 @@ mod analyzer {
             expression::{Expression, Predicate},
             test::prelude::*,
         },
-        jvm::ConstantValue::{Integer, Null},
+        jvm::ConstantVal::{Integer, Null},
     };
+
+    #[test]
+    fn analyzed_conditions_outlive_borrowed_ir_and_its_class() {
+        let [entry, selected] = ids(0);
+        let [constant, unknown]: [ValueId; 2] = ids(0);
+        let conditions = {
+            let fixture = method([(0, InstructionData::Return)], "()V", Vec::new());
+            let descriptor = fixture.as_method().descriptor();
+            let guard = Predicate::Equal(unknown.into(), constant.into());
+            let blocks = HashMap::from([
+                bb(
+                    entry,
+                    [],
+                    &[def(
+                        constant,
+                        crate::jvm::ConstantVal::MethodType(descriptor),
+                    )],
+                    goto_with(
+                        selected,
+                        [],
+                        Transfer::Conditional(BranchGuard::from_literal(guard.into())),
+                    ),
+                ),
+                code(selected, void()),
+            ]);
+            PathCondition::analyze(&ir_method(entry, blocks))
+        };
+        let descriptor = "()V".parse().unwrap();
+        let expected = Predicate::Equal(
+            unknown.into(),
+            crate::jvm::ConstantValue::MethodType(descriptor).into(),
+        );
+        let expected =
+            PathCondition::from_branch_guards([BranchGuard::from_literal(expected.into())]);
+        assert_eq!(conditions[&selected], expected);
+    }
 
     #[test]
     fn path_conditions_prune_contradictory_arms_at_block_locations() {
@@ -157,7 +193,8 @@ mod analyzer {
         let [entry_id, tried, normal, handler, otherwise] = ids(0);
         let taken = Transfer::Conditional(BranchGuard::from_literal(positive));
         let missed = Transfer::Conditional(BranchGuard::from_literal(negative));
-        let caught = Transfer::Exception(Some("java/lang/RuntimeException".parse().unwrap()));
+        let caught_type = cls_name("java/lang/RuntimeException");
+        let caught = Transfer::Exception(Some(&caught_type));
         let exit = void();
 
         let selecting = branch(arm(tried, [], taken), arm(otherwise, [], missed));

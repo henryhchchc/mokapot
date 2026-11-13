@@ -1,7 +1,7 @@
-use std::iter::{once, repeat_n};
-
-use ValueCategory::{Category1, Category2};
-use itertools::Itertools;
+use std::{
+    iter::{once, repeat_n},
+    rc::Rc,
+};
 
 use super::{FrameError, FrameValue};
 use crate::{
@@ -9,6 +9,8 @@ use crate::{
     ir::ValueId,
     types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
 };
+use ValueCategory::{Category1, Category2};
+use itertools::Itertools;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -73,7 +75,7 @@ impl StackOperation {
 pub(crate) struct OperandStack {
     max_slots: u16,
     slot_count: usize,
-    values: Vec<FrameValue>,
+    values: Rc<Vec<FrameValue>>,
 }
 
 impl OperandStack {
@@ -81,8 +83,18 @@ impl OperandStack {
         Self {
             max_slots,
             slot_count: 0,
-            values: Vec::with_capacity(max_slots.into()),
+            values: Rc::new(Vec::with_capacity(max_slots.into())),
         }
+    }
+
+    pub(super) fn for_handler(max_slots: u16, caught: ValueId) -> Result<Self, FrameError> {
+        let mut stack = Self {
+            max_slots,
+            slot_count: 0,
+            values: Rc::new(Vec::with_capacity(1)),
+        };
+        stack.push(caught, Category1)?;
+        Ok(stack)
     }
 
     pub(crate) fn push(
@@ -94,7 +106,7 @@ impl OperandStack {
         if slot_count > usize::from(self.max_slots) {
             return Err(FrameError::StackOverflow);
         }
-        self.values.push(FrameValue { value, category });
+        Rc::make_mut(&mut self.values).push(FrameValue { value, category });
         self.slot_count = slot_count;
         Ok(())
     }
@@ -105,7 +117,8 @@ impl OperandStack {
             return Err(FrameError::InvalidSlotLayout);
         }
         let value = top.value;
-        self.values.truncate(self.values.len() - 1);
+        let len = self.values.len();
+        Rc::make_mut(&mut self.values).truncate(len - 1);
         self.slot_count -= expected.slot_count();
         Ok(value)
     }
@@ -152,9 +165,9 @@ impl OperandStack {
         for (slot, value) in input.iter_mut().zip(replaced) {
             *slot = *value;
         }
-        self.values.truncate(input_start);
-        self.values
-            .extend(output_indices.iter().map(|&index| input[index]));
+        let values = Rc::make_mut(&mut self.values);
+        values.truncate(input_start);
+        values.extend(output_indices.iter().map(|&index| input[index]));
         self.slot_count = resulting_slots;
         Ok(())
     }
@@ -178,7 +191,10 @@ impl OperandStack {
         mut merge_values: impl FnMut(usize, &mut ValueId, ValueId),
     ) {
         let mut slot = 0;
-        for (lhs, rhs) in self.values.iter_mut().zip(&other.values) {
+        for (lhs, rhs) in Rc::make_mut(&mut self.values)
+            .iter_mut()
+            .zip(other.values.iter())
+        {
             slot += lhs.category.slot_count() - 1;
             merge_values(slot, &mut lhs.value, rhs.value);
             slot += 1;
@@ -291,7 +307,7 @@ mod tests {
                 Ok(()) => {
                     let (replaced, pushed) = depths(op);
                     prop_assert_eq!(stack.slot_count + replaced, depth_before + pushed);
-                    for item in &stack.values {
+                    for item in stack.values.iter() {
                         prop_assert!(operands.contains(item));
                     }
                     let untouched = operands.len().saturating_sub(MAX_REPLACED_OPERANDS);

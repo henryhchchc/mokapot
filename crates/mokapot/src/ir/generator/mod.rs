@@ -3,8 +3,7 @@
 //! Generation proceeds through three explicit phases:
 //!
 //! 1. [`control_flow`] partitions all decoded bytecode into a structural CFG.
-//! 2. [`data_flow`] analyzes reachable structural blocks and
-//!    constructs a mutable parts IR with provisional SSA.
+//! 2. [`data_flow`] analyzes reachable blocks and constructs provisional SSA.
 //! 3. [`canonicalize`] simplifies provisional block parameters.
 //!
 //! Analysis fixes addressable instruction positions and records their JVM
@@ -24,7 +23,7 @@ pub use error::{Error as MokaIRBuildError, ErrorKind as MokaIRBuildErrorKind};
 use super::MokaIRMethod;
 use crate::jvm::Method;
 
-pub(super) fn generate(method: Method<'_>) -> Result<MokaIRMethod, MokaIRBuildError> {
+pub(super) fn generate(method: Method<'_>) -> Result<MokaIRMethod<'_>, MokaIRBuildError> {
     let cfg = control_flow::analyze(method)?;
     let data_flow::IrParts {
         mut entry,
@@ -36,9 +35,9 @@ pub(super) fn generate(method: Method<'_>) -> Result<MokaIRMethod, MokaIRBuildEr
     canonicalize::canonicalize_values(&mut entry, &mut blocks);
     let ir = MokaIRMethod {
         access_flags: method.access_flags(),
-        name: method.name().to_owned(),
-        descriptor: method.descriptor().clone(),
-        owner: method.owner().name().clone(),
+        name: method.name(),
+        descriptor: method.descriptor(),
+        owner: method.owner().name(),
         source_map,
         entry,
         this,

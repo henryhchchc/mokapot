@@ -2,7 +2,8 @@ use super::*;
 
 #[test]
 fn builds_ir_blocks_and_provenance() {
-    let ir = get_test_ir();
+    let class = fixture_class("TestAnalysis");
+    let ir = method_ir(&class, "test");
 
     // The `ldc` at `0x0000` may fail, so lifting folds it into the block's
     // `Try` terminator instead of an ordinary operation.
@@ -15,7 +16,7 @@ fn builds_ir_blocks_and_provenance() {
     assert!(matches!(
         first,
         Operation::Definition {
-            expr: Expression::Const(ConstantValue::String(value)),
+            expr: Expression::Const(ConstantVal::String(value)),
             ..
         } if value.to_str().as_deref() == Ok("233")
     ));

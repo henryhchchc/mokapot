@@ -7,17 +7,7 @@ use mokapot::ir::{
     },
 };
 
-fn method_ir(class_name: &str, name: &str) -> MokaIRMethod {
-    let bytes = support::class_bytes(&format!("org/mokapot/test/{class_name}"));
-    let class = Class::from_bytes(&bytes).unwrap();
-    let method = class
-        .methods()
-        .find(|method| method.name() == name)
-        .unwrap();
-    MokaIRMethod::from_method(method).unwrap()
-}
-
-fn operations(ir: &MokaIRMethod) -> Vec<&Operation> {
+fn operations<'ir, 'class>(ir: &'ir MokaIRMethod<'class>) -> Vec<&'ir Operation<'class>> {
     let mut operations = Vec::new();
     for (_, block) in reachable_blocks(ir) {
         operations.extend(&block.operations);
@@ -26,7 +16,10 @@ fn operations(ir: &MokaIRMethod) -> Vec<&Operation> {
     operations
 }
 
-fn definition<'ir>(operations: &[&'ir Operation], value: ValueId) -> &'ir Expression {
+fn definition<'ir, 'class>(
+    operations: &[&'ir Operation<'class>],
+    value: ValueId,
+) -> &'ir Expression<'class> {
     operations
         .iter()
         .find_map(|operation| match operation {
@@ -46,12 +39,12 @@ fn adds_one(operations: &[&Operation], expression: &Expression, value: ValueId) 
             (*left == value
                 && matches!(
                     definition(operations, *right),
-                    Expression::Const(ConstantValue::Integer(1))
+                    Expression::Const(ConstantVal::Integer(1))
                 ))
                 || (*right == value
                     && matches!(
                         definition(operations, *left),
-                        Expression::Const(ConstantValue::Integer(1))
+                        Expression::Const(ConstantVal::Integer(1))
                     ))
         }
         _ => false,
@@ -60,7 +53,8 @@ fn adds_one(operations: &[&Operation], expression: &Expression, value: ValueId) 
 
 #[test]
 fn java_fixture_preserves_field_and_array_operands() {
-    let ir = method_ir("IrSemantics", "run");
+    let class = fixture_class("IrSemantics");
+    let ir = method_ir(&class, "run");
     let operations = operations(&ir);
 
     let read_value = operations
@@ -96,12 +90,12 @@ fn java_fixture_preserves_field_and_array_operands() {
     assert!(operations.iter().any(|operation| matches!(
         operation,
         Operation::Definition { expr: Expression::Field(FieldAccess::ReadInstance { field, .. }), .. }
-            if field.name == "value"
+            if field.name() == "value"
     )));
     assert!(operations.iter().any(|operation| matches!(
         operation,
         Operation::Effect { expr: Expression::Field(FieldAccess::WriteInstance { field, value, .. }) }
-            if field.name == "value" && *value == read_value.0
+            if field.name() == "value" && *value == read_value.0
     )));
     let dimensions = operations
         .iter()
@@ -121,13 +115,14 @@ fn java_fixture_preserves_field_and_array_operands() {
     ));
     assert!(matches!(
         definition(&operations, dimensions[1]),
-        Expression::Const(ConstantValue::Integer(2))
+        Expression::Const(ConstantVal::Integer(2))
     ));
 }
 
 #[test]
 fn java_fixture_preserves_call_and_monitor_operands() {
-    let ir = method_ir("IrSemantics", "run");
+    let class = fixture_class("IrSemantics");
+    let ir = method_ir(&class, "run");
     let operations = operations(&ir);
     let interface_call = operations
         .iter()
@@ -140,7 +135,7 @@ fn java_fixture_preserves_call_and_monitor_operands() {
                         method,
                         args,
                     },
-            } if method.name == "applyAsInt" => Some((*value, *this, args)),
+            } if method.name() == "applyAsInt" => Some((*value, *this, args)),
             _ => None,
         })
         .expect("interface call preserves its receiver and result");
@@ -157,11 +152,11 @@ fn java_fixture_preserves_call_and_monitor_operands() {
                         method,
                         args,
                     },
-            } if method.name == "combine" => Some((*value, method, args)),
+            } if method.name() == "combine" => Some((*value, method, args)),
             _ => None,
         })
         .expect("static call defines its result");
-    assert_eq!(static_call.1.descriptor, "(IJ)J".parse().unwrap());
+    assert_eq!(static_call.1.descriptor(), &"(IJ)J".parse().unwrap());
     assert_eq!(static_call.2.len(), 2);
     assert!(matches!(
         definition(&operations, static_call.2[0]),
@@ -194,25 +189,27 @@ fn java_fixture_preserves_call_and_monitor_operands() {
 
 #[test]
 fn java_fixture_lifts_capturing_lambda_closures() {
-    let ir = method_ir("TestAnalysis", "test");
+    let class = fixture_class("TestAnalysis");
+    let ir = method_ir(&class, "test");
     assert!(operations(&ir).iter().any(|operation| matches!(
         operation,
         Operation::Definition {
             expr: Expression::Closure { name, captures, .. },
             ..
-        } if name == "applyAsInt" && captures.as_slice() == &ir.parameters[..1]
+        } if *name == "applyAsInt" && captures.as_slice() == &ir.parameters[..1]
     )));
 }
 
 #[test]
 fn java_fixture_preserves_signed_immediate_boundaries() {
+    let class = fixture_class("IrSemantics");
     for (name, expected) in [
         ("byteMin", -128),
         ("byteMax", 127),
         ("shortMin", -32768),
         ("shortMax", 32767),
     ] {
-        let ir = method_ir("IrSemantics", name);
+        let ir = method_ir(&class, name);
         let operations = operations(&ir);
         let Terminator::Return {
             value: Some(returned),
@@ -223,7 +220,7 @@ fn java_fixture_preserves_signed_immediate_boundaries() {
         };
         assert!(matches!(
             definition(&operations, *returned),
-            Expression::Const(ConstantValue::Integer(actual)) if *actual == expected
+            Expression::Const(ConstantVal::Integer(actual)) if *actual == expected
         ));
     }
 }
