@@ -87,13 +87,13 @@ jobs:
         with:
           manifest-path: Cargo.toml
       - name: Run clippy
+        id: clippy
         run: |
           set -o pipefail
           cargo clippy \
             --all-features --all-targets \
             --message-format=json \
             -- -D warnings 2>&1 | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
-          echo "CLIPPY_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
         continue-on-error: true
       - name: Upload analysis results to GitHub
         uses: github/codeql-action/upload-sarif@v4.39.3
@@ -102,12 +102,10 @@ jobs:
           sarif_file: rust-clippy-results.sarif
           wait-for-processing: true
       - name: Check clippy result
-        if: always()
+        if: always() && steps.clippy.outcome != 'success'
         run: |
-          if [ "$CLIPPY_EXIT_CODE" != "0" ]; then
-            echo "Clippy found issues (exit code: $CLIPPY_EXIT_CODE)"
-            exit "$CLIPPY_EXIT_CODE"
-          fi
+          echo "Clippy analysis did not succeed"
+          exit 1
 
   # ====================
   # Tests
