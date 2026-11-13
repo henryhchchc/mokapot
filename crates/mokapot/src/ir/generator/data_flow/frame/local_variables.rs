@@ -224,9 +224,7 @@ mod tests {
             };
             let mut allocator = IdAllocator::default();
             let receiver = instance.then(|| allocator.new_id());
-            let parameters: Vec<ValueId> = (0..descriptor.parameters_types.len())
-                .map(|_| allocator.new_id())
-                .collect();
+            let parameters = Vec::from_fn(descriptor.parameters_types.len(), |_| allocator.new_id());
             let entries: Vec<&ValueId> = receiver.iter().chain(&parameters).collect();
 
             let mut layout: Vec<Option<usize>> = Vec::new();

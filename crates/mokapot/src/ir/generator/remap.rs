@@ -256,7 +256,7 @@ mod tests {
         ] {
             let mut operation = effect(call(kind, method.clone(), [argument]));
             let mut remap = |value| {
-                Ok::<_, std::convert::Infallible>(if value == this {
+                Ok::<_, !>(if value == this {
                     new_this
                 } else {
                     assert_eq!(value, argument);

@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use derive_more::{Display, From};
 
 use super::{BooleanVariable, ValueId};
@@ -106,7 +104,7 @@ impl Predicate {
         let mut mapped = self.clone();
         let Ok(()) = mapped.try_for_each_value_mut(|value| {
             *value = map(value);
-            Ok::<_, Infallible>(())
+            Ok::<_, !>(())
         });
         mapped
     }

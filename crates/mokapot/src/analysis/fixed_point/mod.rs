@@ -13,7 +13,7 @@
 //!
 //! ```
 //! use mokapot::analysis::fixed_point::{DataflowProblem, JoinSemiLattice, solve};
-//! use std::{collections::BTreeMap, convert::Infallible};
+//! use std::collections::BTreeMap;
 //!
 //! #[derive(Clone, PartialEq, PartialOrd)]
 //! struct Reachable(bool);
@@ -31,14 +31,14 @@
 //! impl DataflowProblem for Reachability {
 //!     type Location = usize;
 //!     type Fact = Reachable;
-//!     type Err = Infallible;
+//!     type Err = !;
 //!
 //!     fn seeds(&self) -> impl IntoIterator<Item = (usize, Reachable)> {
 //!         [(0, Reachable(true))]
 //!     }
 //!
 //!     fn flow(&mut self, location: &usize, fact: &Reachable)
-//!         -> Result<impl IntoIterator<Item = (usize, Reachable)>, Infallible>
+//!         -> Result<impl IntoIterator<Item = (usize, Reachable)>, !>
 //!     {
 //!         // 0 -> 1 -> 2 -> 0; the unchanged fact ends the cycle.
 //!         Ok([((location + 1) % 3, fact.clone())])

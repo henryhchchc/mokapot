@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    convert::Infallible,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use super::*;
 use crate::ir::test::prelude::TestSet;
@@ -13,7 +10,7 @@ struct RepeatedSuccessors {
 impl DataflowProblem for RepeatedSuccessors {
     type Location = u8;
     type Fact = TestSet;
-    type Err = Infallible;
+    type Err = !;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         [(0, TestSet::default())]
@@ -60,7 +57,7 @@ struct CyclicProblem;
 impl DataflowProblem for CyclicProblem {
     type Location = u8;
     type Fact = TestSet;
-    type Err = Infallible;
+    type Err = !;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         [(0, TestSet::default())]

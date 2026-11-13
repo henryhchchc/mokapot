@@ -1,4 +1,4 @@
-use std::{cmp, collections::HashMap, convert::Infallible};
+use std::{cmp, collections::HashMap};
 
 use super::{BlockId, BranchGuard, MokaIRMethod, PathCondition, Predicate, SolvingBudget};
 use crate::{
@@ -134,7 +134,7 @@ impl DataflowProblem for PathConditionProblem<'_> {
 
     type Fact = PathConditionFact;
 
-    type Err = Infallible;
+    type Err = !;
 
     fn seeds(&self) -> impl IntoIterator<Item = (Self::Location, Self::Fact)> {
         [(self.method.entry.block, PathConditionFact::one(self.budget))]

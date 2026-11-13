@@ -1,7 +1,6 @@
 use std::{
     cmp,
     collections::{HashSet, hash_set},
-    convert::Infallible,
     fmt::{self, Display},
     hash::{Hash, Hasher},
     slice,
@@ -122,7 +121,7 @@ impl<Arm> Terminator<Arm> {
         self,
         mut map: impl FnMut(Arm) -> MappedArm,
     ) -> Terminator<MappedArm> {
-        let Ok(term) = self.try_map_arms(|arm| Ok::<_, Infallible>(map(arm)));
+        let Ok(term) = self.try_map_arms(|arm| Ok::<_, !>(map(arm)));
         term
     }
 

@@ -22,12 +22,9 @@ impl ValueContext {
         let mut value_id_allocator = IdAllocator::default();
         let receiver_value = (!method.access_flags().contains(method::AccessFlags::STATIC))
             .then(|| value_id_allocator.new_id());
-        let parameter_values: Vec<ValueId> = method
-            .descriptor()
-            .parameters_types
-            .iter()
-            .map(|_| value_id_allocator.new_id())
-            .collect();
+        let parameter_values = Vec::from_fn(method.descriptor().parameters_types.len(), |_| {
+            value_id_allocator.new_id()
+        });
         let initial_frame = Frame::for_method_entry(
             method.descriptor(),
             body.max_locals(),

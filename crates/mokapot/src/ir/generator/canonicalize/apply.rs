@@ -1,6 +1,6 @@
 //! Applies parameter simplification results to the method IR.
 
-use std::{collections::HashMap, convert::Infallible};
+use std::collections::HashMap;
 
 use super::SimplifiedParameters;
 use crate::ir::{
@@ -77,7 +77,7 @@ fn rewrite_block(
 }
 
 fn rewrite_ops<T: RemapValues>(value: &mut T, canonical: &impl Fn(ValueId) -> ValueId) {
-    value.try_remap_values(&mut |value| Ok::<_, Infallible>(canonical(value)));
+    value.try_remap_values(&mut |value| Ok::<_, !>(canonical(value)));
 }
 
 #[cfg(test)]
