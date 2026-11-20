@@ -4,19 +4,19 @@ use super::{ValueId, expression::Expression};
 
 /// An ordinary non-parameter, non-terminator operation.
 #[derive(Debug, Clone, PartialEq, Eq, Display)]
-pub enum Operation {
+pub enum Operation<'class> {
     /// Evaluates an expression and defines its result.
     #[display("{value} = {expr}")]
     Definition {
         /// The value defined by the expression.
         value: ValueId,
         /// The expression producing the value.
-        expr: Expression,
+        expr: Expression<'class>,
     },
     /// Evaluates an expression solely for its effects.
     #[display("{expr}")]
     Effect {
         /// The effectful expression.
-        expr: Expression,
+        expr: Expression<'class>,
     },
 }

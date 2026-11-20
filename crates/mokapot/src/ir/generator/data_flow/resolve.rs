@@ -8,7 +8,7 @@ use super::{
 };
 use crate::ir::{BasicBlock, BlockId, BlockParameter, SourceMap, Successor, ValueId};
 
-impl BlockSolution {
+impl<'class> BlockSolution<'class> {
     fn entry_arguments(&self) -> Vec<ValueId> {
         let frame = self
             .incoming_frames
@@ -29,7 +29,7 @@ impl BlockSolution {
         self.parameters.keys().copied().collect()
     }
 
-    fn resolve(self, target_parameters: &HashMap<BlockId, Vec<Position>>) -> BasicBlock {
+    fn resolve(self, target_parameters: &HashMap<BlockId, Vec<Position>>) -> BasicBlock<'class> {
         let Self {
             parameters, block, ..
         } = self;
@@ -84,8 +84,8 @@ impl BlockSolution {
 /// Resolves block parameters and successor arguments after fixed-point analysis.
 pub(super) fn resolve_blocks(
     entry: BlockId,
-    blocks: HashMap<BlockId, BlockSolution>,
-) -> (Vec<ValueId>, HashMap<BlockId, BasicBlock>) {
+    blocks: HashMap<BlockId, BlockSolution<'_>>,
+) -> (Vec<ValueId>, HashMap<BlockId, BasicBlock<'_>>) {
     let entry_arguments = blocks
         .get(&entry)
         .expect("the entry block is always solved")
@@ -102,7 +102,9 @@ pub(super) fn resolve_blocks(
 }
 
 impl SourceMap {
-    pub(super) fn from_block_solutions(block_solutions: &HashMap<BlockId, BlockSolution>) -> Self {
+    pub(super) fn from_block_solutions(
+        block_solutions: &HashMap<BlockId, BlockSolution<'_>>,
+    ) -> Self {
         let mut source_map = SourceMap::new();
         for (&block, sol) in block_solutions {
             if let Some(origin) = sol.block.terminator_source {

@@ -5,6 +5,8 @@ MokaIR is mokapot's register-based, scalar SSA representation of a JVM method, e
 ## Construction
 
 `MokaIRMethod::from_method` lifts a method with a body, emitting only blocks reachable from entry.
+The IR owns its graph and source map and borrows JVM metadata and operands from the declaring class.
+Keep the class alive while using the IR.
 Malformed or unsupported bytecode, or invalid frame state, returns `MokaIRBuildError`; there is no partial method.
 The error exposes a flat `kind` and an optional bytecode `pc`; method-entry and synthetic-state failures have no PC.
 
@@ -45,7 +47,7 @@ For coverage, mark the locations of each covered program counter, and never infe
 ## Path conditions
 
 `PathCondition::analyze` computes a DNF `PathCondition` per reachable block: a disjunction of conjunctions of signed `Predicate`s.
-The returned predicates are owned.
+The returned predicates borrow JVM constants from the declaring class and can outlive the IR.
 Constant SSA definitions are substituted into guards before propagation, so known integer and null tests can be resolved and equivalent tests can share a literal.
 `is_contradiction` reports `⊥`; blocks reachable only under a contradiction are omitted.
 `analyze_with_budget` accepts a `SolvingBudget` for semantic minimization.

@@ -11,7 +11,7 @@ use crate::{
         expression::{BooleanVariable, PathValue, Predicate},
         generator::data_flow::FrameError,
     },
-    jvm::{ConstantValue, code::Instruction},
+    jvm::{ConstantVal, code::Instruction},
     types::field_type::ValueCategory,
 };
 
@@ -20,7 +20,7 @@ use crate::{
 pub(super) fn branch_transfers(
     instruction: &Instruction,
     frame: &mut Frame,
-) -> Result<(ControlTransfer, ControlTransfer), FrameError> {
+) -> Result<(ControlTransfer<'static>, ControlTransfer<'static>), FrameError> {
     let condition: BooleanVariable<Predicate> = pop_condition(frame, instruction)?.into();
     Ok((
         ControlTransfer::Conditional(BranchGuard::from_literal(condition.clone())),
@@ -34,14 +34,17 @@ pub(super) fn switch_selector(frame: &mut Frame) -> Result<ValueId, FrameError> 
 }
 
 /// The transfer selected when `selector` matches `case`.
-pub(super) fn case_guard(selector: ValueId, case: i32) -> ControlTransfer {
+pub(super) fn case_guard(selector: ValueId, case: i32) -> ControlTransfer<'static> {
     ControlTransfer::Conditional(BranchGuard::from_literal(BooleanVariable::Positive(equal(
         selector, case,
     ))))
 }
 
 /// The transfer covering every value `selector` can hold when no case matches.
-pub(super) fn default_guard(selector: ValueId, cases: &BTreeMap<i32, BlockId>) -> ControlTransfer {
+pub(super) fn default_guard(
+    selector: ValueId,
+    cases: &BTreeMap<i32, BlockId>,
+) -> ControlTransfer<'static> {
     let branches = cases
         .keys()
         .map(|&case| BooleanVariable::Negative(equal(selector, case)))
@@ -50,10 +53,10 @@ pub(super) fn default_guard(selector: ValueId, cases: &BTreeMap<i32, BlockId>) -
 }
 
 /// Predicate matching `selector` against the constant `case`.
-fn equal(selector: ValueId, case: i32) -> Predicate {
+fn equal(selector: ValueId, case: i32) -> Predicate<'static> {
     Predicate::Equal(
         selector.into(),
-        PathValue::Constant(ConstantValue::Integer(case)),
+        PathValue::Constant(ConstantVal::Integer(case)),
     )
 }
 
@@ -83,7 +86,10 @@ pub(super) fn throw_operand(
     }
 }
 
-fn pop_condition(frame: &mut Frame, instruction: &Instruction) -> Result<Predicate, FrameError> {
+fn pop_condition(
+    frame: &mut Frame,
+    instruction: &Instruction,
+) -> Result<Predicate<'static>, FrameError> {
     let unary = |frame: &mut Frame| frame.stack.pop(Category1).map(Into::into);
     let binary = |frame: &mut Frame| {
         let rhs = frame.stack.pop(Category1)?.into();
