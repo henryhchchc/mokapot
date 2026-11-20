@@ -19,15 +19,15 @@ enum CallResult {
     Void,
 }
 
-impl LiftContext<'_, '_> {
+impl<'class> LiftContext<'_, '_> {
     pub fn invoke_static(
         &mut self,
-        method: MethodRef<'_>,
-    ) -> Result<Option<Operation>, FrameError> {
+        method: MethodRef<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let result = self.call_result(&method.descriptor().return_type);
         let expr = Expression::Call {
             kind: InvocationKind::Static,
-            method: method.into_owned(),
+            method,
             args: self.frame.stack.pop_arguments(method.descriptor())?,
         };
         self.finish_call(result, expr)
@@ -35,15 +35,15 @@ impl LiftContext<'_, '_> {
 
     pub fn invoke_instance(
         &mut self,
-        method: MethodRef<'_>,
+        method: MethodRef<'class>,
         kind: impl FnOnce(ValueId) -> InvocationKind,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let result = self.call_result(&method.descriptor().return_type);
         let args = self.frame.stack.pop_arguments(method.descriptor())?;
         let this = self.frame.stack.pop(Category1)?;
         let expr = Expression::Call {
             kind: kind(this),
-            method: method.into_owned(),
+            method,
             args,
         };
         self.finish_call(result, expr)
@@ -51,16 +51,16 @@ impl LiftContext<'_, '_> {
 
     pub fn invoke_dynamic(
         &mut self,
-        descriptor: &MethodDescriptor,
+        descriptor: &'class MethodDescriptor,
         bootstrap_method_index: u16,
-        name: &JavaStr,
-    ) -> Result<Option<Operation>, FrameError> {
+        name: &'class JavaStr,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let result = self.call_result(&descriptor.return_type);
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
             bootstrap_method_index,
-            name: name.to_owned(),
-            closure_descriptor: descriptor.clone(),
+            name,
+            closure_descriptor: descriptor,
         };
         self.finish_call(result, expr)
     }
@@ -68,8 +68,8 @@ impl LiftContext<'_, '_> {
     fn finish_call(
         &mut self,
         result: CallResult,
-        expr: Expression,
-    ) -> Result<Option<Operation>, FrameError> {
+        expr: Expression<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         match result {
             CallResult::Value(value, category) => {
                 self.frame.stack.push(value, category)?;

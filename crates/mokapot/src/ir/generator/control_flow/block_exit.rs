@@ -13,10 +13,10 @@ use crate::{
 
 /// The structural exit of one decoded instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BlockExit<T> {
+pub(crate) enum BlockExit<'class, T> {
     Continue {
         next: T,
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: Vec<ExceptionArm<'class, T>>,
     },
     Goto {
         target: T,
@@ -30,14 +30,14 @@ pub(crate) enum BlockExit<T> {
         default: T,
     },
     Return {
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: Vec<ExceptionArm<'class, T>>,
     },
     Throw {
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: Vec<ExceptionArm<'class, T>>,
     },
 }
 
-impl<T> BlockExit<T> {
+impl<T> BlockExit<'_, T> {
     /// Whether this exit forces the following instruction into a new block.
     ///
     /// A continuation without exception arms proceeds into the next instruction
@@ -49,11 +49,11 @@ impl<T> BlockExit<T> {
 
 /// One ordered exception arm of a throwing instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExceptionArm<T> {
+pub(crate) struct ExceptionArm<'class, T> {
     /// Where the exception transfers.
     pub target: ExceptionTarget<T>,
     /// The caught type, or `None` for catch-all.
-    pub catch_type: Option<ClassName>,
+    pub catch_type: Option<&'class ClassName>,
 }
 
 /// An exception successor destination.
@@ -84,10 +84,10 @@ pub(crate) enum ArmKey {
     Exception(usize),
 }
 
-impl BlockExit<ProgramCounter> {
+impl<'class> BlockExit<'class, ProgramCounter> {
     /// Classifies the control transfer of `instruction` at `pc` within `body`.
     pub(super) fn of(
-        body: MethodBody<'_>,
+        body: MethodBody<'class>,
         pc: ProgramCounter,
         instruction: &Instruction,
     ) -> Result<Self, ErrorKind> {
@@ -177,12 +177,15 @@ fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> b
 ///
 /// Selection walks the table in order, so the first catch-all shadows later
 /// entries and an escaping exception unwinds.
-fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
+fn exception_arms(
+    body: MethodBody<'_>,
+    pc: ProgramCounter,
+) -> Vec<ExceptionArm<'_, ProgramCounter>> {
     let mut exception_arms = Vec::new();
     for entry in body.exception_table().filter(|entry| entry.covers(pc)) {
         exception_arms.push(ExceptionArm {
             target: ExceptionTarget::Handler(entry.handler_pc()),
-            catch_type: entry.catch_type().cloned(),
+            catch_type: entry.catch_type(),
         });
         if entry.catches_all() {
             return exception_arms;

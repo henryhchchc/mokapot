@@ -76,11 +76,11 @@ impl NodeIds {
 }
 
 /// Materializes reachable nodes now that every target identity is known.
-fn materialize(
-    layout: &mut BlockLayout,
+fn materialize<'class>(
+    layout: &mut BlockLayout<'class>,
     reachable: &ReachableNodes,
     ids: &NodeIds,
-) -> HashMap<BlockId, CfgNode> {
+) -> HashMap<BlockId, CfgNode<'class>> {
     reachable
         .order
         .iter()
@@ -106,7 +106,10 @@ fn materialize(
 }
 
 /// Links a block exit without changing graph topology.
-fn link_exit(exit: BlockExit<ProgramCounter>, ids: &NodeIds) -> BlockExit<BlockId> {
+fn link_exit<'class>(
+    exit: BlockExit<'class, ProgramCounter>,
+    ids: &NodeIds,
+) -> BlockExit<'class, BlockId> {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
     match exit {
         Continue {
@@ -139,10 +142,10 @@ fn link_exit(exit: BlockExit<ProgramCounter>, ids: &NodeIds) -> BlockExit<BlockI
     }
 }
 
-fn link_exception_arms(
-    exception_arms: Vec<ExceptionArm<ProgramCounter>>,
+fn link_exception_arms<'class>(
+    exception_arms: Vec<ExceptionArm<'class, ProgramCounter>>,
     ids: &NodeIds,
-) -> Vec<ExceptionArm<BlockId>> {
+) -> Vec<ExceptionArm<'class, BlockId>> {
     exception_arms
         .into_iter()
         .map(|arm| ExceptionArm {
@@ -176,7 +179,7 @@ impl NodeKey {
     }
 }
 
-fn visit_exit_successors(exit: &BlockExit<ProgramCounter>, mut visit: impl FnMut(NodeKey)) {
+fn visit_exit_successors(exit: &BlockExit<'_, ProgramCounter>, mut visit: impl FnMut(NodeKey)) {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
     match exit {
@@ -205,7 +208,7 @@ fn visit_exit_successors(exit: &BlockExit<ProgramCounter>, mut visit: impl FnMut
 }
 
 fn visit_exception_successors(
-    arms: &[ExceptionArm<ProgramCounter>],
+    arms: &[ExceptionArm<'_, ProgramCounter>],
     visit: &mut impl FnMut(NodeKey),
 ) {
     for arm in arms {

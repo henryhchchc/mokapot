@@ -1,56 +1,56 @@
 use derive_more::{Display, From};
 
 use super::{BooleanVariable, ValueId};
-use crate::jvm::ConstantValue;
+use crate::jvm::ConstantVal;
 
 /// A branch predicate over SSA values and JVM constants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
-pub enum Predicate {
+pub enum Predicate<'class> {
     /// The two arguments are equal.
     #[display("{_0} == {_1}")]
-    Equal(PathValue, PathValue),
+    Equal(PathValue<'class>, PathValue<'class>),
     /// The two arguments are not equal.
     #[display("{_0} != {_1}")]
-    NotEqual(PathValue, PathValue),
+    NotEqual(PathValue<'class>, PathValue<'class>),
     /// The first argument is less than the second.
     #[display("{_0} < {_1}")]
-    LessThan(PathValue, PathValue),
+    LessThan(PathValue<'class>, PathValue<'class>),
     /// The first argument is less than or equal to the second.
     #[display("{_0} <= {_1}")]
-    LessThanOrEqual(PathValue, PathValue),
+    LessThanOrEqual(PathValue<'class>, PathValue<'class>),
     /// The first argument is greater than the second.
     #[display("{_0} > {_1}")]
-    GreaterThan(PathValue, PathValue),
+    GreaterThan(PathValue<'class>, PathValue<'class>),
     /// The first argument is greater than or equal to the second.
     #[display("{_0} >= {_1}")]
-    GreaterThanOrEqual(PathValue, PathValue),
+    GreaterThanOrEqual(PathValue<'class>, PathValue<'class>),
     /// The argument is null.
     #[display("{_0} == null")]
-    IsNull(PathValue),
+    IsNull(PathValue<'class>),
     /// The argument is not null.
     #[display("{_0} != null")]
-    IsNotNull(PathValue),
+    IsNotNull(PathValue<'class>),
     /// The argument is zero.
     #[display("{_0} == 0")]
-    IsZero(PathValue),
+    IsZero(PathValue<'class>),
     /// The argument is not zero.
     #[display("{_0} != 0")]
-    IsNonZero(PathValue),
+    IsNonZero(PathValue<'class>),
     /// The argument is positive.
     #[display("{_0} > 0")]
-    IsPositive(PathValue),
+    IsPositive(PathValue<'class>),
     /// The argument is negative.
     #[display("{_0} < 0")]
-    IsNegative(PathValue),
+    IsNegative(PathValue<'class>),
     /// The argument is non-negative.
     #[display("{_0} >= 0")]
-    IsNonNegative(PathValue),
+    IsNonNegative(PathValue<'class>),
     /// The argument is non-positive.
     #[display("{_0} <= 0")]
-    IsNonPositive(PathValue),
+    IsNonPositive(PathValue<'class>),
 }
 
-impl BooleanVariable<Predicate> {
+impl BooleanVariable<Predicate<'_>> {
     fn canonicalize(self) -> Self {
         match self {
             Self::Positive(predicate) => canonicalize_predicate(predicate),
@@ -59,7 +59,7 @@ impl BooleanVariable<Predicate> {
     }
 }
 
-fn canonicalize_predicate(predicate: Predicate) -> BooleanVariable<Predicate> {
+const fn canonicalize_predicate(predicate: Predicate<'_>) -> BooleanVariable<Predicate<'_>> {
     use BooleanVariable::{Negative, Positive};
     use Predicate::{
         Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,
@@ -84,23 +84,26 @@ fn canonicalize_predicate(predicate: Predicate) -> BooleanVariable<Predicate> {
     }
 }
 
-impl From<Predicate> for BooleanVariable<Predicate> {
-    fn from(predicate: Predicate) -> Self {
+impl<'class> From<Predicate<'class>> for BooleanVariable<Predicate<'class>> {
+    fn from(predicate: Predicate<'class>) -> Self {
         BooleanVariable::Positive(predicate).canonicalize()
     }
 }
 
 /// An SSA value or constant in a path predicate.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Display, From)]
-pub enum PathValue {
+pub enum PathValue<'class> {
     /// A value produced by the IR.
     Variable(#[from] ValueId),
     /// A JVM constant embedded in the condition.
-    Constant(#[from] ConstantValue),
+    Constant(#[from] ConstantVal<'class>),
 }
 
-impl Predicate {
-    pub(crate) fn map_values(&self, mut map: impl FnMut(&PathValue) -> PathValue) -> Self {
+impl<'class> Predicate<'class> {
+    pub(crate) fn map_values(
+        &self,
+        mut map: impl FnMut(&PathValue<'class>) -> PathValue<'class>,
+    ) -> Self {
         let mut mapped = self.clone();
         let Ok(()) = mapped.try_for_each_value_mut(|value| {
             *value = map(value);
@@ -111,7 +114,7 @@ impl Predicate {
 
     pub(crate) fn try_for_each_value_mut<E>(
         &mut self,
-        mut visit: impl FnMut(&mut PathValue) -> Result<(), E>,
+        mut visit: impl FnMut(&mut PathValue<'class>) -> Result<(), E>,
     ) -> Result<(), E> {
         use Predicate::{
             Equal, GreaterThan, GreaterThanOrEqual, IsNegative, IsNonNegative, IsNonPositive,

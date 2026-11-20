@@ -13,13 +13,16 @@ use super::{Frame, FrameError, StackOperation, values::ValueContext};
 use crate::{
     ir::{
         Operation, ValueId,
-        expression::{Conversion, InvocationKind, LockOperation, MathOperation, NaNTreatment},
+        expression::{
+            ArrayElementType, Conversion, InvocationKind, LockOperation, MathOperation,
+            NaNTreatment,
+        },
     },
     jvm::{
-        ConstantValue,
+        ConstantVal,
         code::{Instruction as JVM, ProgramCounter},
     },
-    types::field_type::{FieldType, ValueCategory},
+    types::field_type::ValueCategory,
 };
 
 struct LiftContext<'values, 'frame> {
@@ -29,39 +32,39 @@ struct LiftContext<'values, 'frame> {
 }
 
 #[expect(clippy::too_many_lines, reason = "exhaustive JVM instruction dispatch")]
-pub(super) fn lift_instruction(
+pub(super) fn lift_instruction<'class>(
     values: &mut ValueContext,
-    jvm_instruction: &JVM,
+    jvm_instruction: &JVM<'class>,
     pc: ProgramCounter,
     frame: &mut Frame,
-) -> Result<Option<Operation>, FrameError> {
+) -> Result<Option<Operation<'class>>, FrameError> {
     #[allow(clippy::enum_glob_use, reason = "all variants are used")]
     use JVM::*;
 
     let mut cx = LiftContext { values, pc, frame };
 
     match jvm_instruction {
-        AConstNull => cx.constant(ConstantValue::Null, Category1),
+        AConstNull => cx.constant(ConstantVal::Null, Category1),
         IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
             let value = i32::from(jvm_instruction.opcode()) - i32::from(IConst0.opcode());
-            cx.constant(ConstantValue::Integer(value), Category1)
+            cx.constant(ConstantVal::Integer(value), Category1)
         }
         LConst0 | LConst1 => {
             let value = i64::from(jvm_instruction.opcode()) - i64::from(LConst0.opcode());
-            cx.constant(ConstantValue::Long(value), Category2)
+            cx.constant(ConstantVal::Long(value), Category2)
         }
         FConst0 | FConst1 | FConst2 => {
             let value = f32::from(jvm_instruction.opcode()) - f32::from(FConst0.opcode());
-            cx.constant(ConstantValue::Float(value), Category1)
+            cx.constant(ConstantVal::Float(value), Category1)
         }
         DConst0 | DConst1 => {
             let value = f64::from(jvm_instruction.opcode()) - f64::from(DConst0.opcode());
-            cx.constant(ConstantValue::Double(value), Category2)
+            cx.constant(ConstantVal::Double(value), Category2)
         }
-        BiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
-        SiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
-        Ldc(value) | LdcW(value) => cx.constant(value.into_owned(), Category1),
-        Ldc2W(value) => cx.constant(value.into_owned(), Category2),
+        BiPush(value) => cx.constant(ConstantVal::Integer(i32::from(*value)), Category1),
+        SiPush(value) => cx.constant(ConstantVal::Integer(i32::from(*value)), Category1),
+        Ldc(value) | LdcW(value) => cx.constant(*value, Category1),
+        Ldc2W(value) => cx.constant(*value, Category2),
         ILoad(idx) | FLoad(idx) | ALoad(idx) => cx.load((*idx).into(), Category1),
         LLoad(idx) | DLoad(idx) => cx.load((*idx).into(), Category2),
         ILoad0 | FLoad0 | ALoad0 => cx.load(0, Category1),
@@ -88,11 +91,9 @@ pub(super) fn lift_instruction(
         LALoad | DALoad => cx.array_read(Category2),
         IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => cx.array_write(Category1),
         LAStore | DAStore => cx.array_write(Category2),
-        ANewArray(element_type) => cx.new_array((*element_type).clone().into()),
-        NewArray(element_type) => cx.new_array(FieldType::Base(*element_type)),
-        MultiANewArray(element_type, dim) => {
-            cx.new_multi_array((*element_type).clone().into(), *dim)
-        }
+        ANewArray(element_type) => cx.new_array(ArrayElementType::Reference(element_type)),
+        NewArray(element_type) => cx.new_array(ArrayElementType::Primitive(*element_type)),
+        MultiANewArray(element_type, dim) => cx.new_multi_array(element_type, *dim),
         ArrayLength => cx.array_length(),
         Pop => cx.stack_effect(StackOperation::Pop),
         Pop2 => cx.stack_effect(StackOperation::Pop2),
@@ -169,12 +170,12 @@ pub(super) fn lift_instruction(
         Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(None),
         New(class) => cx.new_object(class),
         CheckCast(target) => cx.conversion(
-            |value| Conversion::CheckCast(value, (*target).clone()),
+            |value| Conversion::CheckCast(value, target),
             Category1,
             Category1,
         ),
         InstanceOf(target) => cx.conversion(
-            |value| Conversion::InstanceOf(value, (*target).clone()),
+            |value| Conversion::InstanceOf(value, target),
             Category1,
             Category1,
         ),
@@ -185,8 +186,8 @@ pub(super) fn lift_instruction(
     }
 }
 
-impl LiftContext<'_, '_> {
-    fn monitor<OP>(&mut self, operation: OP) -> Result<Option<Operation>, FrameError>
+impl<'class> LiftContext<'_, '_> {
+    fn monitor<OP>(&mut self, operation: OP) -> Result<Option<Operation<'class>>, FrameError>
     where
         OP: FnOnce(ValueId) -> LockOperation,
     {
@@ -195,7 +196,10 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Effect { expr }))
     }
 
-    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<Operation>, FrameError> {
+    fn stack_effect(
+        &mut self,
+        operation: StackOperation,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         self.frame.stack.apply(operation)?;
         Ok(None)
     }

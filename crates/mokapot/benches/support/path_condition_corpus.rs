@@ -39,13 +39,13 @@ pub fn reachable_predicate_count(method: &MokaIRMethod) -> usize {
 }
 
 #[derive(Default)]
-pub struct PathCorpus {
-    pub bins: BTreeMap<usize, Vec<MokaIRMethod>>,
+pub struct PathCorpus<'class> {
+    pub bins: BTreeMap<usize, Vec<MokaIRMethod<'class>>>,
     pub excluded: usize,
 }
 
-impl PathCorpus {
-    pub fn insert(&mut self, method: MokaIRMethod, limit: usize) {
+impl<'class> PathCorpus<'class> {
+    pub fn insert(&mut self, method: MokaIRMethod<'class>, limit: usize) {
         let count = reachable_predicate_count(&method);
         if count <= limit {
             self.bins.entry(count).or_default().push(method);

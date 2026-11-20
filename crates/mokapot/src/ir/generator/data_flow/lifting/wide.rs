@@ -4,10 +4,10 @@ use super::{FrameError, LiftContext};
 use crate::{ir::Operation, jvm::code::WideInstruction, types::field_type::ValueCategory};
 
 impl LiftContext<'_, '_> {
-    pub fn lift_wide(
+    pub fn lift_wide<'class>(
         &mut self,
         instruction: WideInstruction,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         #[allow(clippy::enum_glob_use, reason = "exhaustive dispatch")]
         use WideInstruction::*;
         match instruction {

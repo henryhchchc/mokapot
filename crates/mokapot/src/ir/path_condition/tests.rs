@@ -121,7 +121,7 @@ mod analyzer {
             expression::{Expression, Predicate},
             test::prelude::*,
         },
-        jvm::ConstantValue::{Integer, Null},
+        jvm::ConstantVal::{Integer, Null},
     };
 
     #[test]
@@ -157,7 +157,8 @@ mod analyzer {
         let [entry_id, tried, normal, handler, otherwise] = ids(0);
         let taken = Transfer::Conditional(BranchGuard::from_literal(positive));
         let missed = Transfer::Conditional(BranchGuard::from_literal(negative));
-        let caught = Transfer::Exception(Some("java/lang/RuntimeException".parse().unwrap()));
+        let catch_type = cls_name("java/lang/RuntimeException");
+        let caught = Transfer::Exception(Some(&catch_type));
         let exit = void();
 
         let selecting = branch(arm(tried, [], taken), arm(otherwise, [], missed));

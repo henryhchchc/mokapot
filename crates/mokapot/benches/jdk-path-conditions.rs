@@ -13,7 +13,9 @@ mod jdk_methods;
 mod path_condition_corpus;
 use path_condition_corpus::{PathCorpus, predicate_limit};
 
-static CORPUS: LazyLock<PathCorpus> = LazyLock::new(|| {
+static CLASSES: LazyLock<Vec<mokapot::jvm::Class>> = LazyLock::new(jdk_methods::parse_classes);
+
+static CORPUS: LazyLock<PathCorpus<'static>> = LazyLock::new(|| {
     let value = env::var("JDK_BENCH_MAX_PREDICATES");
     let limit = predicate_limit(match &value {
         Ok(value) => Some(value.as_str()),
@@ -22,9 +24,13 @@ static CORPUS: LazyLock<PathCorpus> = LazyLock::new(|| {
     })
     .expect("valid predicate limit");
     let mut corpus = PathCorpus::default();
-    jdk_methods::for_each_method(|method| {
+    for method in CLASSES
+        .iter()
+        .flat_map(mokapot::jvm::Class::methods)
+        .filter(|method| method.body().is_some())
+    {
         corpus.insert(jdk_methods::build_ir(method), limit);
-    });
+    }
     let included: usize = corpus.bins.values().map(Vec::len).sum();
     jdk_corpus::record_summary(format!(
         "Path conditions: {included} methods included; {} excluded; maximum {limit} predicate occurrences",
