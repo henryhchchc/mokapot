@@ -23,7 +23,8 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
         handler(1.into()..2.into(), 20.into(), None),
         handler(1.into()..2.into(), 30.into(), Some(exception)),
     ];
-    let ir = lift_with_pool(pool, body, "(Ljava/lang/Object;)V", table);
+    let fixture = method_with_pool(pool, body, "(Ljava/lang/Object;)V", table);
+    let ir = build(&fixture).unwrap();
     let fallible = terminator_at(&ir, 1.into());
     let transfers = fallible
         .successors()
@@ -32,7 +33,7 @@ fn catch_all_preserves_precedence_and_shadows_later_handlers() {
 
     assert_eq!(transfers.len(), 3);
     assert!(matches!(transfers[0], Some(ControlTransfer::Unconditional)));
-    assert!(matches!(transfers[1], Some(ControlTransfer::Exception(Some(it))) if it == &runtime));
+    assert!(matches!(transfers[1], Some(ControlTransfer::Exception(Some(it))) if *it == &runtime));
     assert!(matches!(
         transfers[2],
         Some(ControlTransfer::Exception(None))
@@ -51,7 +52,8 @@ fn protected_nonthrowing_operations_do_not_reach_a_handler_or_unwind() {
         (11, InstructionData::Return),
     ];
     let table = vec![handler(0.into()..2.into(), 10.into(), None)];
-    let ir = lift(body, "()V", table);
+    let fixture = method(body, "()V", table);
+    let ir = build(&fixture).unwrap();
     let entry = &ir.block(ir.entry.block).unwrap().terminator;
 
     assert_eq!(ir.blocks.len(), 1);

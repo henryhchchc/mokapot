@@ -4,8 +4,10 @@ use crate::{
     jvm::{Method, method},
 };
 
-impl MokaIRMethod {
+impl<'class> MokaIRMethod<'class> {
     /// Builds completed `MokaIR` from a JVM method.
+    ///
+    /// The result borrows JVM data from the method’s declaring class.
     ///
     /// JVM stack and local state are eliminated during construction, trivial
     /// block parameters are simplified, and only reachable blocks are emitted.
@@ -15,7 +17,7 @@ impl MokaIRMethod {
     /// Returns [`MokaIRBuildError`] when the method has no body, uses unsupported
     /// bytecode, has invalid bytecode structure or reachable frame state, or an
     /// internal construction invariant is violated.
-    pub fn from_method(method: Method<'_>) -> Result<Self, MokaIRBuildError> {
+    pub fn from_method(method: Method<'class>) -> Result<Self, MokaIRBuildError> {
         super::generator::generate(method)
     }
 
@@ -29,14 +31,14 @@ impl MokaIRMethod {
     ///
     /// Identities outside this method's block set yield `None`.
     #[must_use]
-    pub fn block(&self, id: BlockId) -> Option<&BasicBlock> {
+    pub fn block(&self, id: BlockId) -> Option<&BasicBlock<'class>> {
         self.blocks.get(&id)
     }
 
     /// Iterates over all reachable blocks and their method-local identities.
     ///
     /// The iteration order is unspecified.
-    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock)> + '_ {
+    pub fn blocks(&self) -> impl ExactSizeIterator<Item = (BlockId, &BasicBlock<'class>)> + '_ {
         self.blocks.iter().map(|(&id, block)| (id, block))
     }
 
@@ -44,7 +46,7 @@ impl MokaIRMethod {
     ///
     /// Locations outside this method's block structure yield `None`.
     #[must_use]
-    pub fn instruction(&self, location: InstructionLocation) -> Option<InstructionRef<'_>> {
+    pub fn instruction(&self, location: InstructionLocation) -> Option<InstructionRef<'_, 'class>> {
         Some(match location {
             InstructionLocation::BlockParameter { block, index } => {
                 InstructionRef::BlockParameter(self.block(block)?.parameters.get(index)?)
@@ -65,12 +67,12 @@ mod petgraph_impl {
     use petgraph::visit::{GraphBase, IntoNeighbors, Visitable};
     use std::collections::HashSet;
 
-    impl GraphBase for MokaIRMethod {
+    impl GraphBase for MokaIRMethod<'_> {
         type EdgeId = (BlockId, BlockId);
         type NodeId = BlockId;
     }
 
-    impl IntoNeighbors for &MokaIRMethod {
+    impl IntoNeighbors for &MokaIRMethod<'_> {
         type Neighbors = <Vec<BlockId> as IntoIterator>::IntoIter;
 
         fn neighbors(self, a: Self::NodeId) -> Self::Neighbors {
@@ -83,7 +85,7 @@ mod petgraph_impl {
         }
     }
 
-    impl Visitable for MokaIRMethod {
+    impl Visitable for MokaIRMethod<'_> {
         type Map = HashSet<BlockId>;
 
         fn visit_map(&self) -> Self::Map {

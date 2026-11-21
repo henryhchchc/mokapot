@@ -11,19 +11,19 @@ use crate::{
     jvm::code::{ExceptionTableEntry, MethodBody, ProgramCounter as PC},
 };
 
-pub(super) struct BlockLayout {
+pub(super) struct BlockLayout<'class> {
     entry: PC,
-    blocks: BTreeMap<PC, BlockShape>,
+    blocks: BTreeMap<PC, BlockShape<'class>>,
 }
 
-pub(super) struct BlockShape {
+pub(super) struct BlockShape<'class> {
     pub end_pc: PC,
-    pub exit: BlockExit<PC>,
+    pub exit: BlockExit<'class, PC>,
 }
 
-impl BlockLayout {
+impl<'class> BlockLayout<'class> {
     /// Partitions `body`, validating every decoded instruction and leader.
-    pub(super) fn of(body: MethodBody<'_>) -> Result<Self, Error> {
+    pub(super) fn of(body: MethodBody<'class>) -> Result<Self, Error> {
         let entry = body
             .instructions()
             .entry_point()
@@ -64,14 +64,14 @@ impl BlockLayout {
     }
 
     /// Returns the block starting at `start_pc`.
-    pub(super) fn block(&self, start_pc: PC) -> &BlockShape {
+    pub(super) fn block(&self, start_pc: PC) -> &BlockShape<'class> {
         self.blocks
             .get(&start_pc)
             .expect("a discovered block starts at a leader")
     }
 
     /// Takes the block starting at `start_pc`.
-    pub(super) fn take(&mut self, start_pc: PC) -> BlockShape {
+    pub(super) fn take(&mut self, start_pc: PC) -> BlockShape<'class> {
         self.blocks
             .remove(&start_pc)
             .expect("a discovered block starts at a leader")
@@ -82,7 +82,7 @@ impl BlockLayout {
 fn leaders(
     body: MethodBody<'_>,
     entry: PC,
-    exits: &BTreeMap<PC, BlockExit<PC>>,
+    exits: &BTreeMap<PC, BlockExit<'_, PC>>,
 ) -> Result<BTreeSet<PC>, Error> {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 

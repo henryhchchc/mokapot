@@ -10,16 +10,16 @@ use crate::ir::{ValueId, generator::data_flow::FrameError};
 
 /// Mutable analysis state for one reachable block.
 #[derive(Debug)]
-pub(super) struct BlockState {
+pub(super) struct BlockState<'class> {
     incoming_frames: HashMap<FrameSource, Frame>,
     parameters: BlockParameters,
     /// The most recently merged input frame.
     input: Frame,
     /// The interpretation of `input`, once the block has run with it.
-    result: Option<FrameBlock>,
+    result: Option<FrameBlock<'class>>,
 }
 
-impl BlockState {
+impl<'class> BlockState<'class> {
     pub(super) fn new(source: FrameSource, frame: Frame) -> Self {
         Self {
             incoming_frames: HashMap::from([(source, frame.clone())]),
@@ -51,7 +51,7 @@ impl BlockState {
         self.input.clone()
     }
 
-    pub(super) fn complete(&mut self, block: FrameBlock) {
+    pub(super) fn complete(&mut self, block: FrameBlock<'class>) {
         debug_assert!(
             self.result.is_none(),
             "a block was completed without being reinterpreted"
@@ -59,7 +59,7 @@ impl BlockState {
         self.result = Some(block);
     }
 
-    pub(super) fn into_solution(self) -> BlockSolution {
+    pub(super) fn into_solution(self) -> BlockSolution<'class> {
         let block = self
             .result
             .expect("the worklist drains only after every block is interpreted");
@@ -146,8 +146,8 @@ impl BlockParameters {
 
 /// One block after fixed-point execution has completed.
 #[derive(Debug)]
-pub(crate) struct BlockSolution {
+pub(crate) struct BlockSolution<'class> {
     pub(crate) incoming_frames: HashMap<FrameSource, Frame>,
     pub(crate) parameters: BTreeMap<Position, ValueId>,
-    pub(crate) block: FrameBlock,
+    pub(crate) block: FrameBlock<'class>,
 }

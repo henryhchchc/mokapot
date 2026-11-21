@@ -10,7 +10,7 @@ use mokapot::{
         BasicBlock, BlockId, InstructionLocation, InstructionRef, MokaIRMethod, Operation,
         Successor, Terminator, expression::Expression,
     },
-    jvm::{Class, ConstantValue, code::ProgramCounter},
+    jvm::{Class, ConstantVal, code::ProgramCounter},
 };
 
 mod provenance;
@@ -22,23 +22,19 @@ fn get_test_class() -> Class {
     Class::from_bytes(&bytes).unwrap()
 }
 
-fn get_test_ir() -> MokaIRMethod {
-    let class = get_test_class();
-    let method = class
-        .methods()
-        .find(|method| method.name() == "test")
-        .unwrap();
-    MokaIRMethod::from_method(method).unwrap()
-}
-
-fn terminator(method: &MokaIRMethod, location: InstructionLocation) -> Option<&Terminator> {
+fn terminator<'ir, 'class>(
+    method: &'ir MokaIRMethod<'class>,
+    location: InstructionLocation,
+) -> Option<&'ir Terminator<'class>> {
     match method.instruction(location) {
         Some(InstructionRef::Terminator(terminator)) => Some(terminator),
         Some(InstructionRef::BlockParameter(_) | InstructionRef::Operation(_)) | None => None,
     }
 }
 
-fn reachable_blocks(ir: &MokaIRMethod) -> Vec<(BlockId, &BasicBlock)> {
+fn reachable_blocks<'ir, 'class>(
+    ir: &'ir MokaIRMethod<'class>,
+) -> Vec<(BlockId, &'ir BasicBlock<'class>)> {
     let mut result = Vec::new();
     let mut visited = HashSet::new();
     let mut pending = VecDeque::from([ir.entry.block]);

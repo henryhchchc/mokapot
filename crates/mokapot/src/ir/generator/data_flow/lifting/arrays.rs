@@ -2,12 +2,18 @@ use ValueCategory::Category1;
 
 use super::{FrameError, LiftContext};
 use crate::{
-    ir::{Operation, expression::ArrayOperation},
-    types::field_type::{FieldType, ValueCategory},
+    ir::{
+        Operation,
+        expression::{ArrayElementType, ArrayOperation},
+    },
+    types::{field_type::ValueCategory, reference_type::ReferenceType},
 };
 
-impl LiftContext<'_, '_> {
-    pub fn array_read(&mut self, category: ValueCategory) -> Result<Option<Operation>, FrameError> {
+impl<'class> LiftContext<'_, '_> {
+    pub fn array_read(
+        &mut self,
+        category: ValueCategory,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -19,7 +25,7 @@ impl LiftContext<'_, '_> {
     pub fn array_write(
         &mut self,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.frame.stack.pop(category)?;
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
@@ -32,7 +38,10 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Effect { expr }))
     }
 
-    pub fn new_array(&mut self, element_type: FieldType) -> Result<Option<Operation>, FrameError> {
+    pub fn new_array(
+        &mut self,
+        element_type: ArrayElementType<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let length = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;
@@ -46,9 +55,9 @@ impl LiftContext<'_, '_> {
 
     pub fn new_multi_array(
         &mut self,
-        element_type: FieldType,
+        array_type: &'class ReferenceType,
         dimension: u8,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let mut dimensions: Vec<_> = (0..dimension)
             .map(|_| self.frame.stack.pop(Category1))
@@ -56,14 +65,14 @@ impl LiftContext<'_, '_> {
         dimensions.reverse();
         self.frame.stack.push(value, Category1)?;
         let expr = ArrayOperation::NewMultiDim {
-            element_type,
+            array_type,
             dimensions,
         }
         .into();
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn array_length(&mut self) -> Result<Option<Operation>, FrameError> {
+    pub fn array_length(&mut self) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let array_ref = self.frame.stack.pop(Category1)?;
         self.frame.stack.push(value, Category1)?;

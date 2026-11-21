@@ -5,7 +5,7 @@ use crate::types::reference_type::ReferenceType;
 
 /// An operation that converts between types.
 #[derive(Debug, Clone, PartialEq, Eq, Display)]
-pub enum Operation {
+pub enum Operation<'class> {
     /// Converts an `int` to a `long`.
     #[display("{_0} as long")]
     Int2Long(ValueId),
@@ -53,8 +53,8 @@ pub enum Operation {
     Int2Short(ValueId),
     /// Checks if an object is an instance of a given type, and casts it to that type if so.
     #[display("{_0} as {_1}")]
-    CheckCast(ValueId, ReferenceType),
+    CheckCast(ValueId, &'class ReferenceType),
     /// Checks whether an object is an instance of a given type.
     #[display("{_0} is {_1}")]
-    InstanceOf(ValueId, ReferenceType),
+    InstanceOf(ValueId, &'class ReferenceType),
 }

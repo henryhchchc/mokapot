@@ -9,11 +9,11 @@ use crate::{
     types::field_type::ValueCategory,
 };
 
-impl LiftContext<'_, '_> {
+impl<'class> LiftContext<'_, '_> {
     pub fn shift_long(
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let shift_amount = self.frame.stack.pop(Category1)?;
         let base = self.frame.stack.pop(Category2)?;
@@ -22,7 +22,7 @@ impl LiftContext<'_, '_> {
         Ok(Some(Operation::Definition { value, expr }))
     }
 
-    pub fn compare_long(&mut self) -> Result<Option<Operation>, FrameError> {
+    pub fn compare_long(&mut self) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let rhs = self.frame.stack.pop(Category2)?;
         let lhs = self.frame.stack.pop(Category2)?;
@@ -35,7 +35,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         nan_treatment: NaNTreatment,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;
@@ -48,7 +48,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let rhs = self.frame.stack.pop(category)?;
         let lhs = self.frame.stack.pop(category)?;
@@ -60,10 +60,10 @@ impl LiftContext<'_, '_> {
 
     pub fn conversion(
         &mut self,
-        conversion: impl FnOnce(ValueId) -> Conversion,
+        conversion: impl FnOnce(ValueId) -> Conversion<'class>,
         operand_category: ValueCategory,
         result_category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let operand = self.frame.stack.pop(operand_category)?;
         self.frame.stack.push(value, result_category)?;
@@ -75,7 +75,7 @@ impl LiftContext<'_, '_> {
         &mut self,
         operation: impl FnOnce(ValueId) -> MathOperation,
         category: ValueCategory,
-    ) -> Result<Option<Operation>, FrameError> {
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         let operand = self.frame.stack.pop(category)?;
         self.frame.stack.push(value, category)?;
