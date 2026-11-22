@@ -1,9 +1,6 @@
 //! The static partition of a decoded body into leader-delimited blocks.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Bound,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::BlockExit;
 use crate::{
@@ -24,37 +21,38 @@ pub(super) struct BlockShape<'class> {
 impl<'class> BlockLayout<'class> {
     /// Partitions `body`, validating every decoded instruction and leader.
     pub(super) fn of(body: MethodBody<'class>) -> Result<Self, Error> {
-        let entry = body
-            .instructions()
-            .entry_point()
-            .map(|(pc, _)| pc)
+        let mut instructions = body.instructions().iter().peekable();
+        let entry = instructions
+            .peek()
+            .map(|&(pc, _)| pc)
             .ok_or(ErrorKind::MissingOrEmptyBody)?;
-        let mut exits = body
-            .instructions()
-            .iter()
-            .map(|(pc, instruction)| {
-                BlockExit::of(body, pc, &instruction)
-                    .at_pc(pc)
-                    .map(|exit| (pc, exit))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
-        let leaders = leaders(body, entry, &exits)?;
-        let last_pc = exits
-            .last_key_value()
-            .map(|(pc, _)| *pc)
-            .expect("a body with an entry point has instructions");
 
-        let blocks = leaders
-            .iter()
-            .copied()
-            .map(|start_pc| {
-                let end_pc = block_end(body, &leaders, last_pc, start_pc);
-                let exit = exits
-                    .remove(&end_pc)
-                    .expect("a block's final instruction is decoded");
-                (start_pc, BlockShape { end_pc, exit })
-            })
-            .collect();
+        let mut leaders = BTreeSet::from([entry]);
+        leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
+        let mut exits = Vec::with_capacity(instructions.len());
+        while let Some((pc, instruction)) = instructions.next() {
+            let next_pc = instructions.peek().map(|&(pc, _)| pc);
+            let exit = BlockExit::of(body, pc, next_pc, &instruction).at_pc(pc)?;
+            add_leaders(&mut leaders, &exit, next_pc);
+            exits.push((pc, exit));
+        }
+
+        let mut leaders = leaders.into_iter().peekable();
+        let mut exits = exits.into_iter().peekable();
+        let blocks = std::iter::from_fn(|| {
+            let start_pc = leaders.next()?;
+            let next_start = leaders.peek().copied();
+            let Some(mut last) = exits.next_if(|(pc, _)| *pc == start_pc) else {
+                return Some(Err(ErrorKind::MissingInstruction).at_pc(start_pc));
+            };
+            while let Some(next) = exits.next_if(|(pc, _)| next_start.is_none_or(|next| *pc < next))
+            {
+                last = next;
+            }
+            let (end_pc, exit) = last;
+            Some(Ok((start_pc, BlockShape { end_pc, exit })))
+        })
+        .collect::<Result<_, _>>()?;
         Ok(Self { entry, blocks })
     }
 
@@ -78,58 +76,22 @@ impl<'class> BlockLayout<'class> {
     }
 }
 
-/// Collects every block leader, checking each names a decoded instruction.
-fn leaders(
-    body: MethodBody<'_>,
-    entry: PC,
-    exits: &BTreeMap<PC, BlockExit<'_, PC>>,
-) -> Result<BTreeSet<PC>, Error> {
+fn add_leaders(leaders: &mut BTreeSet<PC>, exit: &BlockExit<'_, PC>, next_pc: Option<PC>) {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
-    let mut leaders = BTreeSet::from([entry]);
-    leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
-
-    for (&pc, exit) in exits {
-        match exit {
-            Continue { .. } | Return { .. } | Throw { .. } => {}
-            Goto { target } => {
-                leaders.insert(*target);
-            }
-            Branch { taken, otherwise } => {
-                leaders.insert(*taken);
-                leaders.insert(*otherwise);
-            }
-            Switch { cases, default } => {
-                leaders.extend(cases.values());
-                leaders.insert(*default);
-            }
+    match exit {
+        Continue { .. } | Return { .. } | Throw { .. } => {}
+        Goto { target } | Branch { taken: target, .. } => {
+            leaders.insert(*target);
         }
-        if exit.forces_block_boundary() {
-            leaders.extend(body.instructions().next_pc_of(&pc));
+        Switch { cases, default } => {
+            leaders.extend(cases.values());
+            leaders.insert(*default);
         }
     }
-
-    if let Some(&pc) = leaders
-        .iter()
-        .find(|pc| body.instruction_at(**pc).is_none())
-    {
-        return Err(ErrorKind::MissingInstruction).at_pc(pc);
+    if exit.forces_block_boundary() {
+        leaders.extend(next_pc);
     }
-    Ok(leaders)
-}
-
-/// The final instruction of the block starting at `start_pc`.
-///
-/// A block spans from its leader up to the instruction before the next leader.
-fn block_end(body: MethodBody<'_>, leaders: &BTreeSet<PC>, last_pc: PC, start_pc: PC) -> PC {
-    leaders
-        .range((Bound::Excluded(start_pc), Bound::Unbounded))
-        .next()
-        .map_or(last_pc, |&next| {
-            body.instructions()
-                .prev_pc_of(&next)
-                .expect("a later leader is preceded by the previous leader")
-        })
 }
 
 #[cfg(test)]
@@ -147,12 +109,18 @@ mod tests {
 
     #[test]
     fn rejects_missing_jump_targets_in_reachable_and_unreachable_code() {
-        for entry in [InstructionData::Nop, InstructionData::Return] {
-            let instructions = [(0, entry), (1, InstructionData::Goto(10.into()))];
+        let cases = [(InstructionData::Nop, 2), (InstructionData::Return, 10)];
+        for (entry, target) in cases {
+            let instructions = [
+                (0, entry),
+                (1, InstructionData::Goto(target.into())),
+                (4, InstructionData::Return),
+            ];
             let method = method(instructions, "()V", vec![]);
             let body = method.as_method().body().unwrap();
             let error = BlockLayout::of(body).err().unwrap();
             assert_eq!(error.kind, ErrorKind::MissingInstruction);
+            assert_eq!(error.pc, Some(target.into()));
         }
     }
 

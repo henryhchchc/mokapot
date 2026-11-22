@@ -89,6 +89,7 @@ impl<'class> BlockExit<'class, ProgramCounter> {
     pub(super) fn of(
         body: MethodBody<'class>,
         pc: ProgramCounter,
+        next_pc: Option<ProgramCounter>,
         instruction: &Instruction,
     ) -> Result<Self, ErrorKind> {
         use Instruction::{
@@ -96,11 +97,7 @@ impl<'class> BlockExit<'class, ProgramCounter> {
             IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
             IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
         };
-        let next = || {
-            body.instructions()
-                .next_pc_of(&pc)
-                .ok_or(ErrorKind::MissingFallthrough)
-        };
+        let next = || next_pc.ok_or(ErrorKind::MissingFallthrough);
         if let Instruction::MultiANewArray(array_type, dimensions) = instruction
             && !valid_multi_array_dimensions(array_type, *dimensions)
         {
@@ -216,7 +213,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
+                BlockExit::of(body, 0.into(), Some(10.into()), &instruction),
                 Err(ErrorKind::InvalidTableSwitchRange)
             );
         }
@@ -235,7 +232,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
+                BlockExit::of(body, 0.into(), Some(1.into()), &instruction),
                 Err(ErrorKind::InvalidMultiArrayDimensions)
             );
         }
@@ -254,7 +251,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let view = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &view),
+                BlockExit::of(body, 0.into(), None, &view),
                 Err(ErrorKind::UnsupportedLegacySubroutine)
             );
         }
@@ -265,7 +262,7 @@ mod tests {
         let method = method([(4, InstructionData::Nop)], "()V", vec![]);
         let body = method.as_method().body().unwrap();
         assert_eq!(
-            BlockExit::of(body, 4.into(), &Instruction::Nop),
+            BlockExit::of(body, 4.into(), None, &Instruction::Nop),
             Err(ErrorKind::MissingFallthrough)
         );
     }
