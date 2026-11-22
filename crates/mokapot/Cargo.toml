@@ -39,6 +39,7 @@ document-features = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true, optional = true }
 simd_cesu8 = { workspace = true }
+smallvec = { workspace = true, features = ["union"] }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
 zerocopy = { workspace = true, features = ["simd", "std"] }
