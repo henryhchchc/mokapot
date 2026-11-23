@@ -59,7 +59,7 @@ impl<'method> BlockInterpreter<'method, '_> {
                 start_pc,
                 end_pc,
                 exit,
-            } => self.interpret_bytecode(values, *start_pc, *end_pc, exit.clone(), input),
+            } => self.interpret_bytecode(values, *start_pc, *end_pc, exit, input),
             CfgNode::LandingPad { successor } => {
                 let caught = *input.handler_exception()?;
                 let kind = BlockKind::LandingPad { exception: caught };
@@ -93,7 +93,7 @@ impl<'method> BlockInterpreter<'method, '_> {
         values: &mut ValueContext,
         start_pc: ProgramCounter,
         end_pc: ProgramCounter,
-        exit: BlockExit<'method, BlockId>,
+        exit: &BlockExit<'method, BlockId>,
         input: Frame,
     ) -> Result<FrameBlock<'method>, Error> {
         let mut frame = input;
@@ -114,7 +114,7 @@ impl<'method> BlockInterpreter<'method, '_> {
             }
         }
         let terminator_source = exit.forces_block_boundary().then_some(final_pc);
-        let exit_state = ExitState::new(instruction, final_pc, frame, &exit);
+        let exit_state = ExitState::new(instruction, final_pc, frame, exit);
         let terminator = exit_state
             .terminate(values, exit, &mut operations)
             .at_pc(final_pc)?;

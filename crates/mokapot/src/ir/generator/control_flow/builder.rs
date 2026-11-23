@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, hash_map::Entry};
 
 use super::{
     BlockExit, Cfg, CfgNode, Error, ExceptionArm, ExceptionTarget,
@@ -13,9 +13,8 @@ use crate::{
 pub(super) fn build(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     let body = method.body().ok_or(ErrorKind::MissingOrEmptyBody)?;
     let mut layout = BlockLayout::of(body)?;
-    let reachable = ReachableNodes::discover(&layout);
-    let ids = NodeIds::allocate(&reachable);
-    let blocks = materialize(&mut layout, &reachable, &ids);
+    let ids = NodeIds::discover(&layout);
+    let blocks = materialize(&mut layout, &ids);
 
     Ok(Cfg {
         method,
@@ -25,49 +24,37 @@ pub(super) fn build(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     })
 }
 
-/// Reachable topology nodes in deterministic breadth-first order.
-struct ReachableNodes {
-    entry: NodeKey,
-    order: Vec<NodeKey>,
-}
-
-impl ReachableNodes {
-    /// Discovers topology without allocating identities or consuming the layout.
-    fn discover(layout: &BlockLayout) -> Self {
-        let entry = NodeKey::Code(layout.entry());
-        let mut seen = HashSet::from([entry]);
-        let mut pending = VecDeque::from([entry]);
-        let mut order = Vec::new();
-
-        while let Some(node) = pending.pop_front() {
-            order.push(node);
-            node.visit_successors(layout, |successor| {
-                if seen.insert(successor) {
-                    pending.push_back(successor);
-                }
-            });
-        }
-        Self { entry, order }
-    }
-}
-
-/// Dense identities assigned after the reachable topology is fixed.
+/// Identities assigned to reachable nodes in deterministic breadth-first order.
 struct NodeIds {
     entry: BlockId,
     by_key: HashMap<NodeKey, BlockId>,
+    order: Vec<(NodeKey, BlockId)>,
 }
 
 impl NodeIds {
-    fn allocate(reachable: &ReachableNodes) -> Self {
+    fn discover(layout: &BlockLayout) -> Self {
         let mut allocator = IdAllocator::default();
-        let by_key: HashMap<_, _> = reachable
-            .order
-            .iter()
-            .copied()
-            .map(|node| (node, allocator.new_id()))
-            .collect();
-        let entry = by_key[&reachable.entry];
-        Self { entry, by_key }
+        let entry = allocator.new_id();
+        let entry_node = NodeKey::Code(layout.entry());
+        let mut by_key = HashMap::from([(entry_node, entry)]);
+        let mut order = vec![(entry_node, entry)];
+        let mut next = 0;
+
+        while let Some(&(node, _)) = order.get(next) {
+            node.visit_successors(layout, |successor| {
+                if let Entry::Vacant(slot) = by_key.entry(successor) {
+                    let id = allocator.new_id();
+                    slot.insert(id);
+                    order.push((successor, id));
+                }
+            });
+            next += 1;
+        }
+        Self {
+            entry,
+            by_key,
+            order,
+        }
     }
 
     fn get(&self, node: NodeKey) -> BlockId {
@@ -78,15 +65,11 @@ impl NodeIds {
 /// Materializes reachable nodes now that every target identity is known.
 fn materialize<'class>(
     layout: &mut BlockLayout<'class>,
-    reachable: &ReachableNodes,
     ids: &NodeIds,
 ) -> HashMap<BlockId, CfgNode<'class>> {
-    reachable
-        .order
+    ids.order
         .iter()
-        .copied()
-        .map(|node| {
-            let id = ids.get(node);
+        .map(|&(node, id)| {
             let block = match node {
                 NodeKey::Code(pc) => {
                     let BlockShape { end_pc, exit } = layout.take(pc);
@@ -160,7 +143,7 @@ fn link_exception_arms<'class>(
         .collect()
 }
 
-/// A topology node whose block identity has not yet been allocated.
+/// A topology node identified by its kind and bytecode location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum NodeKey {
     /// A bytecode block starting at the given location.
