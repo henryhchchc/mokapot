@@ -4,6 +4,8 @@ use crate::types::class_name::ClassName;
 
 use std::collections::BTreeMap;
 
+use smallvec::SmallVec;
+
 use super::fallibility::fallthrough_may_throw;
 use crate::{
     ir::generator::error::ErrorKind,
@@ -16,7 +18,7 @@ use crate::{
 pub(crate) enum BlockExit<'class, T> {
     Continue {
         next: T,
-        exception_arms: Vec<ExceptionArm<'class, T>>,
+        exception_arms: ExceptionArms<'class, T>,
     },
     Goto {
         target: T,
@@ -30,10 +32,10 @@ pub(crate) enum BlockExit<'class, T> {
         default: T,
     },
     Return {
-        exception_arms: Vec<ExceptionArm<'class, T>>,
+        exception_arms: ExceptionArms<'class, T>,
     },
     Throw {
-        exception_arms: Vec<ExceptionArm<'class, T>>,
+        exception_arms: ExceptionArms<'class, T>,
     },
 }
 
@@ -42,10 +44,13 @@ impl<T> BlockExit<'_, T> {
     ///
     /// A continuation without exception arms proceeds into the next instruction
     /// without its own terminator.
-    pub(crate) const fn forces_block_boundary(&self) -> bool {
+    pub(crate) fn forces_block_boundary(&self) -> bool {
         !matches!(self, Self::Continue { exception_arms, .. } if exception_arms.is_empty())
     }
 }
+
+/// Ordered exception arms with inline storage for a single arm.
+pub(super) type ExceptionArms<'class, T> = SmallVec<[ExceptionArm<'class, T>; 1]>;
 
 /// One ordered exception arm of a throwing instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,7 +151,7 @@ impl<'class> BlockExit<'class, ProgramCounter> {
                 exception_arms: if fallthrough_may_throw(instruction) {
                     exception_arms(body, pc)
                 } else {
-                    Vec::new()
+                    ExceptionArms::new()
                 },
             },
         })
@@ -174,11 +179,8 @@ fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> b
 ///
 /// Selection walks the table in order, so the first catch-all shadows later
 /// entries and an escaping exception unwinds.
-fn exception_arms(
-    body: MethodBody<'_>,
-    pc: ProgramCounter,
-) -> Vec<ExceptionArm<'_, ProgramCounter>> {
-    let mut exception_arms = Vec::new();
+fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> ExceptionArms<'_, ProgramCounter> {
+    let mut exception_arms = ExceptionArms::new();
     for entry in body.exception_table().filter(|entry| entry.covers(pc)) {
         exception_arms.push(ExceptionArm {
             target: ExceptionTarget::Handler(entry.handler_pc()),

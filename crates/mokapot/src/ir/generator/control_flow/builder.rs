@@ -2,6 +2,7 @@ use std::collections::{HashMap, hash_map::Entry};
 
 use super::{
     BlockExit, Cfg, CfgNode, Error, ExceptionArm, ExceptionTarget,
+    block_exit::ExceptionArms,
     layout::{BlockLayout, BlockShape},
 };
 use crate::{
@@ -126,9 +127,9 @@ fn link_exit<'class>(
 }
 
 fn link_exception_arms<'class>(
-    exception_arms: Vec<ExceptionArm<'class, ProgramCounter>>,
+    exception_arms: ExceptionArms<'class, ProgramCounter>,
     ids: &NodeIds,
-) -> Vec<ExceptionArm<'class, BlockId>> {
+) -> ExceptionArms<'class, BlockId> {
     exception_arms
         .into_iter()
         .map(|arm| ExceptionArm {
