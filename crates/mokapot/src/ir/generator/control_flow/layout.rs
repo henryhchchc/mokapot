@@ -63,13 +63,6 @@ impl<'class> BlockLayout<'class> {
         self.entry
     }
 
-    /// Returns the block starting at `start_pc`.
-    pub(super) fn block(&self, start_pc: PC) -> &BlockShape<'class> {
-        self.blocks
-            .get(&start_pc)
-            .expect("a discovered block starts at a leader")
-    }
-
     /// Takes the block starting at `start_pc`.
     pub(super) fn take(&mut self, start_pc: PC) -> BlockShape<'class> {
         self.blocks
