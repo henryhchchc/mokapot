@@ -1,6 +1,6 @@
 //! The static partition of a decoded body into leader-delimited blocks.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::BlockExit;
 use crate::{
@@ -27,7 +27,7 @@ impl<'class> BlockLayout<'class> {
             .map(|&(pc, _)| pc)
             .ok_or(ErrorKind::MissingOrEmptyBody)?;
 
-        let mut leaders = BTreeSet::from([entry]);
+        let mut leaders = vec![entry];
         leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
         let mut exits = Vec::with_capacity(instructions.len());
         while let Some((pc, instruction)) = instructions.next() {
@@ -37,6 +37,8 @@ impl<'class> BlockLayout<'class> {
             exits.push((pc, exit));
         }
 
+        leaders.sort_unstable();
+        leaders.dedup();
         let mut leaders = leaders.into_iter().peekable();
         let mut exits = exits.into_iter().peekable();
         let blocks = std::iter::from_fn(|| {
@@ -76,17 +78,17 @@ impl<'class> BlockLayout<'class> {
     }
 }
 
-fn add_leaders(leaders: &mut BTreeSet<PC>, exit: &BlockExit<'_, PC>, next_pc: Option<PC>) {
+fn add_leaders(leaders: &mut Vec<PC>, exit: &BlockExit<'_, PC>, next_pc: Option<PC>) {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
     match exit {
         Continue { .. } | Return { .. } | Throw { .. } => {}
         Goto { target } | Branch { taken: target, .. } => {
-            leaders.insert(*target);
+            leaders.push(*target);
         }
         Switch { cases, default } => {
-            leaders.extend(cases.values());
-            leaders.insert(*default);
+            leaders.extend(cases.iter().map(|&(_, target)| target));
+            leaders.push(*default);
         }
     }
     if exit.forces_block_boundary() {

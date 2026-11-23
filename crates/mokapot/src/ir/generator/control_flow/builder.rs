@@ -180,8 +180,8 @@ fn visit_exit_successors(exit: &BlockExit<'_, ProgramCounter>, mut visit: impl F
             visit(NodeKey::Code(*otherwise));
         }
         Switch { cases, default } => {
-            for target in cases.values() {
-                visit(NodeKey::Code(*target));
+            for &(_, target) in cases {
+                visit(NodeKey::Code(target));
             }
             visit(NodeKey::Code(*default));
         }

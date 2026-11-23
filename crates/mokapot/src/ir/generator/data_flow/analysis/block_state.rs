@@ -1,6 +1,6 @@
 //! Mutable frame merging and execution state for one block.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, hash_map::Entry};
 
 use super::{
     Frame, Position, ValueContext,
@@ -35,7 +35,12 @@ impl<'class> BlockState<'class> {
         frame: Frame,
         values: &mut ValueContext,
     ) -> Result<bool, FrameError> {
-        self.incoming_frames.insert(source, frame);
+        match self.incoming_frames.entry(source) {
+            Entry::Occupied(entry) if entry.get() == &frame => return Ok(false),
+            entry => {
+                entry.insert_entry(frame);
+            }
+        }
         debug_assert!(
             self.parameters.declared.is_empty() || self.incoming_frames.len() >= 2,
             "a parameter was declared without a second incoming frame"

@@ -2,8 +2,6 @@
 
 use crate::types::class_name::ClassName;
 
-use std::collections::BTreeMap;
-
 use smallvec::SmallVec;
 
 use super::fallibility::fallthrough_may_throw;
@@ -28,7 +26,8 @@ pub(crate) enum BlockExit<'class, T> {
         otherwise: T,
     },
     Switch {
-        cases: BTreeMap<i32, T>,
+        /// Cases in ascending key order.
+        cases: Box<[(i32, T)]>,
         default: T,
     },
     Return {
@@ -143,7 +142,7 @@ impl<'class> BlockExit<'class, ProgramCounter> {
                 match_targets,
                 default,
             } => Self::Switch {
-                cases: match_targets.iter().copied().collect(),
+                cases: Box::from(*match_targets),
                 default: *default,
             },
             _ => Self::Continue {

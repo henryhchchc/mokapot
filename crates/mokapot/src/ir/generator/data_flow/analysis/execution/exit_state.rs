@@ -1,7 +1,5 @@
 //! Interpretation of a block's final instruction into its terminator.
 
-use std::collections::BTreeMap;
-
 use super::{Frame, FrameArm, FrameTerminator, ValueContext, effects, lifting};
 use crate::{
     ir::{
@@ -130,7 +128,7 @@ impl<'instruction> ExitState<'instruction> {
     /// Interprets a switch, whose selector is popped and matched by the final instruction.
     fn terminate_switch(
         mut self,
-        cases: &BTreeMap<i32, BlockId>,
+        cases: &[(i32, BlockId)],
         default: BlockId,
     ) -> Result<FrameTerminator<'instruction>, FrameError> {
         let selector = effects::switch_selector(&mut self.frame)?;
@@ -146,7 +144,7 @@ impl<'instruction> ExitState<'instruction> {
         let default_transfer = effects::default_guard(selector, cases);
         let cases = cases
             .iter()
-            .map(|(&case, &target)| {
+            .map(|&(case, target)| {
                 let transfer = effects::case_guard(selector, case);
                 FrameArm::block(ArmKey::Case(case), target, transfer, self.frame.clone())
             })

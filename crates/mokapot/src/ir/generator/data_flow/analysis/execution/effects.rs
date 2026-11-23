@@ -1,7 +1,5 @@
 //! Dataflow effects of a structural block's final instruction.
 
-use std::collections::BTreeMap;
-
 use ValueCategory::{Category1, Category2};
 
 use super::Frame;
@@ -43,11 +41,11 @@ pub(super) fn case_guard(selector: ValueId, case: i32) -> ControlTransfer<'stati
 /// The transfer covering every value `selector` can hold when no case matches.
 pub(super) fn default_guard(
     selector: ValueId,
-    cases: &BTreeMap<i32, BlockId>,
+    cases: &[(i32, BlockId)],
 ) -> ControlTransfer<'static> {
     let branches = cases
-        .keys()
-        .map(|&case| BooleanVariable::Negative(equal(selector, case)))
+        .iter()
+        .map(|&(case, _)| BooleanVariable::Negative(equal(selector, case)))
         .collect();
     ControlTransfer::Conditional(branches)
 }
