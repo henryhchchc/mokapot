@@ -97,7 +97,7 @@ impl<'method> BlockInterpreter<'method, '_> {
         input: Frame,
     ) -> Result<FrameBlock<'method>, Error> {
         let mut frame = input;
-        let mut instructions = self.cfg.instructions_in(start_pc, end_pc);
+        let mut instructions = self.cfg.body().instructions().range(start_pc..=end_pc);
         let (final_pc, instruction) = instructions
             .next_back()
             .expect("a structural block contains its final instruction");

@@ -17,7 +17,7 @@ use crate::{
     ir::BlockId,
     jvm::{
         Method,
-        code::{Instruction, MethodBody, ProgramCounter},
+        code::{MethodBody, ProgramCounter},
     },
 };
 
@@ -56,14 +56,6 @@ impl<'method> Cfg<'method> {
         self.blocks
             .get(&id)
             .expect("a CFG block identity belongs to its graph")
-    }
-
-    pub fn instructions_in(
-        &self,
-        start: ProgramCounter,
-        end: ProgramCounter,
-    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, Instruction<'method>)> {
-        self.body().instructions().range(start..=end)
     }
 }
 
