@@ -45,22 +45,26 @@ impl<'class> BlockLayout<'class> {
             .collect();
         leaders.sort_unstable();
         leaders.dedup();
-        let mut leaders = leaders.into_iter().peekable();
-        let mut exits = exits.into_iter().peekable();
-        let blocks = std::iter::from_fn(|| {
-            let start_pc = leaders.next()?;
-            let next_start = leaders.peek().copied();
-            let Some(mut last) = exits.next_if(|(pc, _)| *pc == start_pc) else {
-                return Some(Err(ErrorKind::MissingInstruction).at_pc(start_pc));
-            };
-            while let Some(next) = exits.next_if(|(pc, _)| next_start.is_none_or(|next| *pc < next))
-            {
-                last = next;
-            }
-            let (end_pc, exit) = last;
-            Some(Ok((start_pc, BlockShape { end_pc, exit })))
-        })
-        .collect::<Result<_, _>>()?;
+
+        let bounds = leaders
+            .array_windows::<2>()
+            .map(|&[start_pc, next_start]| (start_pc, Some(next_start)))
+            .chain(leaders.last().copied().map(|start_pc| (start_pc, None)));
+        let blocks = bounds
+            .scan(
+                exits.into_iter().peekable(),
+                |exits, (start_pc, next_start)| {
+                    let Some(first) = exits.next_if(|(pc, _)| *pc == start_pc) else {
+                        return Some(Err(ErrorKind::MissingInstruction).at_pc(start_pc));
+                    };
+                    let rest = std::iter::from_fn(|| {
+                        exits.next_if(|(pc, _)| next_start.is_none_or(|next| *pc < next))
+                    });
+                    let (end_pc, exit) = rest.last().unwrap_or(first);
+                    Some(Ok((start_pc, BlockShape { end_pc, exit })))
+                },
+            )
+            .collect::<Result<_, _>>()?;
         Ok(Self { entry, blocks })
     }
 
