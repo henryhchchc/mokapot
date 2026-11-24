@@ -21,22 +21,28 @@ pub(super) struct BlockShape<'class> {
 impl<'class> BlockLayout<'class> {
     /// Partitions `body`, validating every decoded instruction and leader.
     pub(super) fn of(body: MethodBody<'class>) -> Result<Self, Error> {
-        let mut instructions = body.instructions().iter().peekable();
-        let entry = instructions
-            .peek()
+        let exits = body
+            .instructions()
+            .iter_with_next_pc()
+            .map(|(pc, instruction, next_pc)| {
+                BlockExit::of(body, pc, next_pc, &instruction)
+                    .at_pc(pc)
+                    .map(|exit| (pc, exit))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let entry = exits
+            .first()
             .map(|&(pc, _)| pc)
             .ok_or(ErrorKind::MissingOrEmptyBody)?;
 
-        let mut leaders = vec![entry];
-        leaders.extend(body.exception_table().map(ExceptionTableEntry::handler_pc));
-        let mut exits = Vec::with_capacity(instructions.len());
-        while let Some((pc, instruction)) = instructions.next() {
-            let next_pc = instructions.peek().map(|&(pc, _)| pc);
-            let exit = BlockExit::of(body, pc, next_pc, &instruction).at_pc(pc)?;
-            add_leaders(&mut leaders, &exit, next_pc);
-            exits.push((pc, exit));
-        }
-
+        let next_pcs = exits.iter().skip(1).map(|&(pc, _)| Some(pc)).chain([None]);
+        let mut leaders: Vec<_> = exits
+            .iter()
+            .zip(next_pcs)
+            .flat_map(|((_, exit), next_pc)| leader_pcs(exit, next_pc))
+            .chain([entry])
+            .chain(body.exception_table().map(ExceptionTableEntry::handler_pc))
+            .collect();
         leaders.sort_unstable();
         leaders.dedup();
         let mut leaders = leaders.into_iter().peekable();
@@ -71,22 +77,23 @@ impl<'class> BlockLayout<'class> {
     }
 }
 
-fn add_leaders(leaders: &mut Vec<PC>, exit: &BlockExit<'_, PC>, next_pc: Option<PC>) {
+fn leader_pcs<'exit>(
+    exit: &'exit BlockExit<'_, PC>,
+    next_pc: Option<PC>,
+) -> impl Iterator<Item = PC> + 'exit {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
 
-    match exit {
-        Continue { .. } | Return { .. } | Throw { .. } => {}
-        Goto { target } | Branch { taken: target, .. } => {
-            leaders.push(*target);
-        }
-        Switch { cases, default } => {
-            leaders.extend(cases.iter().map(|&(_, target)| target));
-            leaders.push(*default);
-        }
-    }
-    if exit.forces_block_boundary() {
-        leaders.extend(next_pc);
-    }
+    let (cases, target): (&[(i32, PC)], _) = match exit {
+        Continue { .. } | Return { .. } | Throw { .. } => (&[], None),
+        Goto { target } | Branch { taken: target, .. } => (&[], Some(*target)),
+        Switch { cases, default } => (cases, Some(*default)),
+    };
+    let next_leader = next_pc.filter(|_| exit.forces_block_boundary());
+    cases
+        .iter()
+        .map(|&(_, target)| target)
+        .chain(target)
+        .chain(next_leader)
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque, hash_map::Entry};
+use std::collections::{HashMap, VecDeque};
 
 use super::{
     BlockExit, Cfg, CfgNode, Error, ExceptionArm, ExceptionTarget,
@@ -50,17 +50,13 @@ struct Discovery {
 }
 
 impl Discovery {
-    /// Returns a node's identity, queueing it on the first visit.
+    /// Returns a node's identity, queuing it on the first visit.
     fn id_for(&mut self, node: NodeKey) -> BlockId {
-        match self.ids.entry(node) {
-            Entry::Occupied(slot) => *slot.get(),
-            Entry::Vacant(slot) => {
-                let id = self.allocator.new_id();
-                slot.insert(id);
-                self.pending.push_back((node, id));
-                id
-            }
-        }
+        *self.ids.entry(node).or_insert_with(|| {
+            let id = self.allocator.new_id();
+            self.pending.push_back((node, id));
+            id
+        })
     }
 }
 

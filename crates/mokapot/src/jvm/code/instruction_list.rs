@@ -27,6 +27,18 @@ impl<'class> InstructionList<'class> {
         }
     }
 
+    /// Iterates over instructions with the PC of the following instruction.
+    pub(crate) fn iter_with_next_pc(
+        self,
+    ) -> impl Iterator<Item = (ProgramCounter, Instruction<'class>, Option<ProgramCounter>)> {
+        let instructions = self.data.as_slice();
+        instructions
+            .array_windows::<2>()
+            .map(|[current, (next_pc, _)]| (current, Some(*next_pc)))
+            .chain(instructions.last().map(|last| (last, None)))
+            .map(move |((pc, data), next_pc)| (*pc, data.as_borrowed(self.pool), next_pc))
+    }
+
     /// Iterates over the instructions whose program counters are in `range`.
     ///
     /// # Panics
