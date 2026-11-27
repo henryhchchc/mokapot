@@ -100,8 +100,8 @@ impl<'class> BlockExit<'class, ProgramCounter> {
             IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
             IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
         };
-        let next = || next_pc.ok_or(ErrorKind::MissingFallthrough);
-        Ok(match instruction {
+        let next_pc = || next_pc.ok_or(ErrorKind::MissingFallthrough);
+        let block_exit = match instruction {
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {
                 exception_arms: exception_arms(body, pc),
             },
@@ -114,7 +114,7 @@ impl<'class> BlockExit<'class, ProgramCounter> {
             | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
             | IfACmpNe(target) | IfNull(target) | IfNonNull(target) => Self::Branch {
                 taken: *target,
-                otherwise: next()?,
+                otherwise: next_pc()?,
             },
             Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
                 return Err(ErrorKind::UnsupportedLegacySubroutine);
@@ -140,14 +140,15 @@ impl<'class> BlockExit<'class, ProgramCounter> {
                 default: *default,
             },
             _ => Self::Continue {
-                next: next()?,
+                next: next_pc()?,
                 exception_arms: if fallthrough_may_throw(instruction) {
                     exception_arms(body, pc)
                 } else {
                     ExceptionArms::new()
                 },
             },
-        })
+        };
+        Ok(block_exit)
     }
 }
 
