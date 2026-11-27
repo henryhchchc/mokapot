@@ -7,10 +7,12 @@ use crate::{
     jvm::{
         class_file::constant_pool::ConstantPoolBuilder,
         code::{InstructionData, ProgramCounter, WideInstruction},
-        errors::ParseError,
-        errors::ParsingErrorContext,
+        errors::{ParseError, ParsingErrorContext},
     },
-    types::field_type::PrimitiveType,
+    types::{
+        field_type::{FieldType, PrimitiveType},
+        reference_type::ReferenceType,
+    },
 };
 
 impl InstructionData {
@@ -380,6 +382,21 @@ impl InstructionData {
             Wide(raw_wide) => Self::Wide(lift_wide_instruction(raw_wide)),
             MultiANewArray { index, dimensions } => {
                 let type_ref = constant_pool.reference_type_id(index)?;
+                let invalid_dimensions = || {
+                    ParseError::malform(format_args!(
+                        "Invalid multianewarray dimension count {dimensions} at instruction {pc}"
+                    ))
+                };
+                let ReferenceType::Array(element) = constant_pool.reference_type(type_ref) else {
+                    return Err(invalid_dimensions());
+                };
+                let mut element = element.as_ref();
+                for _ in 1..dimensions.get() {
+                    let FieldType::Array(inner) = element else {
+                        return Err(invalid_dimensions());
+                    };
+                    element = inner;
+                }
                 Self::MultiANewArray(type_ref, dimensions)
             }
             IfNull { offset } => Self::IfNull((pc + offset).context("Invalid jump offset")?),

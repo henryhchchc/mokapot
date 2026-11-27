@@ -3,7 +3,7 @@ use crate::ir::test::prelude::assert_matches;
 use crate::jvm::class_file::constant_pool::{
     ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
 };
-use crate::jvm::{Class, code::Instruction, references::MethodReference};
+use crate::jvm::{Class, code::Instruction, errors::ParseErrorKind, references::MethodReference};
 
 #[test]
 fn tableswitch_resolves_backward_default_and_inclusive_range() {
@@ -107,12 +107,34 @@ fn invocation_opcodes_preserve_pool_kind_validation() {
             } else {
                 assert_matches!(
                     result.unwrap_err().kind(),
-                    crate::jvm::errors::ParseErrorKind::UnexpectedConstantPoolEntry {
-                        index: 6,
-                        ..
-                    }
+                    ParseErrorKind::UnexpectedConstantPoolEntry { index: 6, .. }
                 );
             }
         }
+    }
+}
+
+#[test]
+fn multianewarray_validates_dimensions() {
+    for (descriptor, count, expected) in [
+        ("[[I", 0, Err(ParseErrorKind::Malformed)),
+        ("java/lang/Object", 1, Err(ParseErrorKind::Malformed)),
+        ("[I", 2, Err(ParseErrorKind::Malformed)),
+        ("[[I", 2, Ok(())),
+        ("[[I", 1, Ok(())),
+    ] {
+        let mut pool = resolve(RawConstantPool::from_entries([
+            RawEntry::Utf8(descriptor.as_bytes()),
+            RawEntry::Class {
+                name_index: 1.into(),
+            },
+        ]))
+        .unwrap();
+        let bytes = [0, 0xc5, 0, 2, count];
+        let result = RawInstruction::iter_from_bytes(&bytes)
+            .nth(1)
+            .unwrap()
+            .and_then(|(pc, raw)| InstructionData::from_raw_instruction(raw, pc, &mut pool));
+        assert_eq!(result.map(|_| ()).map_err(|error| error.kind()), expected);
     }
 }

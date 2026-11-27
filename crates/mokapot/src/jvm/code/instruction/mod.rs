@@ -1,5 +1,7 @@
 //! Resolved JVM instruction model and presentation.
 
+use std::num::NonZeroU8;
+
 use derive_more::Display;
 
 mod display;

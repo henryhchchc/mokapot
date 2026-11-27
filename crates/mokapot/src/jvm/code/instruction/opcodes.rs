@@ -210,7 +210,7 @@ macro_rules! for_each_instruction {
                 ANewArray(value0: ReferenceTypeId => &$class ReferenceType = $pool.reference_type(*value0)) = 0xbd, "anewarray";
                 CheckCast(value0: ReferenceTypeId => &$class ReferenceType = $pool.reference_type(*value0)) = 0xc0, "checkcast";
                 InstanceOf(value0: ReferenceTypeId => &$class ReferenceType = $pool.reference_type(*value0)) = 0xc1, "instanceof";
-                MultiANewArray(value0: ReferenceTypeId => &$class ReferenceType = $pool.reference_type(*value0), value1: u8 => u8 = *value1) = 0xc5, "multianewarray";
+                MultiANewArray(value0: ReferenceTypeId => &$class ReferenceType = $pool.reference_type(*value0), value1: NonZeroU8 => NonZeroU8 = *value1) = 0xc5, "multianewarray";
             }
             structured {
                 TableSwitch {

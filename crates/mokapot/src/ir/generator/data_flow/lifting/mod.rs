@@ -93,7 +93,7 @@ pub(super) fn lift_instruction<'class>(
         LAStore | DAStore => cx.array_write(Category2),
         ANewArray(element_type) => cx.new_array(ArrayElementType::Reference(element_type)),
         NewArray(element_type) => cx.new_array(ArrayElementType::Primitive(*element_type)),
-        MultiANewArray(element_type, dim) => cx.new_multi_array(element_type, *dim),
+        MultiANewArray(element_type, dim) => cx.new_multi_array(element_type, dim.get()),
         ArrayLength => cx.array_length(),
         Pop => cx.stack_effect(StackOperation::Pop),
         Pop2 => cx.stack_effect(StackOperation::Pop2),

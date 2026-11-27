@@ -6,7 +6,7 @@ use crate::jvm::class_file::{
 };
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::I32};
 
-use std::iter;
+use std::{iter, num::NonZeroU8};
 
 use super::super::{ParseError, fixed_layout::FixedLayout};
 use crate::{
@@ -221,7 +221,7 @@ pub enum RawInstruction<'a> {
     MonitorEnter = 0xC2,
     MonitorExit = 0xC3,
     Wide(RawWideInstruction) = 0xC4,
-    MultiANewArray { index: u16, dimensions: u8 } = 0xC5,
+    MultiANewArray { index: u16, dimensions: NonZeroU8 } = 0xC5,
     IfNull { offset: i16 } = 0xC6,
     IfNonNull { offset: i16 } = 0xC7,
     GotoW { offset: i32 } = 0xC8,
@@ -665,10 +665,15 @@ impl<'a> RawInstruction<'a> {
             0xca => Breakpoint,
             0xfe => ImpDep1,
             0xff => ImpDep2,
-            0xc5 => MultiANewArray {
-                index: decode_value(bytes)?,
-                dimensions: decode_value(bytes)?,
-            },
+            0xc5 => {
+                let index = decode_value(bytes)?;
+                let dimensions = NonZeroU8::new(decode_value(bytes)?).ok_or_else(|| {
+                    ParseError::malform(format_args!(
+                        "Zero multianewarray dimensions at instruction {pc}"
+                    ))
+                })?;
+                MultiANewArray { index, dimensions }
+            }
             0xbb => New {
                 index: decode_value(bytes)?,
             },

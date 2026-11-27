@@ -8,7 +8,6 @@ use super::fallibility::fallthrough_may_throw;
 use crate::{
     ir::generator::error::ErrorKind,
     jvm::code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
-    types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
 /// The structural exit of one decoded instruction.
@@ -102,11 +101,6 @@ impl<'class> BlockExit<'class, ProgramCounter> {
             IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
         };
         let next = || next_pc.ok_or(ErrorKind::MissingFallthrough);
-        if let Instruction::MultiANewArray(array_type, dimensions) = instruction
-            && !valid_multi_array_dimensions(array_type, *dimensions)
-        {
-            return Err(ErrorKind::InvalidMultiArrayDimensions);
-        }
         Ok(match instruction {
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {
                 exception_arms: exception_arms(body, pc),
@@ -157,23 +151,6 @@ impl<'class> BlockExit<'class, ProgramCounter> {
     }
 }
 
-fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> bool {
-    let ReferenceType::Array(element_type) = array_type else {
-        return false;
-    };
-    let mut element_type = element_type.as_ref();
-    if dimensions == 0 {
-        return false;
-    }
-    for _ in 1..dimensions {
-        let FieldType::Array(inner) = element_type else {
-            return false;
-        };
-        element_type = inner.as_ref();
-    }
-    true
-}
-
 /// The ordered exception arms of the instruction at `pc`.
 ///
 /// Selection walks the table in order, so the first catch-all shadows later
@@ -216,25 +193,6 @@ mod tests {
             assert_eq!(
                 BlockExit::of(body, 0.into(), Some(10.into()), &instruction),
                 Err(ErrorKind::InvalidTableSwitchRange)
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_invalid_multianewarray_dimensions() {
-        for (array_type, dimensions) in [("[[I", 0), ("[I", 2), ("java/lang/Object", 1)] {
-            let mut pool = ConstantPool::new();
-            let array_type = pool.insert_reference_type(ref_t(array_type));
-            let instructions = [
-                (0, InstructionData::MultiANewArray(array_type, dimensions)),
-                (1, InstructionData::Return),
-            ];
-            let method = method_with_pool(pool, instructions, "()V", vec![]);
-            let body = method.as_method().body().unwrap();
-            let instruction = body.instruction_at(0.into()).unwrap();
-            assert_eq!(
-                BlockExit::of(body, 0.into(), Some(1.into()), &instruction),
-                Err(ErrorKind::InvalidMultiArrayDimensions)
             );
         }
     }
