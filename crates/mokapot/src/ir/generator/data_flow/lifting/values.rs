@@ -28,7 +28,7 @@ impl<'class> LiftContext<'_, '_> {
         let base = *self.frame.locals.get(idx, Category1)?;
         self.frame.locals.set(idx, value, Category1)?;
         let expr = MathOperation::Increment(base, constant).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        Ok(Some(Operation::Definition(value, expr)))
     }
 
     pub fn load(

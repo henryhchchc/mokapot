@@ -16,7 +16,7 @@ fn exceptional_state_excludes_the_fallible_result() {
     let fixture = method_with_pool(pool, body, "(Ljava/lang/Object;)Ljava/lang/Object;", table);
     let ir = build(&fixture).unwrap();
     let attempted = terminator_at(&ir, 1.into()).operation().unwrap();
-    let Operation::Definition { value: result, .. } = attempted else {
+    let Operation::Definition(result, _) = attempted else {
         panic!("checkcast must define a result");
     };
     let result = *result;

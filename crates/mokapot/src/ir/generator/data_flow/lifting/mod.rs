@@ -192,7 +192,7 @@ impl<'class> LiftContext<'_, '_> {
     {
         let object_ref = self.frame.stack.pop(Category1)?;
         let expr = operation(object_ref).into();
-        Ok(Some(Operation::Effect { expr }))
+        Ok(Some(Operation::Effect(expr)))
     }
 
     fn stack_effect(
@@ -214,9 +214,6 @@ impl<'class> LiftContext<'_, '_> {
     ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.definition_id();
         self.frame.stack.push(value, category)?;
-        Ok(Some(Operation::Definition {
-            value,
-            expr: expr.into(),
-        }))
+        Ok(Some(Operation::Definition(value, expr.into())))
     }
 }

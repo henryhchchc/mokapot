@@ -29,11 +29,11 @@ impl RemapValues for Operation<'_> {
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
     ) -> Result<(), E> {
         match self {
-            Self::Definition { value, expr } => {
+            Self::Definition(value, expr) => {
                 remap_value(value, remap)?;
                 remap_expression(expr, remap)
             }
-            Self::Effect { expr } => remap_expression(expr, remap),
+            Self::Effect(expr) => remap_expression(expr, remap),
         }
     }
 }

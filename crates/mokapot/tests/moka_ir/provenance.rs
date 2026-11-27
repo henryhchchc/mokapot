@@ -18,10 +18,7 @@ fn builds_ir_blocks_and_provenance() {
         .unwrap();
     assert!(matches!(
         first,
-        Operation::Definition {
-            expr: Expression::Const(ConstantVal::String(value)),
-            ..
-        } if value.to_str().as_deref() == Ok("233")
+        Operation::Definition(_, Expression::Const(ConstantVal::String(value))) if value.to_str().as_deref() == Ok("233")
     ));
 
     assert_eq!(

@@ -284,7 +284,7 @@ pub(crate) fn void<'class>() -> Terminator<'class> {
 
 /// An operation evaluated only for its effects.
 pub(crate) fn effect<'class>(expr: impl Into<Expression<'class>>) -> Operation<'class> {
-    Operation::Effect { expr: expr.into() }
+    Operation::Effect(expr.into())
 }
 
 /// An operation defining `value` from `expr`.
@@ -292,10 +292,7 @@ pub(crate) fn def<'class>(
     value: ValueId,
     expr: impl Into<Expression<'class>>,
 ) -> Operation<'class> {
-    Operation::Definition {
-        value,
-        expr: expr.into(),
-    }
+    Operation::Definition(value, expr.into())
 }
 
 /// The JVM origin of `ir`'s entry terminator.

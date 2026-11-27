@@ -34,7 +34,7 @@ impl<'class> LiftContext<'_, '_> {
             value,
         }
         .into();
-        Ok(Some(Operation::Effect { expr }))
+        Ok(Some(Operation::Effect(expr)))
     }
 
     pub fn new_array(

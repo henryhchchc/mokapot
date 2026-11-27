@@ -34,9 +34,9 @@ impl<'class> LiftContext<'_, '_> {
         field: FieldRef<'class>,
     ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.pop_field_value(field)?;
-        Ok(Some(Operation::Effect {
-            expr: FieldAccess::WriteStatic { field, value }.into(),
-        }))
+        Ok(Some(Operation::Effect(
+            FieldAccess::WriteStatic { field, value }.into(),
+        )))
     }
 
     pub fn write_instance(
@@ -45,14 +45,14 @@ impl<'class> LiftContext<'_, '_> {
     ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
-        Ok(Some(Operation::Effect {
-            expr: FieldAccess::WriteInstance {
+        Ok(Some(Operation::Effect(
+            FieldAccess::WriteInstance {
                 object_ref,
                 field,
                 value,
             }
             .into(),
-        }))
+        )))
     }
 
     fn pop_field_value(&mut self, field: FieldRef<'class>) -> Result<ValueId, FrameError> {

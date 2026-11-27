@@ -6,17 +6,9 @@ use super::{ValueId, expression::Expression};
 #[derive(Debug, Clone, PartialEq, Eq, Display)]
 pub enum Operation<'class> {
     /// Evaluates an expression and defines its result.
-    #[display("{value} = {expr}")]
-    Definition {
-        /// The value defined by the expression.
-        value: ValueId,
-        /// The expression producing the value.
-        expr: Expression<'class>,
-    },
+    #[display("{_0} = {_1}")]
+    Definition(ValueId, Expression<'class>),
     /// Evaluates an expression solely for its effects.
-    #[display("{expr}")]
-    Effect {
-        /// The effectful expression.
-        expr: Expression<'class>,
-    },
+    #[display("{_0}")]
+    Effect(Expression<'class>),
 }

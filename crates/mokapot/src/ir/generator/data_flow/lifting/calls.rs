@@ -67,7 +67,7 @@ impl<'class> LiftContext<'_, '_> {
             ReturnType::Some(return_type) => {
                 self.define_on_stack(return_type.value_category(), expr)
             }
-            ReturnType::Void => Ok(Some(Operation::Effect { expr })),
+            ReturnType::Void => Ok(Some(Operation::Effect(expr))),
         }
     }
 }

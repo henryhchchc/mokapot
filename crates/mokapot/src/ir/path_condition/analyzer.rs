@@ -27,10 +27,9 @@ impl<'method, 'class> PathConditionProblem<'method, 'class> {
             .values()
             .flat_map(|block| &block.operations)
             .filter_map(|operation| match operation {
-                Operation::Definition {
-                    value,
-                    expr: Expression::Const(constant),
-                } => Some((*value, *constant)),
+                Operation::Definition(value, Expression::Const(constant)) => {
+                    Some((*value, *constant))
+                }
                 _ => None,
             })
             .collect();
