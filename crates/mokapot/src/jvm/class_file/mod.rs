@@ -15,7 +15,6 @@ pub(crate) mod decoder;
 mod field;
 mod fixed_layout;
 mod flags;
-mod metadata;
 mod method;
 mod module;
 mod nesting;

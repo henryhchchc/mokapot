@@ -1,60 +1,29 @@
-use zerocopy::byteorder::big_endian::U16;
-
 use crate::jvm::class_file::attribute::extract_attributes;
 use crate::jvm::class_file::flags::parse_flags;
 
-use super::{
-    Decode, ParseError, ResolutionContext, attribute::AttributeInfo, decoder::parse_repeated,
-    resolve::Resolve,
-};
-use crate::{
-    intrinsics::see_jvm_spec,
-    jvm::{
-        annotation::AnnotationsData,
-        field::{self, FieldData},
-    },
+use super::{ParseError, ResolutionContext, class::raw::MemberInfo, resolve::Resolve};
+use crate::jvm::{
+    annotation::AnnotationsData,
+    field::{self, FieldData},
 };
 
-/// The raw representation of a `field_info` structure.
-#[doc = see_jvm_spec!(4, 5)]
-#[derive(Debug)]
-pub(crate) struct FieldInfo<'a> {
-    access_flags: u16,
-    name_index: u16,
-    descriptor_index: u16,
-    attributes: Box<[&'a AttributeInfo]>,
-}
-
-impl<'a> Decode<'a> for FieldInfo<'a> {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let [access_flags, name_index, descriptor_index, attributes_count] =
-            <[U16; 4]>::decode(bytes)?.map(U16::get);
-        let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
-        Ok(Self {
-            access_flags,
-            name_index,
-            descriptor_index,
-            attributes,
-        })
-    }
-}
-
-impl Resolve for FieldInfo<'_> {
-    type Output = FieldData;
-
-    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
+impl MemberInfo<'_> {
+    pub(super) fn resolve_field(
+        self,
+        ctx: &mut ResolutionContext,
+    ) -> Result<FieldData, ParseError> {
         let Self {
             access_flags,
-            name_index,
-            descriptor_index,
+            name,
+            descriptor,
             attributes,
         } = self;
         let access_flags =
             parse_flags::<field::AccessFlags>(access_flags, "Invalid field access flags")?;
-        let name = ctx.constant_pool.utf8_id(name_index)?;
+        let name = ctx.constant_pool.utf8_id(name)?;
         let field_type = ctx
             .constant_pool
-            .intern_field_type(descriptor_index)
+            .intern_field_type(descriptor)
             .map_err(|error| error.add_context("Invalid field descriptor"))?;
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
 
@@ -100,6 +69,7 @@ impl Resolve for FieldInfo<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jvm::constant_pool::pool_index;
     use crate::jvm::{
         class::Version,
         class_file::{
@@ -116,19 +86,19 @@ mod tests {
             constant_pool: resolve(pool).unwrap(),
             class_version: Version::LATEST,
         };
-        let field = FieldInfo {
+        let field = MemberInfo {
             access_flags: 0,
-            name_index: 1,
-            descriptor_index: 2,
+            name: pool_index(1),
+            descriptor: pool_index(2),
             attributes: Box::new([]),
         };
         let component = RecordComponentInfo {
-            name_index: 1,
-            descriptor_index: 2,
+            name: pool_index(1),
+            descriptor: pool_index(2),
             attributes: Box::new([]),
         };
         let expected = ParseErrorKind::InvalidConstantPoolIndex { index: 2 };
-        assert_eq!(field.resolve(&mut ctx).unwrap_err().kind(), expected);
+        assert_eq!(field.resolve_field(&mut ctx).unwrap_err().kind(), expected);
         assert_eq!(component.resolve(&mut ctx).unwrap_err().kind(), expected);
     }
 }

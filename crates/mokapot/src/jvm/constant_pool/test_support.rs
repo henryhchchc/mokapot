@@ -1,6 +1,10 @@
 use super::*;
 use crate::jvm::{JavaString, references::MethodReference};
 
+pub(crate) fn pool_index(index: u16) -> ConstantPoolIndex {
+    index.try_into().unwrap()
+}
+
 impl ConstantPool {
     pub(crate) fn new() -> Self {
         Self::with_slots(1, 0)
@@ -11,7 +15,7 @@ impl ConstantPool {
         self.utf8_bytes.extend(value.into_bytes());
         let range = start..self.utf8_bytes.len();
         let index = self.inner.push(Entry::Utf8(range));
-        Utf8Id(NonZeroU16::new(index).expect("nonzero test index"))
+        Utf8Id(ConstantPoolIndex::new(index).expect("nonzero test index"))
     }
 
     pub(crate) fn insert_class_name(&mut self, value: ClassName) -> ClassId {
@@ -19,7 +23,7 @@ impl ConstantPool {
             reference_type: ReferenceType::Class(value),
             is_binary_name: true,
         });
-        ClassId(NonZeroU16::new(index).expect("nonzero test index"))
+        ClassId(ConstantPoolIndex::new(index).expect("nonzero test index"))
     }
 
     pub(crate) fn insert_reference_type(&mut self, value: ReferenceType) -> ReferenceTypeId {
@@ -27,7 +31,7 @@ impl ConstantPool {
             reference_type: value,
             is_binary_name: false,
         });
-        ReferenceTypeId(NonZeroU16::new(index).expect("nonzero test index"))
+        ReferenceTypeId(ConstantPoolIndex::new(index).expect("nonzero test index"))
     }
 
     pub(crate) fn insert_field_type(&mut self, value: FieldType) -> FieldTypeId {
@@ -55,7 +59,7 @@ impl ConstantPool {
             owner,
             name_and_type,
         }));
-        MethodRefId(NonZeroU16::new(index).expect("nonzero test index"))
+        MethodRefId(ConstantPoolIndex::new(index).expect("nonzero test index"))
     }
 
     fn insert_method_name_and_type(
@@ -66,7 +70,7 @@ impl ConstantPool {
         let index = self
             .inner
             .push(Entry::NameAndType(NameAndType::Method(name, descriptor)));
-        MethodNameAndTypeId(NonZeroU16::new(index).expect("nonzero test index"))
+        MethodNameAndTypeId(ConstantPoolIndex::new(index).expect("nonzero test index"))
     }
 }
 

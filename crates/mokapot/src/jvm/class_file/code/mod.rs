@@ -47,16 +47,14 @@ impl Resolve for raw::ExceptionTableEntry {
             handler_pc,
             catch_type,
         } = raw;
-        let catch_type = catch_type.get();
         let start_pc = ProgramCounter::from(start_pc);
         let end_pc = ProgramCounter::from(end_pc);
         let covered_pc = start_pc..end_pc;
         let handler_pc = ProgramCounter::from(handler_pc);
-        let catch_type = if catch_type == 0 {
-            None
-        } else {
-            Some(ctx.constant_pool.class_id(catch_type)?)
-        };
+        let catch_type = catch_type
+            .get()
+            .map(|index| ctx.constant_pool.class_id(index))
+            .transpose()?;
         Ok(ExceptionTableEntryData {
             covered_pc,
             handler_pc,
@@ -242,6 +240,7 @@ mod tests {
     fn catch_types_reject_array_and_descriptor_class_entries() {
         use crate::jvm::{
             class_file::constant_pool::{RawConstantPool, RawEntry},
+            constant_pool::pool_index,
             errors::ParseErrorKind,
         };
 
@@ -249,7 +248,7 @@ mod tests {
             let pool = RawConstantPool::from_entries([
                 RawEntry::Utf8(name),
                 RawEntry::Class {
-                    name_index: 1.into(),
+                    name: pool_index(1),
                 },
             ]);
             let mut ctx = ResolutionContext {

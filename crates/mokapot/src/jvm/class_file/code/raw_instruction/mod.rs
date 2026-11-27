@@ -1,14 +1,14 @@
 //! Raw JVM instruction model and parser.
 
-use crate::jvm::class_file::{Decode, decoder::borrow_view};
+use crate::jvm::class_file::{Decode, decoder::try_borrow_view};
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::I32};
 
 use std::{iter, num::NonZeroU8};
 
-use super::super::{ParseError, fixed_layout::FixedLayout};
+use super::super::ParseError;
 use crate::{
     intrinsics::see_jvm_spec,
-    jvm::{code::ProgramCounter, errors::ParseErrorKind},
+    jvm::{code::ProgramCounter, constant_pool::ConstantPoolIndex, errors::ParseErrorKind},
 };
 
 /// A JVM instruction before resolving constant-pool references.
@@ -39,9 +39,9 @@ pub enum RawInstruction<'a> {
     DConst1 = 0x0F,
     BiPush { value: i8 } = 0x10,
     SiPush { value: i16 } = 0x11,
-    Ldc { const_index: u8 } = 0x12,
-    LdcW { const_index: u16 } = 0x13,
-    Ldc2W { const_index: u16 } = 0x14,
+    Ldc(ConstantPoolIndex) = 0x12,
+    LdcW(ConstantPoolIndex) = 0x13,
+    Ldc2W(ConstantPoolIndex) = 0x14,
     ILoad { index: u8 } = 0x15,
     LLoad { index: u8 } = 0x16,
     FLoad { index: u8 } = 0x17,
@@ -199,26 +199,26 @@ pub enum RawInstruction<'a> {
     DReturn = 0xAF,
     AReturn = 0xB0,
     Return = 0xB1,
-    GetStatic { field_ref_index: u16 } = 0xB2,
-    PutStatic { field_ref_index: u16 } = 0xB3,
-    GetField { field_ref_index: u16 } = 0xB4,
-    PutField { field_ref_index: u16 } = 0xB5,
-    InvokeVirtual { method_index: u16 } = 0xB6,
-    InvokeSpecial { method_index: u16 } = 0xB7,
-    InvokeStatic { method_index: u16 } = 0xB8,
-    InvokeInterface { method_index: u16, count: NonZeroU8 } = 0xB9,
-    InvokeDynamic { dynamic_index: u16 } = 0xBA,
-    New { index: u16 } = 0xBB,
+    GetStatic(ConstantPoolIndex) = 0xB2,
+    PutStatic(ConstantPoolIndex) = 0xB3,
+    GetField(ConstantPoolIndex) = 0xB4,
+    PutField(ConstantPoolIndex) = 0xB5,
+    InvokeVirtual(ConstantPoolIndex) = 0xB6,
+    InvokeSpecial(ConstantPoolIndex) = 0xB7,
+    InvokeStatic(ConstantPoolIndex) = 0xB8,
+    InvokeInterface(ConstantPoolIndex, NonZeroU8) = 0xB9,
+    InvokeDynamic(ConstantPoolIndex) = 0xBA,
+    New(ConstantPoolIndex) = 0xBB,
     NewArray { atype: u8 } = 0xBC,
-    ANewArray { index: u16 } = 0xBD,
+    ANewArray(ConstantPoolIndex) = 0xBD,
     ArrayLength = 0xBE,
     AThrow = 0xBF,
-    CheckCast { target_type_index: u16 } = 0xC0,
-    InstanceOf { target_type_index: u16 } = 0xC1,
+    CheckCast(ConstantPoolIndex) = 0xC0,
+    InstanceOf(ConstantPoolIndex) = 0xC1,
     MonitorEnter = 0xC2,
     MonitorExit = 0xC3,
     Wide(RawWideInstruction) = 0xC4,
-    MultiANewArray { index: u16, dimensions: NonZeroU8 } = 0xC5,
+    MultiANewArray(ConstantPoolIndex, NonZeroU8) = 0xC5,
     IfNull { offset: i16 } = 0xC6,
     IfNonNull { offset: i16 } = 0xC7,
     GotoW { offset: i32 } = 0xC8,
@@ -265,8 +265,6 @@ pub struct LookupSwitchPair {
     pub offset: I32,
 }
 
-impl FixedLayout for LookupSwitchPair {}
-
 /// A table-switch payload after its opcode and padding.
 #[derive(Debug, PartialEq, Eq, FromBytes, Immutable, KnownLayout, Unaligned)]
 #[repr(C)]
@@ -292,7 +290,7 @@ impl<'a> Decode<'a> for &'a TableSwitchInfo {
         }
         let count = usize::try_from(i64::from(high) - i64::from(low) + 1)
             .map_err(|_| ParseError::malform("Invalid tableswitch range"))?;
-        borrow_view::<TableSwitchInfo>(bytes, count)
+        try_borrow_view::<TableSwitchInfo>(bytes, count)
     }
 }
 
@@ -316,7 +314,7 @@ impl<'a> Decode<'a> for &'a LookupSwitchInfo {
         let count = usize::try_from(npairs)
             .map_err(|_| ParseError::malform("Invalid lookupswitch pair count"))?;
         let mut remaining = *bytes;
-        let info = borrow_view::<LookupSwitchInfo>(&mut remaining, count)?;
+        let info = try_borrow_view::<LookupSwitchInfo>(&mut remaining, count)?;
         if info
             .match_offsets
             .windows(2)
@@ -367,9 +365,7 @@ impl<'a> RawInstruction<'a> {
             0x2b => ALoad1,
             0x2c => ALoad2,
             0x2d => ALoad3,
-            0xbd => ANewArray {
-                index: Decode::decode(bytes)?,
-            },
+            0xbd => ANewArray(Decode::decode(bytes)?),
             0xb0 => AReturn,
             0xbe => ArrayLength,
             0x3a => AStore {
@@ -387,9 +383,7 @@ impl<'a> RawInstruction<'a> {
             },
             0x34 => CALoad,
             0x55 => CAStore,
-            0xc0 => CheckCast {
-                target_type_index: Decode::decode(bytes)?,
-            },
+            0xc0 => CheckCast(Decode::decode(bytes)?),
             0x90 => D2F,
             0x8e => D2I,
             0x8f => D2L,
@@ -457,12 +451,8 @@ impl<'a> RawInstruction<'a> {
             0x45 => FStore2,
             0x46 => FStore3,
             0x66 => FSub,
-            0xb4 => GetField {
-                field_ref_index: Decode::decode(bytes)?,
-            },
-            0xb2 => GetStatic {
-                field_ref_index: Decode::decode(bytes)?,
-            },
+            0xb4 => GetField(Decode::decode(bytes)?),
+            0xb2 => GetStatic(Decode::decode(bytes)?),
             0xa7 => Goto {
                 offset: Decode::decode(bytes)?,
             },
@@ -548,19 +538,17 @@ impl<'a> RawInstruction<'a> {
             0x1d => ILoad3,
             0x68 => IMul,
             0x74 => INeg,
-            0xc1 => InstanceOf {
-                target_type_index: Decode::decode(bytes)?,
-            },
+            0xc1 => InstanceOf(Decode::decode(bytes)?),
             0xba => {
-                let dynamic_index = Decode::decode(bytes)?;
+                let dynamic = Decode::decode(bytes)?;
                 let zero = u16::decode(bytes)?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
-                InvokeDynamic { dynamic_index }
+                InvokeDynamic(dynamic)
             }
             0xb9 => {
-                let method_index = Decode::decode(bytes)?;
+                let method = Decode::decode(bytes)?;
                 let count = Decode::decode(bytes).map_err(|error| {
                     error.add_context(format_args!(
                         "Invalid invokeinterface count at instruction {pc}"
@@ -570,20 +558,11 @@ impl<'a> RawInstruction<'a> {
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
-                InvokeInterface {
-                    method_index,
-                    count,
-                }
+                InvokeInterface(method, count)
             }
-            0xb7 => InvokeSpecial {
-                method_index: Decode::decode(bytes)?,
-            },
-            0xb8 => InvokeStatic {
-                method_index: Decode::decode(bytes)?,
-            },
-            0xb6 => InvokeVirtual {
-                method_index: Decode::decode(bytes)?,
-            },
+            0xb7 => InvokeSpecial(Decode::decode(bytes)?),
+            0xb8 => InvokeStatic(Decode::decode(bytes)?),
+            0xb6 => InvokeVirtual(Decode::decode(bytes)?),
             0x80 => IOr,
             0x70 => IRem,
             0xac => IReturn,
@@ -615,15 +594,9 @@ impl<'a> RawInstruction<'a> {
             0x94 => LCmp,
             0x09 => LConst0,
             0x0a => LConst1,
-            0x12 => Ldc {
-                const_index: Decode::decode(bytes)?,
-            },
-            0x13 => LdcW {
-                const_index: Decode::decode(bytes)?,
-            },
-            0x14 => Ldc2W {
-                const_index: Decode::decode(bytes)?,
-            },
+            0x12 => Ldc(u16::from(u8::decode(bytes)?).try_into()?),
+            0x13 => LdcW(Decode::decode(bytes)?),
+            0x14 => Ldc2W(Decode::decode(bytes)?),
             0x6d => LDiv,
             0x16 => LLoad {
                 index: Decode::decode(bytes)?,
@@ -666,29 +639,23 @@ impl<'a> RawInstruction<'a> {
             0xca => Breakpoint,
             0xfe => ImpDep1,
             0xff => ImpDep2,
-            0xc5 => MultiANewArray {
-                index: Decode::decode(bytes)?,
-                dimensions: Decode::decode(bytes).map_err(|error| {
+            0xc5 => MultiANewArray(
+                Decode::decode(bytes)?,
+                Decode::decode(bytes).map_err(|error| {
                     error.add_context(format_args!(
                         "Invalid multianewarray dimensions at instruction {pc}"
                     ))
                 })?,
-            },
-            0xbb => New {
-                index: Decode::decode(bytes)?,
-            },
+            ),
+            0xbb => New(Decode::decode(bytes)?),
             0xbc => NewArray {
                 atype: Decode::decode(bytes)?,
             },
             0x00 => Nop,
             0x57 => Pop,
             0x58 => Pop2,
-            0xb5 => PutField {
-                field_ref_index: Decode::decode(bytes)?,
-            },
-            0xb3 => PutStatic {
-                field_ref_index: Decode::decode(bytes)?,
-            },
+            0xb5 => PutField(Decode::decode(bytes)?),
+            0xb3 => PutStatic(Decode::decode(bytes)?),
             0xa9 => Ret {
                 index: Decode::decode(bytes)?,
             },

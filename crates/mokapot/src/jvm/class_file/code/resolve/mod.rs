@@ -45,16 +45,16 @@ impl InstructionData {
             DConst1 => Self::DConst1,
             BiPush { value } => Self::BiPush(value),
             SiPush { value } => Self::SiPush(value),
-            Ldc { const_index } => {
-                let constant = constant_pool.constant_value_id(u16::from(const_index))?;
+            Ldc(value) => {
+                let constant = constant_pool.constant_value_id(value)?;
                 Self::Ldc(constant)
             }
-            LdcW { const_index } => {
-                let constant = constant_pool.constant_value_id(const_index)?;
+            LdcW(value) => {
+                let constant = constant_pool.constant_value_id(value)?;
                 Self::LdcW(constant)
             }
-            Ldc2W { const_index } => {
-                let constant = constant_pool.constant_value_id(const_index)?;
+            Ldc2W(value) => {
+                let constant = constant_pool.constant_value_id(value)?;
                 Self::Ldc2W(constant)
             }
 
@@ -303,45 +303,42 @@ impl InstructionData {
             Return => Self::Return,
 
             // References
-            GetStatic { field_ref_index } => {
-                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
+            GetStatic(field_ref) => {
+                let field_ref = constant_pool.field_ref_id(field_ref)?;
                 Self::GetStatic(field_ref)
             }
-            PutStatic { field_ref_index } => {
-                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
+            PutStatic(field_ref) => {
+                let field_ref = constant_pool.field_ref_id(field_ref)?;
                 Self::PutStatic(field_ref)
             }
-            GetField { field_ref_index } => {
-                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
+            GetField(field_ref) => {
+                let field_ref = constant_pool.field_ref_id(field_ref)?;
                 Self::GetField(field_ref)
             }
-            PutField { field_ref_index } => {
-                let field_ref = constant_pool.field_ref_id(field_ref_index)?;
+            PutField(field_ref) => {
+                let field_ref = constant_pool.field_ref_id(field_ref)?;
                 Self::PutField(field_ref)
             }
-            InvokeVirtual { method_index } => {
-                let method_ref = constant_pool.method_ref_id(method_index)?;
+            InvokeVirtual(method) => {
+                let method_ref = constant_pool.method_ref_id(method)?;
                 Self::InvokeVirtual(method_ref)
             }
-            InvokeSpecial { method_index } => {
-                let method_ref = constant_pool.method_or_interface_ref_id(method_index)?;
+            InvokeSpecial(method) => {
+                let method_ref = constant_pool.method_or_interface_ref_id(method)?;
                 Self::InvokeSpecial(method_ref)
             }
-            InvokeStatic { method_index } => {
-                let method_ref = constant_pool.method_or_interface_ref_id(method_index)?;
+            InvokeStatic(method) => {
+                let method_ref = constant_pool.method_or_interface_ref_id(method)?;
                 Self::InvokeStatic(method_ref)
             }
-            InvokeInterface {
-                method_index,
-                count,
-            } => {
-                let method_ref = constant_pool.interface_method_ref_id(method_index)?;
+            InvokeInterface(method, count) => {
+                let method_ref = constant_pool.interface_method_ref_id(method)?;
                 Self::InvokeInterface(method_ref, count)
             }
-            InvokeDynamic { dynamic_index } => {
-                Self::InvokeDynamic(constant_pool.invoke_dynamic_id(dynamic_index)?)
+            InvokeDynamic(dynamic) => {
+                Self::InvokeDynamic(constant_pool.invoke_dynamic_id(dynamic)?)
             }
-            New { index } => {
+            New(index) => {
                 let class_name = constant_pool.class_id(index)?;
                 Self::New(class_name)
             }
@@ -361,18 +358,18 @@ impl InstructionData {
                 };
                 Self::NewArray(element_type)
             }
-            ANewArray { index } => {
-                let element_type = constant_pool.reference_type_id(index)?;
+            ANewArray(element) => {
+                let element_type = constant_pool.reference_type_id(element)?;
                 Self::ANewArray(element_type)
             }
             ArrayLength => Self::ArrayLength,
             AThrow => Self::AThrow,
-            CheckCast { target_type_index } => {
-                let type_ref = constant_pool.reference_type_id(target_type_index)?;
+            CheckCast(target_type) => {
+                let type_ref = constant_pool.reference_type_id(target_type)?;
                 Self::CheckCast(type_ref)
             }
-            InstanceOf { target_type_index } => {
-                let type_ref = constant_pool.reference_type_id(target_type_index)?;
+            InstanceOf(target_type) => {
+                let type_ref = constant_pool.reference_type_id(target_type)?;
                 Self::InstanceOf(type_ref)
             }
             MonitorEnter => Self::MonitorEnter,
@@ -380,8 +377,8 @@ impl InstructionData {
 
             // Extended
             Wide(raw_wide) => Self::Wide(lift_wide_instruction(raw_wide)),
-            MultiANewArray { index, dimensions } => {
-                let type_ref = constant_pool.reference_type_id(index)?;
+            MultiANewArray(array_ty, dimensions) => {
+                let type_ref = constant_pool.reference_type_id(array_ty)?;
                 let invalid_dimensions = || {
                     ParseError::malform(format_args!(
                         "Invalid multianewarray dimension count {dimensions} at instruction {pc}"

@@ -1,18 +1,5 @@
-use zerocopy::{FromBytes, Immutable, Unaligned, byteorder::big_endian::U16};
-
 use super::RawEntry;
-use crate::jvm::class_file::{
-    Decode, ParseError, decoder::borrow_bytes, fixed_layout::FixedLayout,
-};
-
-#[derive(FromBytes, Immutable, Unaligned)]
-#[repr(C)]
-struct MethodHandlePayload {
-    reference_kind: u8,
-    reference_index: U16,
-}
-
-impl FixedLayout for MethodHandlePayload {}
+use crate::jvm::class_file::{Decode, ParseError, decoder::borrow_bytes};
 
 impl<'a> Decode<'a> for RawEntry<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
@@ -27,53 +14,59 @@ impl<'a> Decode<'a> for RawEntry<'a> {
             4 => Decode::decode(bytes).map(Self::Float),
             5 => Decode::decode(bytes).map(Self::Long),
             6 => Decode::decode(bytes).map(Self::Double),
-            7 => Decode::decode(bytes).map(|name_index| Self::Class { name_index }),
-            8 => Decode::decode(bytes).map(|string_index| Self::String { string_index }),
+            7 => Decode::decode(bytes).map(|name| Self::Class { name }),
+            8 => Decode::decode(bytes).map(|string| Self::String { string }),
             9 => {
-                <[U16; 2]>::decode(bytes).map(|[class_index, name_and_type_index]| Self::FieldRef {
-                    class_index,
-                    name_and_type_index,
+                let [class, name_and_type] = Decode::decode(bytes)?;
+                Ok(Self::FieldRef {
+                    class,
+                    name_and_type,
                 })
             }
-            10 => <[U16; 2]>::decode(bytes).map(|[class_index, name_and_type_index]| {
-                Self::MethodRef {
-                    class_index,
-                    name_and_type_index,
-                }
-            }),
-            11 => <[U16; 2]>::decode(bytes).map(|[class_index, name_and_type_index]| {
-                Self::InterfaceMethodRef {
-                    class_index,
-                    name_and_type_index,
-                }
-            }),
+            10 => {
+                let [class, name_and_type] = Decode::decode(bytes)?;
+                Ok(Self::MethodRef {
+                    class,
+                    name_and_type,
+                })
+            }
+            11 => {
+                let [class, name_and_type] = Decode::decode(bytes)?;
+                Ok(Self::InterfaceMethodRef {
+                    class,
+                    name_and_type,
+                })
+            }
             12 => {
-                <[U16; 2]>::decode(bytes).map(|[name_index, descriptor_index]| Self::NameAndType {
-                    name_index,
-                    descriptor_index,
+                let [name, descriptor] = Decode::decode(bytes)?;
+                Ok(Self::NameAndType { name, descriptor })
+            }
+            15 => {
+                let mut payload = borrow_bytes(bytes, 3)?;
+                Ok(Self::MethodHandle {
+                    reference_kind: Decode::decode(&mut payload)?,
+                    reference: Decode::decode(&mut payload)?,
                 })
             }
-            15 => MethodHandlePayload::decode(bytes).map(|payload| Self::MethodHandle {
-                reference_kind: payload.reference_kind,
-                reference_index: payload.reference_index,
-            }),
-            16 => Ok(Self::MethodType {
-                descriptor_index: Decode::decode(bytes)?,
-            }),
-            17 => <[U16; 2]>::decode(bytes).map(
-                |[bootstrap_method_attr_index, name_and_type_index]| Self::Dynamic {
-                    bootstrap_method_attr_index,
-                    name_and_type_index,
-                },
-            ),
-            18 => <[U16; 2]>::decode(bytes).map(
-                |[bootstrap_method_attr_index, name_and_type_index]| Self::InvokeDynamic {
-                    bootstrap_method_attr_index,
-                    name_and_type_index,
-                },
-            ),
-            19 => Decode::decode(bytes).map(|name_index| Self::Module { name_index }),
-            20 => Decode::decode(bytes).map(|name_index| Self::Package { name_index }),
+            16 => Decode::decode(bytes).map(|descriptor| Self::MethodType { descriptor }),
+            17 | 18 => {
+                let mut payload = borrow_bytes(bytes, 4)?;
+                let bootstrap_method_attr_index = Decode::decode(&mut payload)?;
+                let name_and_type = Decode::decode(&mut payload)?;
+                Ok(if tag == 17 {
+                    Self::Dynamic {
+                        bootstrap_method_attr_index,
+                        name_and_type,
+                    }
+                } else {
+                    Self::InvokeDynamic {
+                        bootstrap_method_attr_index,
+                        name_and_type,
+                    }
+                })
+            }
+            19 => Decode::decode(bytes).map(|name| Self::Module { name }),
+            20 => Decode::decode(bytes).map(|name| Self::Package { name }),
             tag => Err(ParseError::malform(format!(
                 "Invalid constant pool tag: {tag}"
             ))),

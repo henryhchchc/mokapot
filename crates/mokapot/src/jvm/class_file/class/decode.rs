@@ -3,9 +3,7 @@ use crate::jvm::class_file::{
     Decode, ParseError,
     attribute::AttributeInfo,
     constant_pool::RawConstantPool,
-    decoder::{borrow_slice, parse_repeated},
-    field::FieldInfo,
-    method::MethodInfo,
+    decoder::{parse_repeated, try_borrow_view},
 };
 
 impl<'a> ClassFile<'a> {
@@ -35,11 +33,11 @@ impl<'a> Decode<'a> for ClassFile<'a> {
         let this_class = Decode::decode(bytes)?;
         let super_class = Decode::decode(bytes)?;
         let interfaces_count = u16::decode(bytes)?;
-        let interfaces = borrow_slice(bytes, usize::from(interfaces_count))?;
+        let interfaces = try_borrow_view(bytes, usize::from(interfaces_count))?;
         let fields_count = u16::decode(bytes)?;
-        let fields = parse_repeated(bytes, fields_count, FieldInfo::decode)?;
+        let fields = parse_repeated(bytes, fields_count, Decode::decode)?;
         let methods_count = u16::decode(bytes)?;
-        let methods = parse_repeated(bytes, methods_count, MethodInfo::decode)?;
+        let methods = parse_repeated(bytes, methods_count, Decode::decode)?;
         let attributes_count = u16::decode(bytes)?;
         let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
 

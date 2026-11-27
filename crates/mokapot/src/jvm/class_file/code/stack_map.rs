@@ -90,8 +90,8 @@ impl Resolve for raw::VerificationTypeInfo {
             raw::VerificationTypeInfo::UninitializedThis => {
                 Ok(VerificationTypeData::UninitializedThis)
             }
-            raw::VerificationTypeInfo::Object { cpool_index } => Ok(VerificationTypeData::Object(
-                ctx.constant_pool.reference_type_id(cpool_index)?,
+            raw::VerificationTypeInfo::Object { class } => Ok(VerificationTypeData::Object(
+                ctx.constant_pool.reference_type_id(class)?,
             )),
             raw::VerificationTypeInfo::Uninitialized { offset } => {
                 Ok(VerificationTypeData::Uninitialized {

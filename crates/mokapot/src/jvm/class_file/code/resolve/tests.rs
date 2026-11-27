@@ -3,6 +3,7 @@ use crate::ir::test::prelude::assert_matches;
 use crate::jvm::class_file::constant_pool::{
     ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
 };
+use crate::jvm::constant_pool::pool_index;
 use crate::jvm::{Class, code::Instruction, errors::ParseErrorKind, references::MethodReference};
 
 #[test]
@@ -33,25 +34,25 @@ fn empty_pool() -> ConstantPoolBuilder {
 fn interface_method_pool(is_interface: bool) -> ConstantPoolBuilder {
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
-            class_index: 2.into(),
-            name_and_type_index: 5.into(),
+            class: pool_index(2),
+            name_and_type: pool_index(5),
         }
     } else {
         RawEntry::MethodRef {
-            class_index: 2.into(),
-            name_and_type_index: 5.into(),
+            class: pool_index(2),
+            name_and_type: pool_index(5),
         }
     };
     let raw = RawConstantPool::from_entries([
         RawEntry::Utf8(b"a/b/I"),
         RawEntry::Class {
-            name_index: 1.into(),
+            name: pool_index(1),
         },
         RawEntry::Utf8(b"m"),
         RawEntry::Utf8(b"()V"),
         RawEntry::NameAndType {
-            name_index: 3.into(),
-            descriptor_index: 4.into(),
+            name: pool_index(3),
+            descriptor: pool_index(4),
         },
         entry,
     ]);
@@ -66,7 +67,7 @@ fn invokeinterface_parses_interface_method_refs() {
         .unwrap();
     let mut pool = interface_method_pool(true);
     let data = InstructionData::from_raw_instruction(instruction, pc, &mut pool).unwrap();
-    let name = pool.class_id(2).unwrap();
+    let name = pool.class_id(2_u16.try_into().unwrap()).unwrap();
     let class = Class {
         name,
         constant_pool: pool.finish(),
@@ -126,7 +127,7 @@ fn multianewarray_validates_dimensions() {
         let mut pool = resolve(RawConstantPool::from_entries([
             RawEntry::Utf8(descriptor.as_bytes()),
             RawEntry::Class {
-                name_index: 1.into(),
+                name: pool_index(1),
             },
         ]))
         .unwrap();

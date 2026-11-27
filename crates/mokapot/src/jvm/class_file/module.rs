@@ -15,9 +15,9 @@ impl Resolve for raw::ModuleInfo<'_> {
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw::ModuleInfo {
-            module_name_index,
+            module_name,
             module_flags,
-            module_version_index,
+            module_version,
             requires,
             exports,
             opens,
@@ -25,40 +25,35 @@ impl Resolve for raw::ModuleInfo<'_> {
             provides,
         } = self;
 
-        let name = ctx.constant_pool.module_id(module_name_index)?;
+        let name = ctx.constant_pool.module_id(module_name)?;
         let flags = parse_flags(module_flags, "Invalid access flag")?;
-        let version = if module_version_index > 0 {
-            Some(ctx.constant_pool.utf8_id(module_version_index)?)
-        } else {
-            None
-        };
+        let version = module_version
+            .map(|index| ctx.constant_pool.utf8_id(index))
+            .transpose()?;
 
         let requires = requires
             .iter()
             .map(|raw| {
                 Ok(RequireData {
-                    module: ctx.constant_pool.module_id(raw.requires_index.get())?,
+                    module: ctx.constant_pool.module_id(raw.module)?,
                     flags: parse_flags(raw.requires_flags.get(), "Invalid access flag")?,
-                    version: if raw.requires_version_index.get() > 0 {
-                        Some(
-                            ctx.constant_pool
-                                .utf8_id(raw.requires_version_index.get())?,
-                        )
-                    } else {
-                        None
-                    },
+                    version: raw
+                        .requires_version
+                        .get()
+                        .map(|index| ctx.constant_pool.utf8_id(index))
+                        .transpose()?,
                 })
             })
             .try_collect_exact()?;
         let exports = exports
             .iter()
             .map(|raw| {
-                let package = ctx.constant_pool.package_id(raw.exports_index.get())?;
+                let package = ctx.constant_pool.package_id(raw.package)?;
                 let flags = parse_flags(raw.exports_flags.get(), "Invalid access flag")?;
                 let to = raw
                     .exports_to
                     .iter()
-                    .map(|id| ctx.constant_pool.module_id(id.get()))
+                    .map(|&id| ctx.constant_pool.module_id(id))
                     .try_collect_exact()?;
                 Ok(ExportData { package, flags, to })
             })
@@ -66,28 +61,28 @@ impl Resolve for raw::ModuleInfo<'_> {
         let opens = opens
             .iter()
             .map(|raw| {
-                let package = ctx.constant_pool.package_id(raw.opens_index.get())?;
+                let package = ctx.constant_pool.package_id(raw.package)?;
                 let flags = parse_flags(raw.opens_flags.get(), "Invalid access flag")?;
                 let to = raw
                     .opens_to
                     .iter()
-                    .map(|id| ctx.constant_pool.module_id(id.get()))
+                    .map(|&id| ctx.constant_pool.module_id(id))
                     .try_collect_exact()?;
                 Ok(OpenData { package, flags, to })
             })
             .try_collect_exact()?;
         let uses = uses
             .iter()
-            .map(|id| ctx.constant_pool.class_id(id.get()))
+            .map(|&id| ctx.constant_pool.class_id(id))
             .try_collect_exact()?;
         let provides = provides
             .iter()
             .map(|raw| {
-                let service = ctx.constant_pool.class_id(raw.provides_index.get())?;
+                let service = ctx.constant_pool.class_id(raw.service)?;
                 let with = raw
                     .provides_with
                     .iter()
-                    .map(|id| ctx.constant_pool.class_id(id.get()))
+                    .map(|&id| ctx.constant_pool.class_id(id))
                     .try_collect_exact()?;
                 Ok(ProvideData { service, with })
             })

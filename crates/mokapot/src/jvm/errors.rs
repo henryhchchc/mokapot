@@ -100,6 +100,10 @@ impl BytecodeError<ParseErrorKind> {
             available,
         })
     }
+
+    pub(crate) fn invalid_constant_pool_index(index: u16) -> Self {
+        Self::from_kind(ParseErrorKind::InvalidConstantPoolIndex { index })
+    }
 }
 
 #[derive(Debug)]

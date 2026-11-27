@@ -1,5 +1,9 @@
 use std::{fmt, num::NonZeroU16, ops::Range};
 
+use zerocopy::{
+    FromBytes, Immutable, KnownLayout, TryFromBytes, Unaligned, byteorder::big_endian::U16,
+};
+
 pub(crate) mod storage;
 
 use crate::{
@@ -19,6 +23,62 @@ use crate::{
         reference_type::ReferenceType,
     },
 };
+
+/// A nonzero JVM constant-pool index stored as two unaligned, big-endian bytes.
+/// The pool checks the referenced entry on lookup.
+#[derive(Clone, Copy, PartialEq, Eq, TryFromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(C, packed)]
+pub struct ConstantPoolIndex(NonZeroU16);
+
+impl ConstantPoolIndex {
+    /// Creates an index, returning `None` for zero.
+    #[must_use]
+    pub fn new(index: u16) -> Option<Self> {
+        NonZeroU16::new(index.to_be()).map(Self)
+    }
+
+    /// Returns the numeric index in native byte order.
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        u16::from_be(self.0.get())
+    }
+}
+
+impl fmt::Debug for ConstantPoolIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ConstantPoolIndex")
+            .field(&self.get())
+            .finish()
+    }
+}
+
+impl TryFrom<u16> for ConstantPoolIndex {
+    type Error = ParseError;
+
+    fn try_from(index: u16) -> Result<Self, Self::Error> {
+        Self::new(index).ok_or_else(|| ParseError::invalid_constant_pool_index(index))
+    }
+}
+
+/// A two-byte constant-pool reference whose zero value encodes absence.
+#[derive(Debug, Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
+#[repr(transparent)]
+pub struct OptionalConstantPoolIndex(U16);
+
+impl OptionalConstantPoolIndex {
+    /// Returns the referenced index, or `None` for zero.
+    #[must_use]
+    pub fn get(self) -> Option<ConstantPoolIndex> {
+        ConstantPoolIndex::new(self.0.get())
+    }
+}
+
+#[cfg(test)]
+impl From<u16> for OptionalConstantPoolIndex {
+    fn from(index: u16) -> Self {
+        Self(U16::new(index))
+    }
+}
 
 /// An immutable constant pool whose entries have been resolved to typed values.
 #[derive(Clone, PartialEq)]
@@ -52,21 +112,21 @@ macro_rules! define_pool_ids {
 }
 
 define_pool_ids! {
-    Utf8Id(NonZeroU16),
+    Utf8Id(ConstantPoolIndex),
     MethodDescriptorId(u16),
-    ClassId(NonZeroU16),
-    ReferenceTypeId(NonZeroU16),
-    PackageId(NonZeroU16),
-    ModuleId(NonZeroU16),
-    MethodHandleId(NonZeroU16),
-    MethodNameAndTypeId(NonZeroU16),
-    FieldNameAndTypeId(NonZeroU16),
+    ClassId(ConstantPoolIndex),
+    ReferenceTypeId(ConstantPoolIndex),
+    PackageId(ConstantPoolIndex),
+    ModuleId(ConstantPoolIndex),
+    MethodHandleId(ConstantPoolIndex),
+    MethodNameAndTypeId(ConstantPoolIndex),
+    FieldNameAndTypeId(ConstantPoolIndex),
     FieldTypeId(u16),
     ReturnTypeId(u16),
-    ConstantValueId(NonZeroU16),
-    FieldRefId(NonZeroU16),
-    MethodRefId(NonZeroU16),
-    InvokeDynamicId(NonZeroU16),
+    ConstantValueId(ConstantPoolIndex),
+    FieldRefId(ConstantPoolIndex),
+    MethodRefId(ConstantPoolIndex),
+    InvokeDynamicId(ConstantPoolIndex),
 }
 
 /// A resolved constant-pool entry.
@@ -131,7 +191,7 @@ pub(crate) enum NameAndType {
 }
 
 impl Entry {
-    fn type_mismatch(&self, index: NonZeroU16, expected: &'static str) -> ParseError {
+    fn type_mismatch(&self, index: ConstantPoolIndex, expected: &'static str) -> ParseError {
         ParseError::from_kind(ParseErrorKind::UnexpectedConstantPoolEntry {
             index: index.get(),
             expected,
@@ -165,36 +225,48 @@ impl Entry {
 }
 
 impl ConstantPool {
-    pub(crate) fn field_ref_id(&self, index: u16) -> Result<FieldRefId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn field_ref_id(&self, index: ConstantPoolIndex) -> Result<FieldRefId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::FieldRef(_) => Ok(FieldRefId(index)),
             _ => Err(entry.type_mismatch(index, "Fieldref")),
         }
     }
-    pub(crate) fn method_ref_id(&self, index: u16) -> Result<MethodRefId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn method_ref_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<MethodRefId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::MethodRef(_) => Ok(MethodRefId(index)),
             _ => Err(entry.type_mismatch(index, "Methodref")),
         }
     }
-    pub(crate) fn interface_method_ref_id(&self, index: u16) -> Result<MethodRefId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn interface_method_ref_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<MethodRefId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::InterfaceMethodRef(_) => Ok(MethodRefId(index)),
             _ => Err(entry.type_mismatch(index, "InterfaceMethodref")),
         }
     }
-    pub(crate) fn method_or_interface_ref_id(&self, index: u16) -> Result<MethodRefId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn method_or_interface_ref_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<MethodRefId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::MethodRef(_) | Entry::InterfaceMethodRef(_) => Ok(MethodRefId(index)),
             _ => Err(entry.type_mismatch(index, "Methodref | InterfaceMethodref")),
         }
     }
-    pub(crate) fn invoke_dynamic_id(&self, index: u16) -> Result<InvokeDynamicId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn invoke_dynamic_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<InvokeDynamicId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::InvokeDynamic { .. } => Ok(InvokeDynamicId(index)),
             _ => Err(entry.type_mismatch(index, "InvokeDynamic")),
@@ -238,8 +310,11 @@ impl ConstantPool {
             _ => unreachable!("validated entry kind"),
         }
     }
-    pub(crate) fn reference_type_id(&self, index: u16) -> Result<ReferenceTypeId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn reference_type_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<ReferenceTypeId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::Class { .. } => Ok(ReferenceTypeId(index)),
             _ => Err(entry.type_mismatch(index, "Class")),
@@ -254,8 +329,8 @@ impl ConstantPool {
     pub(crate) fn class_reference_type(&self, id: ClassId) -> &ReferenceType {
         self.reference_type(ReferenceTypeId(id.0))
     }
-    pub(crate) fn class_id(&self, index: u16) -> Result<ClassId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn class_id(&self, index: ConstantPoolIndex) -> Result<ClassId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::Class {
                 reference_type: ReferenceType::Class(_),
@@ -273,8 +348,8 @@ impl ConstantPool {
             _ => unreachable!("validated entry kind"),
         }
     }
-    pub(crate) fn package_id(&self, index: u16) -> Result<PackageId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn package_id(&self, index: ConstantPoolIndex) -> Result<PackageId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::Package(_) => Ok(PackageId(index)),
             _ => Err(entry.type_mismatch(index, "PackageName")),
@@ -286,8 +361,8 @@ impl ConstantPool {
             _ => unreachable!("validated entry kind"),
         }
     }
-    pub(crate) fn module_id(&self, index: u16) -> Result<ModuleId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn module_id(&self, index: ConstantPoolIndex) -> Result<ModuleId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::Module(_) => Ok(ModuleId(index)),
             _ => Err(entry.type_mismatch(index, "ModuleName")),
@@ -299,8 +374,11 @@ impl ConstantPool {
             _ => unreachable!("validated entry kind"),
         }
     }
-    pub(crate) fn method_handle_id(&self, index: u16) -> Result<MethodHandleId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+    pub(crate) fn method_handle_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<MethodHandleId, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
             Entry::MethodHandle(_) => Ok(MethodHandleId(index)),
             _ => Err(entry.type_mismatch(index, "MethodHandle")),
@@ -314,9 +392,9 @@ impl ConstantPool {
     }
     pub(crate) fn method_name_and_type_id(
         &self,
-        index: u16,
+        index: ConstantPoolIndex,
     ) -> Result<MethodNameAndTypeId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+        let entry = self.entry(index)?;
         match entry {
             Entry::NameAndType(NameAndType::Method(..)) => Ok(MethodNameAndTypeId(index)),
             _ => Err(entry.type_mismatch(index, "method name and type")),
@@ -339,37 +417,39 @@ impl ConstantPool {
     pub(crate) fn return_type(&self, id: ReturnTypeId) -> &ReturnType {
         &self.return_types[usize::from(id.0)]
     }
-    pub(crate) fn constant_value_id(&self, index: u16) -> Result<ConstantValueId, ParseError> {
-        let (index, _) = self.get_constant_value(index)?;
+    pub(crate) fn constant_value_id(
+        &self,
+        index: ConstantPoolIndex,
+    ) -> Result<ConstantValueId, ParseError> {
+        self.get_constant_value(index)?;
         Ok(ConstantValueId(index))
     }
     pub(crate) fn constant_value(&self, id: ConstantValueId) -> ConstantVal<'_> {
-        self.get_constant_value(id.0.get())
+        self.get_constant_value(id.0)
             .expect("validated constant pool ID")
-            .1
     }
-    pub(crate) fn get_utf8(&self, index: u16) -> Result<&JavaStr, ParseError> {
-        let (_, range) = self.utf8_range(index)?;
+    pub(crate) fn get_utf8(&self, index: ConstantPoolIndex) -> Result<&JavaStr, ParseError> {
+        let range = self.utf8_range(index)?;
         let bytes = &self.utf8_bytes[range.clone()];
         // SAFETY: append_utf8 records the exact bounds of a validated JavaStr.
         Ok(unsafe { JavaStr::from_cesu8_unchecked(bytes) })
     }
 
-    fn utf8_range(&self, index: u16) -> Result<(NonZeroU16, &Range<usize>), ParseError> {
-        let (index, entry) = self.entry(index)?;
+    fn utf8_range(&self, index: ConstantPoolIndex) -> Result<&Range<usize>, ParseError> {
+        let entry = self.entry(index)?;
         match entry {
-            Entry::Utf8(range) => Ok((index, range)),
+            Entry::Utf8(range) => Ok(range),
             _ => Err(entry.type_mismatch(index, "Utf8")),
         }
     }
 
-    pub(crate) fn utf8_id(&self, index: u16) -> Result<Utf8Id, ParseError> {
-        let (index, _) = self.utf8_range(index)?;
+    pub(crate) fn utf8_id(&self, index: ConstantPoolIndex) -> Result<Utf8Id, ParseError> {
+        self.utf8_range(index)?;
         Ok(Utf8Id(index))
     }
 
     pub(crate) fn utf8(&self, id: Utf8Id) -> &JavaStr {
-        self.get_utf8(id.0.get()).expect("validated UTF-8 pool ID")
+        self.get_utf8(id.0).expect("validated UTF-8 pool ID")
     }
 
     pub(crate) fn method_descriptor(&self, id: MethodDescriptorId) -> &MethodDescriptor {
@@ -377,30 +457,26 @@ impl ConstantPool {
     }
 
     #[cfg(test)]
-    #[cfg(test)]
     pub(crate) const fn count(&self) -> u16 {
         self.inner.count()
     }
 
     /// Gets an entry, or `None` for an invalid index or reserved slot.
     #[must_use]
-    fn get_entry(&self, index: NonZeroU16) -> Option<&Entry> {
+    fn get_entry(&self, index: ConstantPoolIndex) -> Option<&Entry> {
         self.inner.get_entry(index.get())
     }
 
-    fn entry(&self, index: u16) -> Result<(NonZeroU16, &Entry), ParseError> {
-        let invalid_index =
-            || ParseError::from_kind(ParseErrorKind::InvalidConstantPoolIndex { index });
-        let index = NonZeroU16::new(index).ok_or_else(invalid_index)?;
-        let entry = self.get_entry(index).ok_or_else(invalid_index)?;
-        Ok((index, entry))
+    fn entry(&self, index: ConstantPoolIndex) -> Result<&Entry, ParseError> {
+        self.get_entry(index)
+            .ok_or_else(|| ParseError::invalid_constant_pool_index(index.get()))
     }
 
     pub(crate) fn field_name_and_type_id(
         &self,
-        index: u16,
+        index: ConstantPoolIndex,
     ) -> Result<FieldNameAndTypeId, ParseError> {
-        let (index, entry) = self.entry(index)?;
+        let entry = self.entry(index)?;
         match entry {
             Entry::NameAndType(NameAndType::Field(..)) => Ok(FieldNameAndTypeId(index)),
             _ => Err(entry.type_mismatch(index, "NameAndType with a field descriptor")),
@@ -416,9 +492,9 @@ impl ConstantPool {
         }
     }
 
-    fn get_constant_value(&self, index: u16) -> Result<(NonZeroU16, ConstantVal<'_>), ParseError> {
-        let (index, entry) = self.entry(index)?;
-        let value = match entry {
+    fn get_constant_value(&self, index: ConstantPoolIndex) -> Result<ConstantVal<'_>, ParseError> {
+        let entry = self.entry(index)?;
+        Ok(match entry {
             Entry::Integer(value) => ConstantVal::Integer(*value),
             Entry::Float(value) => ConstantVal::Float(*value),
             Entry::Long(value) => ConstantVal::Long(*value),
@@ -435,8 +511,7 @@ impl ConstantPool {
                 ConstantVal::Dynamic(*bootstrap_method_attr_index, name, ty)
             }
             _ => return Err(entry.type_mismatch(index, "Loadable constant")),
-        };
-        Ok((index, value))
+        })
     }
 
     fn append_utf8(&mut self, value: &JavaStr) -> Range<usize> {
@@ -502,5 +577,7 @@ impl ConstantPool {
 
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+pub(crate) use test_support::pool_index;
 #[cfg(test)]
 mod tests;

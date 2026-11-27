@@ -4,28 +4,27 @@ use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endi
 
 use super::super::{
     Decode, ParseError,
-    decoder::{borrow_slice, parse_repeated},
-    fixed_layout::FixedLayout,
+    decoder::{parse_repeated, try_borrow_view},
 };
-use crate::intrinsics::see_jvm_spec;
+use crate::{intrinsics::see_jvm_spec, jvm::ConstantPoolIndex};
 
 #[doc = see_jvm_spec!(4, 7, 16)]
 pub struct Annotation {
-    pub type_index: u16,
-    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
+    pub annotation_type: ConstantPoolIndex,
+    pub element_value_pairs: Box<[(ConstantPoolIndex, ElementValueInfo)]>,
 }
 
 impl<'a> Decode<'a> for Annotation {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let type_index = Decode::decode(bytes)?;
+        let annotation_type = Decode::decode(bytes)?;
         let num_element_value_pairs = u16::decode(bytes)?;
         let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
-            let element_name_index = Decode::decode(bytes)?;
+            let element_name = Decode::decode(bytes)?;
             let element_value = ElementValueInfo::decode(bytes)?;
-            Ok((element_name_index, element_value))
+            Ok((element_name, element_value))
         })?;
         Ok(Self {
-            type_index,
+            annotation_type,
             element_value_pairs,
         })
     }
@@ -33,12 +32,12 @@ impl<'a> Decode<'a> for Annotation {
 
 #[doc = see_jvm_spec!(4, 7, 16, 1)]
 pub enum ElementValueInfo {
-    Const(u8, u16),
+    Const(u8, ConstantPoolIndex),
     Enum {
-        type_name_index: u16,
-        const_name_index: u16,
+        type_name: ConstantPoolIndex,
+        const_name: ConstantPoolIndex,
     },
-    ClassInfo(u16),
+    ClassInfo(ConstantPoolIndex),
     Annotation(Annotation),
     Array(Box<[ElementValueInfo]>),
 }
@@ -51,8 +50,8 @@ impl<'a> Decode<'a> for ElementValueInfo {
                 Ok(Self::Const(tag, Decode::decode(bytes)?))
             }
             b'e' => Ok(Self::Enum {
-                type_name_index: Decode::decode(bytes)?,
-                const_name_index: Decode::decode(bytes)?,
+                type_name: Decode::decode(bytes)?,
+                const_name: Decode::decode(bytes)?,
             }),
             b'c' => Ok(Self::ClassInfo(Decode::decode(bytes)?)),
             b'@' => Ok(Self::Annotation(Annotation::decode(bytes)?)),
@@ -75,32 +74,30 @@ pub struct TypePathElement {
     pub argument_index: u8,
 }
 
-impl FixedLayout for TypePathElement {}
-
 #[doc = see_jvm_spec!(4, 7, 20)]
 pub struct TypeAnnotation<'a> {
     pub target_info: TargetInfo<'a>,
     pub target_path: &'a [TypePathElement],
-    pub type_index: u16,
-    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
+    pub annotation_type: ConstantPoolIndex,
+    pub element_value_pairs: Box<[(ConstantPoolIndex, ElementValueInfo)]>,
 }
 
 impl<'a> Decode<'a> for TypeAnnotation<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let target_info = TargetInfo::decode(bytes)?;
         let target_path_length = u8::decode(bytes)?;
-        let target_path = borrow_slice(bytes, usize::from(target_path_length))?;
-        let type_index = Decode::decode(bytes)?;
+        let target_path = try_borrow_view(bytes, usize::from(target_path_length))?;
+        let annotation_type = Decode::decode(bytes)?;
         let num_element_value_pairs = u16::decode(bytes)?;
         let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
-            let element_name_index = Decode::decode(bytes)?;
+            let element_name = Decode::decode(bytes)?;
             let element_value = ElementValueInfo::decode(bytes)?;
-            Ok((element_name_index, element_value))
+            Ok((element_name, element_value))
         })?;
         Ok(Self {
             target_info,
             target_path,
-            type_index,
+            annotation_type,
             element_value_pairs,
         })
     }
@@ -207,12 +204,12 @@ impl<'a> Decode<'a> for TargetInfo<'a> {
             },
             0x40 => {
                 let table_length = u16::decode(bytes)?;
-                let table = borrow_slice(bytes, usize::from(table_length))?;
+                let table = try_borrow_view(bytes, usize::from(table_length))?;
                 Self::LocalVariable(table)
             }
             0x41 => {
                 let table_length = u16::decode(bytes)?;
-                let table = borrow_slice(bytes, usize::from(table_length))?;
+                let table = try_borrow_view(bytes, usize::from(table_length))?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
@@ -265,5 +262,3 @@ pub struct LocalVariableTarget {
     pub length: U16,
     pub index: U16,
 }
-
-impl FixedLayout for LocalVariableTarget {}

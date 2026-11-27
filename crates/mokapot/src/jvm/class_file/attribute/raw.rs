@@ -1,12 +1,16 @@
 //! Raw attribute payloads.
 
-use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
+use zerocopy::{
+    FromBytes, Immutable, KnownLayout, TryFromBytes, Unaligned, byteorder::big_endian::U16,
+};
 
 use super::super::{
-    Decode, ParseError, class::raw as class_raw, code::raw as code_raw, decoder::borrow_view,
-    fixed_layout::FixedLayout,
+    Decode, ParseError, class::raw as class_raw, code::raw as code_raw, decoder::try_borrow_view,
 };
-use crate::intrinsics::see_jvm_spec;
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{ConstantPoolIndex, constant_pool::OptionalConstantPoolIndex},
+};
 
 macro_rules! impl_decode {
     ($name:ident, $count:ty) => {
@@ -14,33 +18,28 @@ macro_rules! impl_decode {
             fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
                 let mut header = *bytes;
                 let count = <$count>::decode(&mut header)?;
-                borrow_view::<$name>(bytes, usize::from(count))
+                try_borrow_view(bytes, usize::from(count))
             }
         }
     };
 }
 
-#[doc = see_jvm_spec!(4, 7, 2)]
-#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ConstantValue {
-    pub constantvalue_index: U16,
-}
-
-impl FixedLayout for ConstantValue {}
-
+/// Shared payload of `Exceptions`, `ModulePackages`, `NestMembers` and `PermittedSubclasses`.
 #[doc = see_jvm_spec!(4, 7, 5)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[doc = see_jvm_spec!(4, 7, 26)]
+#[doc = see_jvm_spec!(4, 7, 29)]
+#[doc = see_jvm_spec!(4, 7, 31)]
+#[derive(TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
-pub struct Exceptions {
-    pub number_of_exceptions: U16,
-    pub exception_index_table: [U16],
+pub struct ConstantPoolIndices {
+    pub count: U16,
+    pub indices: [ConstantPoolIndex],
 }
 
-impl_decode!(Exceptions, u16);
+impl_decode!(ConstantPoolIndices, u16);
 
 #[doc = see_jvm_spec!(4, 7, 6)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct InnerClasses {
     pub number_of_classes: U16,
@@ -48,24 +47,6 @@ pub struct InnerClasses {
 }
 
 impl_decode!(InnerClasses, u16);
-
-#[doc = see_jvm_spec!(4, 7, 9)]
-#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct Signature {
-    pub signature_index: U16,
-}
-
-impl FixedLayout for Signature {}
-
-#[doc = see_jvm_spec!(4, 7, 10)]
-#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct SourceFile {
-    pub sourcefile_index: U16,
-}
-
-impl FixedLayout for SourceFile {}
 
 #[doc = see_jvm_spec!(4, 7, 12)]
 #[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
@@ -78,7 +59,7 @@ pub struct LineNumberTable {
 impl_decode!(LineNumberTable, u16);
 
 #[doc = see_jvm_spec!(4, 7, 13)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableTable {
     pub local_variable_table_length: U16,
@@ -88,7 +69,7 @@ pub struct LocalVariableTable {
 impl_decode!(LocalVariableTable, u16);
 
 #[doc = see_jvm_spec!(4, 7, 14)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableTypeTable {
     pub local_variable_type_table_length: U16,
@@ -101,11 +82,9 @@ impl_decode!(LocalVariableTypeTable, u16);
 #[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct MethodParameterInfo {
-    pub name_index: U16,
+    pub name: OptionalConstantPoolIndex,
     pub access_flags: U16,
 }
-
-impl FixedLayout for MethodParameterInfo {}
 
 #[doc = see_jvm_spec!(4, 7, 24)]
 #[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
@@ -116,51 +95,3 @@ pub struct MethodParameters {
 }
 
 impl_decode!(MethodParameters, u8);
-
-#[doc = see_jvm_spec!(4, 7, 26)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ModulePackages {
-    pub package_count: U16,
-    pub package_index: [U16],
-}
-
-impl_decode!(ModulePackages, u16);
-
-#[doc = see_jvm_spec!(4, 7, 27)]
-#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct ModuleMainClass {
-    pub main_class_index: U16,
-}
-
-impl FixedLayout for ModuleMainClass {}
-
-#[doc = see_jvm_spec!(4, 7, 28)]
-#[derive(Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct NestHost {
-    pub host_class_index: U16,
-}
-
-impl FixedLayout for NestHost {}
-
-#[doc = see_jvm_spec!(4, 7, 29)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct NestMembers {
-    pub number_of_classes: U16,
-    pub classes: [U16],
-}
-
-impl_decode!(NestMembers, u16);
-
-#[doc = see_jvm_spec!(4, 7, 31)]
-#[derive(FromBytes, KnownLayout, Immutable, Unaligned)]
-#[repr(C)]
-pub struct PermittedSubclasses {
-    pub number_of_classes: U16,
-    pub classes: [U16],
-}
-
-impl_decode!(PermittedSubclasses, u16);
