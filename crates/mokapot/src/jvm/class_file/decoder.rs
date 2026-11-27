@@ -24,10 +24,6 @@ fn read_wire<T: FixedLayout>(bytes: &mut &[u8]) -> Result<T, ParseError> {
     Ok(value)
 }
 
-/// Decodes one value, advancing the input past it.
-pub(super) fn decode_value<'a, T: Decode<'a>>(bytes: &mut &'a [u8]) -> Result<T, ParseError> {
-    T::decode(bytes)
-}
 macro_rules! impl_decode_integer {
     ($type:ty, $wire_type:ty) => {
         impl<'a> Decode<'a> for $type {
@@ -45,13 +41,13 @@ impl_decode_integer!(i32, I32);
 
 impl<'a> Decode<'a> for NonZeroU8 {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Self::new(decode_value(bytes)?).context("Expected a nonzero value")
+        Self::new(u8::decode(bytes)?).context("Expected a nonzero value")
     }
 }
 
 impl<'a> Decode<'a> for NonZeroU16 {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        Self::new(decode_value(bytes)?).context("Expected a nonzero value")
+        Self::new(u16::decode(bytes)?).context("Expected a nonzero value")
     }
 }
 
@@ -104,13 +100,13 @@ pub(super) fn parse_repeated<'a, E>(
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, decode_value, parse_repeated};
+    use super::{Decode, ParseError, parse_repeated};
     use crate::jvm::errors::ParseErrorKind;
 
     #[test]
     fn truncated_value_reports_size_without_consuming_input() {
         let mut remaining = [1].as_slice();
-        let error = decode_value::<u16>(&mut remaining).unwrap_err();
+        let error = u16::decode(&mut remaining).unwrap_err();
         assert_eq!(
             error.kind(),
             ParseErrorKind::Truncated {
@@ -125,7 +121,7 @@ mod tests {
     fn repeated_parsing_stops_when_an_element_is_rejected() {
         let mut remaining = [1, 0xff, 3].as_slice();
         let error = parse_repeated(&mut remaining, 3_u8, |bytes| {
-            let value: u8 = decode_value(bytes)?;
+            let value = u8::decode(bytes)?;
             if value == 0xff {
                 return Err(ParseError::malform("Rejected element"));
             }

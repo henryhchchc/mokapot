@@ -1,9 +1,6 @@
 //! Raw JVM instruction model and parser.
 
-use crate::jvm::class_file::{
-    Decode,
-    decoder::{borrow_view, decode_value},
-};
+use crate::jvm::class_file::{Decode, decoder::borrow_view};
 use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::I32};
 
 use std::{iter, num::NonZeroU8};
@@ -287,9 +284,9 @@ pub struct TableSwitchInfo {
 impl<'a> Decode<'a> for &'a TableSwitchInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let mut header = *bytes;
-        let _: i32 = decode_value(&mut header)?;
-        let low: i32 = decode_value(&mut header)?;
-        let high: i32 = decode_value(&mut header)?;
+        i32::decode(&mut header)?;
+        let low = i32::decode(&mut header)?;
+        let high = i32::decode(&mut header)?;
         if low > high {
             return Err(ParseError::malform("Invalid tableswitch range"));
         }
@@ -314,8 +311,8 @@ pub struct LookupSwitchInfo {
 impl<'a> Decode<'a> for &'a LookupSwitchInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let mut header = *bytes;
-        let _: i32 = decode_value(&mut header)?;
-        let npairs: i32 = decode_value(&mut header)?;
+        i32::decode(&mut header)?;
+        let npairs = i32::decode(&mut header)?;
         let count = usize::try_from(npairs)
             .map_err(|_| ParseError::malform("Invalid lookupswitch pair count"))?;
         let mut remaining = *bytes;
@@ -358,25 +355,25 @@ impl<'a> RawInstruction<'a> {
         if bytes.is_empty() {
             return Ok(None);
         }
-        let opcode: u8 = decode_value(bytes)?;
+        let opcode = u8::decode(bytes)?;
         let instruction = match opcode {
             0x32 => AALoad,
             0x53 => AAStore,
             0x01 => AConstNull,
             0x19 => ALoad {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x2a => ALoad0,
             0x2b => ALoad1,
             0x2c => ALoad2,
             0x2d => ALoad3,
             0xbd => ANewArray {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0xb0 => AReturn,
             0xbe => ArrayLength,
             0x3a => AStore {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x4b => AStore0,
             0x4c => AStore1,
@@ -386,12 +383,12 @@ impl<'a> RawInstruction<'a> {
             0x33 => BALoad,
             0x54 => BAStore,
             0x10 => BiPush {
-                value: decode_value(bytes)?,
+                value: Decode::decode(bytes)?,
             },
             0x34 => CALoad,
             0x55 => CAStore,
             0xc0 => CheckCast {
-                target_type_index: decode_value(bytes)?,
+                target_type_index: Decode::decode(bytes)?,
             },
             0x90 => D2F,
             0x8e => D2I,
@@ -405,7 +402,7 @@ impl<'a> RawInstruction<'a> {
             0x0f => DConst1,
             0x6f => DDiv,
             0x18 => DLoad {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x26 => DLoad0,
             0x27 => DLoad1,
@@ -416,7 +413,7 @@ impl<'a> RawInstruction<'a> {
             0x73 => DRem,
             0xaf => DReturn,
             0x39 => DStore {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x47 => DStore0,
             0x48 => DStore1,
@@ -442,7 +439,7 @@ impl<'a> RawInstruction<'a> {
             0x0d => FConst2,
             0x6e => FDiv,
             0x17 => FLoad {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x22 => FLoad0,
             0x23 => FLoad1,
@@ -453,7 +450,7 @@ impl<'a> RawInstruction<'a> {
             0x72 => FRem,
             0xae => FReturn,
             0x38 => FStore {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x43 => FStore0,
             0x44 => FStore1,
@@ -461,16 +458,16 @@ impl<'a> RawInstruction<'a> {
             0x46 => FStore3,
             0x66 => FSub,
             0xb4 => GetField {
-                field_ref_index: decode_value(bytes)?,
+                field_ref_index: Decode::decode(bytes)?,
             },
             0xb2 => GetStatic {
-                field_ref_index: decode_value(bytes)?,
+                field_ref_index: Decode::decode(bytes)?,
             },
             0xa7 => Goto {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xc8 => GotoW {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x91 => I2B,
             0x92 => I2C,
@@ -491,59 +488,59 @@ impl<'a> RawInstruction<'a> {
             0x08 => IConst5,
             0x6c => IDiv,
             0xa5 => IfACmpEq {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xa6 => IfACmpNe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x9f => IfICmpEq {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xa0 => IfICmpNe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xa1 => IfICmpLt {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xa2 => IfICmpGe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xa3 => IfICmpGt {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xa4 => IfICmpLe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x99 => IfEq {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x9a => IfNe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x9b => IfLt {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x9c => IfGe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x9d => IfGt {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x9e => IfLe {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xc7 => IfNonNull {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xc6 => IfNull {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x84 => IInc {
-                index: decode_value(bytes)?,
-                constant: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
+                constant: Decode::decode(bytes)?,
             },
             0x15 => ILoad {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x1a => ILoad0,
             0x1b => ILoad1,
@@ -552,24 +549,24 @@ impl<'a> RawInstruction<'a> {
             0x68 => IMul,
             0x74 => INeg,
             0xc1 => InstanceOf {
-                target_type_index: decode_value(bytes)?,
+                target_type_index: Decode::decode(bytes)?,
             },
             0xba => {
-                let dynamic_index = decode_value(bytes)?;
-                let zero: u16 = decode_value(bytes)?;
+                let dynamic_index = Decode::decode(bytes)?;
+                let zero = u16::decode(bytes)?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
                 InvokeDynamic { dynamic_index }
             }
             0xb9 => {
-                let method_index = decode_value(bytes)?;
-                let count = decode_value(bytes).map_err(|error| {
+                let method_index = Decode::decode(bytes)?;
+                let count = Decode::decode(bytes).map_err(|error| {
                     error.add_context(format_args!(
                         "Invalid invokeinterface count at instruction {pc}"
                     ))
                 })?;
-                let zero: u8 = decode_value(bytes)?;
+                let zero = u8::decode(bytes)?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
                 }
@@ -579,13 +576,13 @@ impl<'a> RawInstruction<'a> {
                 }
             }
             0xb7 => InvokeSpecial {
-                method_index: decode_value(bytes)?,
+                method_index: Decode::decode(bytes)?,
             },
             0xb8 => InvokeStatic {
-                method_index: decode_value(bytes)?,
+                method_index: Decode::decode(bytes)?,
             },
             0xb6 => InvokeVirtual {
-                method_index: decode_value(bytes)?,
+                method_index: Decode::decode(bytes)?,
             },
             0x80 => IOr,
             0x70 => IRem,
@@ -593,7 +590,7 @@ impl<'a> RawInstruction<'a> {
             0x78 => IShl,
             0x7a => IShr,
             0x36 => IStore {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x3b => IStore0,
             0x3c => IStore1,
@@ -603,10 +600,10 @@ impl<'a> RawInstruction<'a> {
             0x7c => IUShr,
             0x82 => IXor,
             0xa8 => Jsr {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0xc9 => JsrW {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x8a => L2D,
             0x89 => L2F,
@@ -619,17 +616,17 @@ impl<'a> RawInstruction<'a> {
             0x09 => LConst0,
             0x0a => LConst1,
             0x12 => Ldc {
-                const_index: decode_value(bytes)?,
+                const_index: Decode::decode(bytes)?,
             },
             0x13 => LdcW {
-                const_index: decode_value(bytes)?,
+                const_index: Decode::decode(bytes)?,
             },
             0x14 => Ldc2W {
-                const_index: decode_value(bytes)?,
+                const_index: Decode::decode(bytes)?,
             },
             0x6d => LDiv,
             0x16 => LLoad {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x1e => LLoad0,
             0x1f => LLoad1,
@@ -639,15 +636,15 @@ impl<'a> RawInstruction<'a> {
             0x75 => LNeg,
             0xab => {
                 while !(original_len - bytes.len()).is_multiple_of(4) {
-                    let _: u8 = decode_value(bytes)?;
+                    u8::decode(bytes)?;
                 }
-                LookupSwitch(decode_value(bytes)?)
+                LookupSwitch(Decode::decode(bytes)?)
             }
             0xaa => {
                 while !(original_len - bytes.len()).is_multiple_of(4) {
-                    let _: u8 = decode_value(bytes)?;
+                    u8::decode(bytes)?;
                 }
-                TableSwitch(decode_value(bytes)?)
+                TableSwitch(Decode::decode(bytes)?)
             }
             0x81 => LOr,
             0x71 => LRem,
@@ -655,7 +652,7 @@ impl<'a> RawInstruction<'a> {
             0x79 => LShl,
             0x7b => LShr,
             0x37 => LStore {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0x3f => LStore0,
             0x40 => LStore1,
@@ -670,77 +667,77 @@ impl<'a> RawInstruction<'a> {
             0xfe => ImpDep1,
             0xff => ImpDep2,
             0xc5 => MultiANewArray {
-                index: decode_value(bytes)?,
-                dimensions: decode_value(bytes).map_err(|error| {
+                index: Decode::decode(bytes)?,
+                dimensions: Decode::decode(bytes).map_err(|error| {
                     error.add_context(format_args!(
                         "Invalid multianewarray dimensions at instruction {pc}"
                     ))
                 })?,
             },
             0xbb => New {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0xbc => NewArray {
-                atype: decode_value(bytes)?,
+                atype: Decode::decode(bytes)?,
             },
             0x00 => Nop,
             0x57 => Pop,
             0x58 => Pop2,
             0xb5 => PutField {
-                field_ref_index: decode_value(bytes)?,
+                field_ref_index: Decode::decode(bytes)?,
             },
             0xb3 => PutStatic {
-                field_ref_index: decode_value(bytes)?,
+                field_ref_index: Decode::decode(bytes)?,
             },
             0xa9 => Ret {
-                index: decode_value(bytes)?,
+                index: Decode::decode(bytes)?,
             },
             0xb1 => Return,
             0x35 => SALoad,
             0x56 => SAStore,
             0x11 => SiPush {
-                value: decode_value(bytes)?,
+                value: Decode::decode(bytes)?,
             },
             0x5f => Swap,
             0xc4 => {
-                let wide_opcode: u8 = decode_value(bytes)?;
+                let wide_opcode = u8::decode(bytes)?;
                 let wide_insn = match wide_opcode {
                     0x15 => RawWideInstruction::ILoad {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x16 => RawWideInstruction::LLoad {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x17 => RawWideInstruction::FLoad {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x18 => RawWideInstruction::DLoad {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x19 => RawWideInstruction::ALoad {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x36 => RawWideInstruction::IStore {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x37 => RawWideInstruction::LStore {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x38 => RawWideInstruction::FStore {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x39 => RawWideInstruction::DStore {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x3a => RawWideInstruction::AStore {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     0x84 => RawWideInstruction::IInc {
-                        index: decode_value(bytes)?,
-                        increment: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
+                        increment: Decode::decode(bytes)?,
                     },
                     0xa9 => RawWideInstruction::Ret {
-                        index: decode_value(bytes)?,
+                        index: Decode::decode(bytes)?,
                     },
                     _ => Err(ParseError::from_kind(ParseErrorKind::InvalidOpcode {
                         opcode: wide_opcode,

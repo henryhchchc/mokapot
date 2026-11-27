@@ -4,9 +4,7 @@ use crate::jvm::class_file::attribute::extract_attributes;
 use crate::jvm::class_file::flags::parse_flags;
 
 use super::{
-    Decode, ParseError, ResolutionContext,
-    attribute::AttributeInfo,
-    decoder::{decode_value, parse_repeated},
+    Decode, ParseError, ResolutionContext, attribute::AttributeInfo, decoder::parse_repeated,
     resolve::Resolve,
 };
 use crate::{
@@ -30,7 +28,7 @@ pub(crate) struct FieldInfo<'a> {
 impl<'a> Decode<'a> for FieldInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let [access_flags, name_index, descriptor_index, attributes_count] =
-            decode_value::<[U16; 4]>(bytes)?.map(U16::get);
+            <[U16; 4]>::decode(bytes)?.map(U16::get);
         let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             access_flags,

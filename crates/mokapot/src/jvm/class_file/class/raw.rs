@@ -7,7 +7,7 @@ use super::super::fixed_layout::FixedLayout;
 use super::super::{
     Decode, ParseError,
     attribute::AttributeInfo,
-    decoder::{borrow_view, decode_value, parse_repeated},
+    decoder::{borrow_view, parse_repeated},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -45,8 +45,8 @@ pub struct BootstrapMethod {
 impl<'a> Decode<'a> for &'a BootstrapMethod {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let mut header = *bytes;
-        let _: u16 = decode_value(&mut header)?;
-        let count: u16 = decode_value(&mut header)?;
+        u16::decode(&mut header)?;
+        let count = u16::decode(&mut header)?;
         borrow_view::<BootstrapMethod>(bytes, usize::from(count))
     }
 }
@@ -60,9 +60,9 @@ pub struct RecordComponentInfo<'a> {
 
 impl<'a> Decode<'a> for RecordComponentInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let name_index = decode_value(bytes)?;
-        let descriptor_index = decode_value(bytes)?;
-        let attributes_count: u16 = decode_value(bytes)?;
+        let name_index = Decode::decode(bytes)?;
+        let descriptor_index = Decode::decode(bytes)?;
+        let attributes_count = u16::decode(bytes)?;
         let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             name_index,

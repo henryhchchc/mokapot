@@ -6,7 +6,7 @@ use super::super::fixed_layout::FixedLayout;
 
 use super::super::{
     Decode, ParseError,
-    decoder::{borrow_slice, borrow_view, decode_value, parse_repeated},
+    decoder::{borrow_slice, borrow_view, parse_repeated},
 };
 use crate::intrinsics::see_jvm_spec;
 
@@ -24,18 +24,18 @@ pub struct ModuleInfo<'a> {
 
 impl<'a> Decode<'a> for ModuleInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let module_name_index = decode_value(bytes)?;
-        let module_flags = decode_value(bytes)?;
-        let module_version_index = decode_value(bytes)?;
-        let requires_count: u16 = decode_value(bytes)?;
+        let module_name_index = Decode::decode(bytes)?;
+        let module_flags = Decode::decode(bytes)?;
+        let module_version_index = Decode::decode(bytes)?;
+        let requires_count = u16::decode(bytes)?;
         let requires = borrow_slice(bytes, usize::from(requires_count))?;
-        let exports_count: u16 = decode_value(bytes)?;
+        let exports_count = u16::decode(bytes)?;
         let exports = parse_repeated(bytes, exports_count, <&ExportsInfo>::decode)?;
-        let opens_count: u16 = decode_value(bytes)?;
+        let opens_count = u16::decode(bytes)?;
         let opens = parse_repeated(bytes, opens_count, <&OpensInfo>::decode)?;
-        let uses_count: u16 = decode_value(bytes)?;
+        let uses_count = u16::decode(bytes)?;
         let uses = borrow_slice(bytes, usize::from(uses_count))?;
-        let provides_count: u16 = decode_value(bytes)?;
+        let provides_count = u16::decode(bytes)?;
         let provides = parse_repeated(bytes, provides_count, <&ProvidesInfo>::decode)?;
         Ok(Self {
             module_name_index,
@@ -74,9 +74,9 @@ pub struct ExportsInfo {
 impl<'a> Decode<'a> for &'a ExportsInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let mut header = *bytes;
-        let _: u16 = decode_value(&mut header)?;
-        let _: u16 = decode_value(&mut header)?;
-        let count: u16 = decode_value(&mut header)?;
+        u16::decode(&mut header)?;
+        u16::decode(&mut header)?;
+        let count = u16::decode(&mut header)?;
         borrow_view::<ExportsInfo>(bytes, usize::from(count))
     }
 }
@@ -94,9 +94,9 @@ pub struct OpensInfo {
 impl<'a> Decode<'a> for &'a OpensInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let mut header = *bytes;
-        let _: u16 = decode_value(&mut header)?;
-        let _: u16 = decode_value(&mut header)?;
-        let count: u16 = decode_value(&mut header)?;
+        u16::decode(&mut header)?;
+        u16::decode(&mut header)?;
+        let count = u16::decode(&mut header)?;
         borrow_view::<OpensInfo>(bytes, usize::from(count))
     }
 }
@@ -113,8 +113,8 @@ pub struct ProvidesInfo {
 impl<'a> Decode<'a> for &'a ProvidesInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let mut header = *bytes;
-        let _: u16 = decode_value(&mut header)?;
-        let count: u16 = decode_value(&mut header)?;
+        u16::decode(&mut header)?;
+        let count = u16::decode(&mut header)?;
         borrow_view::<ProvidesInfo>(bytes, usize::from(count))
     }
 }
