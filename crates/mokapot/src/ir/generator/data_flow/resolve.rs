@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 
 use super::{
-    Position,
-    analysis::{BlockSolution, FrameArm, FrameBlock, FrameSource},
+    Frame, IrParts, Position,
+    analysis::{BlockSolution, DataflowParts, FrameArm, FrameBlock, FrameSource},
 };
-use crate::ir::{BasicBlock, BlockId, BlockParameter, SourceMap, Successor, ValueId};
+use crate::ir::{BasicBlock, BlockId, BlockParameter, MethodEntry, SourceMap, Successor, ValueId};
 
 impl<'class> BlockSolution<'class> {
     fn entry_arguments(&self) -> Vec<ValueId> {
@@ -14,22 +14,15 @@ impl<'class> BlockSolution<'class> {
             .incoming_frames
             .get(&FrameSource::Entry)
             .expect("the entry block is seeded with its entry frame");
-        self.parameters
-            .keys()
-            .map(|&position| {
-                frame
-                    .value_at(position)
-                    .copied()
-                    .expect("every incoming frame holds each declared parameter")
-            })
-            .collect()
+        arguments_for(frame, self.parameters.keys().copied())
     }
 
-    fn parameter_positions(&self) -> Vec<Position> {
-        self.parameters.keys().copied().collect()
-    }
-
-    fn resolve(self, target_parameters: &HashMap<BlockId, Vec<Position>>) -> BasicBlock<'class> {
+    fn resolve(
+        self,
+        id: BlockId,
+        target_parameters: &HashMap<BlockId, Vec<Position>>,
+        source_map: &mut SourceMap,
+    ) -> BasicBlock<'class> {
         let Self {
             parameters, block, ..
         } = self;
@@ -37,7 +30,7 @@ impl<'class> BlockSolution<'class> {
             kind,
             operations,
             terminator,
-            ..
+            terminator_source,
         } = block;
         let terminator = terminator.map_arms(|arm| match arm {
             FrameArm::Block {
@@ -46,20 +39,12 @@ impl<'class> BlockSolution<'class> {
                 frame,
                 ..
             } => {
-                let arguments = target_parameters
+                let positions = target_parameters
                     .get(&target)
-                    .expect("every arm target is a solved block")
-                    .iter()
-                    .map(|&position| {
-                        frame
-                            .value_at(position)
-                            .copied()
-                            .expect("a successor frame holds every target parameter")
-                    })
-                    .collect();
+                    .expect("every arm target is a solved block");
                 Successor::Block {
                     target,
-                    arguments,
+                    arguments: arguments_for(&frame, positions.iter().copied()),
                     transfer,
                 }
             }
@@ -69,51 +54,65 @@ impl<'class> BlockSolution<'class> {
             .into_values()
             .map(|value| BlockParameter { value })
             .collect();
+        if let Some(origin) = terminator_source {
+            source_map.record_terminator(origin, id);
+        }
+        let operations = operations
+            .into_iter()
+            .enumerate()
+            .map(|(index, (origin, operation))| {
+                source_map.record_operation(origin, id, index);
+                operation
+            })
+            .collect();
         BasicBlock {
             kind,
             parameters,
-            operations: operations
-                .into_iter()
-                .map(|(_, operation)| operation)
-                .collect(),
+            operations,
             terminator,
         }
     }
 }
 
+fn arguments_for(frame: &Frame, positions: impl Iterator<Item = Position>) -> Vec<ValueId> {
+    positions
+        .map(|position| {
+            *frame
+                .value_at(position)
+                .expect("every incoming frame holds each declared parameter")
+        })
+        .collect()
+}
+
 /// Resolves block parameters and successor arguments after fixed-point analysis.
-pub(super) fn resolve_blocks(
-    entry: BlockId,
-    blocks: HashMap<BlockId, BlockSolution<'_>>,
-) -> (Vec<ValueId>, HashMap<BlockId, BasicBlock<'_>>) {
+pub(super) fn resolve(parts: DataflowParts<'_>) -> IrParts<'_> {
+    let DataflowParts {
+        entry,
+        blocks,
+        this_value,
+        parameter_values,
+    } = parts;
     let entry_arguments = blocks
         .get(&entry)
         .expect("the entry block is always solved")
         .entry_arguments();
     let target_parameters = blocks
         .iter()
-        .map(|(&id, block)| (id, block.parameter_positions()))
+        .map(|(&id, block)| (id, block.parameters.keys().copied().collect()))
         .collect::<HashMap<_, _>>();
-    let basic_blocks = blocks
+    let mut source_map = SourceMap::new();
+    let blocks = blocks
         .into_iter()
-        .map(|(id, block)| (id, block.resolve(&target_parameters)))
+        .map(|(id, block)| (id, block.resolve(id, &target_parameters, &mut source_map)))
         .collect();
-    (entry_arguments, basic_blocks)
-}
-
-impl SourceMap {
-    pub(super) fn from_block_solutions(
-        block_solutions: &HashMap<BlockId, BlockSolution<'_>>,
-    ) -> Self {
-        let mut source_map = SourceMap::new();
-        for (&block, sol) in block_solutions {
-            if let Some(origin) = sol.block.terminator_source {
-                source_map.record_terminator(origin, block);
-            }
-            for (index, (origin, _)) in sol.block.operations.iter().enumerate() {
-                source_map.record_operation(*origin, block, index);
-            }
-        }
-        source_map
+    IrParts {
+        entry: MethodEntry {
+            block: entry,
+            arguments: entry_arguments,
+        },
+        blocks,
+        this: this_value,
+        parameters: parameter_values,
+        source_map,
     }
 }

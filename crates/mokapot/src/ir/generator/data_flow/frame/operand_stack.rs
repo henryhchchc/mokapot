@@ -7,7 +7,10 @@ use super::{FrameError, FrameValue};
 use crate::{
     intrinsics::see_jvm_spec,
     ir::ValueId,
-    types::{field_type::ValueCategory, method_descriptor::MethodDescriptor},
+    types::{
+        field_type::{FieldType, ValueCategory},
+        method_descriptor::MethodDescriptor,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,14 +117,25 @@ impl OperandStack {
         &mut self,
         descriptor: &MethodDescriptor,
     ) -> Result<Vec<ValueId>, FrameError> {
-        let mut arguments: Vec<_> = descriptor
-            .parameters_types
-            .iter()
+        self.pop_operands(
+            descriptor
+                .parameters_types
+                .iter()
+                .map(FieldType::value_category),
+        )
+    }
+
+    /// Pops operands from the stack and returns them in the supplied category order.
+    pub(crate) fn pop_operands(
+        &mut self,
+        categories: impl DoubleEndedIterator<Item = ValueCategory>,
+    ) -> Result<Vec<ValueId>, FrameError> {
+        let mut operands: Vec<_> = categories
             .rev()
-            .map(|value_type| self.pop(value_type.value_category()))
+            .map(|category| self.pop(category))
             .try_collect()?;
-        arguments.reverse();
-        Ok(arguments)
+        operands.reverse();
+        Ok(operands)
     }
 
     pub(crate) fn apply(&mut self, operation: StackOperation) -> Result<(), FrameError> {

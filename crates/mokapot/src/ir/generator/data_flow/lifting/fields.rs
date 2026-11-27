@@ -12,25 +12,21 @@ impl<'class> LiftContext<'_, '_> {
         &mut self,
         field: FieldRef<'class>,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        self.frame
-            .stack
-            .push(value, field.field_type().value_category())?;
-        let expr = FieldAccess::ReadStatic { field }.into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(
+            field.field_type().value_category(),
+            FieldAccess::ReadStatic { field },
+        )
     }
 
     pub fn read_instance(
         &mut self,
         field: FieldRef<'class>,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
         let object_ref = self.frame.stack.pop(Category1)?;
-        self.frame
-            .stack
-            .push(value, field.field_type().value_category())?;
-        let expr = FieldAccess::ReadInstance { object_ref, field }.into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(
+            field.field_type().value_category(),
+            FieldAccess::ReadInstance { object_ref, field },
+        )
     }
 
     pub fn write_static(

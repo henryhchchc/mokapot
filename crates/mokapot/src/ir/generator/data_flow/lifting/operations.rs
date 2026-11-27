@@ -4,7 +4,7 @@ use super::{FrameError, LiftContext};
 use crate::{
     ir::{
         Operation, ValueId,
-        expression::{Conversion, MathOperation, NaNTreatment},
+        expression::{Expression, MathOperation, NaNTreatment},
     },
     types::field_type::ValueCategory,
 };
@@ -14,21 +14,11 @@ impl<'class> LiftContext<'_, '_> {
         &mut self,
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let shift_amount = self.frame.stack.pop(Category1)?;
-        let base = self.frame.stack.pop(Category2)?;
-        self.frame.stack.push(value, Category2)?;
-        let expr = operation(base, shift_amount).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.binary_with_categories(operation, [Category2, Category1], Category2)
     }
 
     pub fn compare_long(&mut self) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let rhs = self.frame.stack.pop(Category2)?;
-        let lhs = self.frame.stack.pop(Category2)?;
-        self.frame.stack.push(value, Category1)?;
-        let expr = MathOperation::LongComparison(lhs, rhs).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.binary_with_categories(MathOperation::LongComparison, [Category2; 2], Category1)
     }
 
     pub fn compare_float(
@@ -36,12 +26,11 @@ impl<'class> LiftContext<'_, '_> {
         nan_treatment: NaNTreatment,
         category: ValueCategory,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let rhs = self.frame.stack.pop(category)?;
-        let lhs = self.frame.stack.pop(category)?;
-        self.frame.stack.push(value, Category1)?;
-        let expr = MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.binary_with_categories(
+            |lhs, rhs| MathOperation::FloatingPointComparison(lhs, rhs, nan_treatment),
+            [category; 2],
+            Category1,
+        )
     }
 
     pub fn binary(
@@ -49,37 +38,30 @@ impl<'class> LiftContext<'_, '_> {
         operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
         category: ValueCategory,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let rhs = self.frame.stack.pop(category)?;
-        let lhs = self.frame.stack.pop(category)?;
-        self.frame.stack.push(value, category)?;
-
-        let expr = operation(lhs, rhs).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.binary_with_categories(operation, [category; 2], category)
     }
 
-    pub fn conversion(
+    fn binary_with_categories(
         &mut self,
-        conversion: impl FnOnce(ValueId) -> Conversion<'class>,
-        operand_category: ValueCategory,
+        operation: impl FnOnce(ValueId, ValueId) -> MathOperation,
+        [lhs_category, rhs_category]: [ValueCategory; 2],
         result_category: ValueCategory,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let operand = self.frame.stack.pop(operand_category)?;
-        self.frame.stack.push(value, result_category)?;
-        let expr = conversion(operand).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        let rhs = self.frame.stack.pop(rhs_category)?;
+        let lhs = self.frame.stack.pop(lhs_category)?;
+        self.define_on_stack(result_category, operation(lhs, rhs))
     }
 
-    pub fn unary(
+    pub fn unary<E>(
         &mut self,
-        operation: impl FnOnce(ValueId) -> MathOperation,
-        category: ValueCategory,
-    ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let operand = self.frame.stack.pop(category)?;
-        self.frame.stack.push(value, category)?;
-        let expr = operation(operand).into();
-        Ok(Some(Operation::Definition { value, expr }))
+        operation: impl FnOnce(ValueId) -> E,
+        operand_category: ValueCategory,
+        result_category: ValueCategory,
+    ) -> Result<Option<Operation<'class>>, FrameError>
+    where
+        E: Into<Expression<'class>>,
+    {
+        let operand = self.frame.stack.pop(operand_category)?;
+        self.define_on_stack(result_category, operation(operand))
     }
 }

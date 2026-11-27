@@ -5,7 +5,6 @@ mod calls;
 mod fields;
 mod operations;
 mod values;
-mod wide;
 
 use ValueCategory::{Category1, Category2};
 
@@ -14,7 +13,7 @@ use crate::{
     ir::{
         Operation, ValueId,
         expression::{
-            ArrayElementType, Conversion, InvocationKind, LockOperation, MathOperation,
+            ArrayElementType, Conversion, Expression, InvocationKind, LockOperation, MathOperation,
             NaNTreatment,
         },
     },
@@ -114,8 +113,8 @@ pub(super) fn lift_instruction<'class>(
         LMul | DMul => cx.binary(MathOperation::Multiply, Category2),
         LDiv | DDiv => cx.binary(MathOperation::Divide, Category2),
         LRem | DRem => cx.binary(MathOperation::Remainder, Category2),
-        INeg | FNeg => cx.unary(MathOperation::Negate, Category1),
-        LNeg | DNeg => cx.unary(MathOperation::Negate, Category2),
+        INeg | FNeg => cx.unary(MathOperation::Negate, Category1, Category1),
+        LNeg | DNeg => cx.unary(MathOperation::Negate, Category2, Category2),
         IShl => cx.binary(MathOperation::ShiftLeft, Category1),
         IShr => cx.binary(MathOperation::ShiftRight, Category1),
         IUShr => cx.binary(MathOperation::LogicalShiftRight, Category1),
@@ -128,21 +127,21 @@ pub(super) fn lift_instruction<'class>(
         LAnd => cx.binary(MathOperation::BitwiseAnd, Category2),
         LOr => cx.binary(MathOperation::BitwiseOr, Category2),
         LXor => cx.binary(MathOperation::BitwiseXor, Category2),
-        I2F => cx.conversion(Conversion::Int2Float, Category1, Category1),
-        I2L => cx.conversion(Conversion::Int2Long, Category1, Category2),
-        I2D => cx.conversion(Conversion::Int2Double, Category1, Category2),
-        L2I => cx.conversion(Conversion::Long2Int, Category2, Category1),
-        L2F => cx.conversion(Conversion::Long2Float, Category2, Category1),
-        L2D => cx.conversion(Conversion::Long2Double, Category2, Category2),
-        F2I => cx.conversion(Conversion::Float2Int, Category1, Category1),
-        F2L => cx.conversion(Conversion::Float2Long, Category1, Category2),
-        F2D => cx.conversion(Conversion::Float2Double, Category1, Category2),
-        D2I => cx.conversion(Conversion::Double2Int, Category2, Category1),
-        D2L => cx.conversion(Conversion::Double2Long, Category2, Category2),
-        D2F => cx.conversion(Conversion::Double2Float, Category2, Category1),
-        I2B => cx.conversion(Conversion::Int2Byte, Category1, Category1),
-        I2C => cx.conversion(Conversion::Int2Char, Category1, Category1),
-        I2S => cx.conversion(Conversion::Int2Short, Category1, Category1),
+        I2F => cx.unary(Conversion::Int2Float, Category1, Category1),
+        I2L => cx.unary(Conversion::Int2Long, Category1, Category2),
+        I2D => cx.unary(Conversion::Int2Double, Category1, Category2),
+        L2I => cx.unary(Conversion::Long2Int, Category2, Category1),
+        L2F => cx.unary(Conversion::Long2Float, Category2, Category1),
+        L2D => cx.unary(Conversion::Long2Double, Category2, Category2),
+        F2I => cx.unary(Conversion::Float2Int, Category1, Category1),
+        F2L => cx.unary(Conversion::Float2Long, Category1, Category2),
+        F2D => cx.unary(Conversion::Float2Double, Category1, Category2),
+        D2I => cx.unary(Conversion::Double2Int, Category2, Category1),
+        D2L => cx.unary(Conversion::Double2Long, Category2, Category2),
+        D2F => cx.unary(Conversion::Double2Float, Category2, Category1),
+        I2B => cx.unary(Conversion::Int2Byte, Category1, Category1),
+        I2C => cx.unary(Conversion::Int2Char, Category1, Category1),
+        I2S => cx.unary(Conversion::Int2Short, Category1, Category1),
         LCmp => cx.compare_long(),
         FCmpL => cx.compare_float(NaNTreatment::IsSmallest, Category1),
         FCmpG => cx.compare_float(NaNTreatment::IsLargest, Category1),
@@ -169,12 +168,12 @@ pub(super) fn lift_instruction<'class>(
         } => cx.invoke_dynamic(descriptor, *bootstrap_method_index, name),
         Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(None),
         New(class) => cx.new_object(class),
-        CheckCast(target) => cx.conversion(
+        CheckCast(target) => cx.unary(
             |value| Conversion::CheckCast(value, target),
             Category1,
             Category1,
         ),
-        InstanceOf(target) => cx.conversion(
+        InstanceOf(target) => cx.unary(
             |value| Conversion::InstanceOf(value, target),
             Category1,
             Category1,
@@ -206,5 +205,18 @@ impl<'class> LiftContext<'_, '_> {
 
     fn definition_id(&mut self) -> ValueId {
         self.values.definition_at(self.pc)
+    }
+
+    fn define_on_stack(
+        &mut self,
+        category: ValueCategory,
+        expr: impl Into<Expression<'class>>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
+        let value = self.definition_id();
+        self.frame.stack.push(value, category)?;
+        Ok(Some(Operation::Definition {
+            value,
+            expr: expr.into(),
+        }))
     }
 }

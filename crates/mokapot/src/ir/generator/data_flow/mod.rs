@@ -18,27 +18,9 @@ use frame::{Frame, Position, StackOperation};
 pub(super) fn analyze<'class>(
     cfg: &super::control_flow::Cfg<'class>,
 ) -> Result<IrParts<'class>, Error> {
-    let analysis::DataflowParts {
-        entry,
-        blocks,
-        this_value,
-        parameter_values,
-    } = analysis::DataflowSolver::new(cfg)?.solve()?;
-
-    let source_map = SourceMap::from_block_solutions(&blocks);
-    let (entry_arguments, blocks) = resolve::resolve_blocks(entry, blocks);
-
-    let parts_method = IrParts {
-        entry: MethodEntry {
-            block: entry,
-            arguments: entry_arguments,
-        },
-        blocks,
-        this: this_value,
-        parameters: parameter_values,
-        source_map,
-    };
-    Ok(parts_method)
+    analysis::DataflowSolver::new(cfg)?
+        .solve()
+        .map(resolve::resolve)
 }
 
 pub(super) struct IrParts<'class> {

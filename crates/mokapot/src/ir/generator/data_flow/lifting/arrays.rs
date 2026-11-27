@@ -1,3 +1,5 @@
+use std::iter::repeat_n;
+
 use ValueCategory::Category1;
 
 use super::{FrameError, LiftContext};
@@ -14,12 +16,9 @@ impl<'class> LiftContext<'_, '_> {
         &mut self,
         category: ValueCategory,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
         let index = self.frame.stack.pop(Category1)?;
         let array_ref = self.frame.stack.pop(Category1)?;
-        self.frame.stack.push(value, category)?;
-        let expr = ArrayOperation::Read { array_ref, index }.into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(category, ArrayOperation::Read { array_ref, index })
     }
 
     pub fn array_write(
@@ -42,15 +41,14 @@ impl<'class> LiftContext<'_, '_> {
         &mut self,
         element_type: ArrayElementType<'class>,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
         let length = self.frame.stack.pop(Category1)?;
-        self.frame.stack.push(value, Category1)?;
-        let expr = ArrayOperation::New {
-            element_type,
-            length,
-        }
-        .into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(
+            Category1,
+            ArrayOperation::New {
+                element_type,
+                length,
+            },
+        )
     }
 
     pub fn new_multi_array(
@@ -58,25 +56,21 @@ impl<'class> LiftContext<'_, '_> {
         array_type: &'class ReferenceType,
         dimension: u8,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        let mut dimensions: Vec<_> = (0..dimension)
-            .map(|_| self.frame.stack.pop(Category1))
-            .collect::<Result<_, _>>()?;
-        dimensions.reverse();
-        self.frame.stack.push(value, Category1)?;
-        let expr = ArrayOperation::NewMultiDim {
-            array_type,
-            dimensions,
-        }
-        .into();
-        Ok(Some(Operation::Definition { value, expr }))
+        let dimensions = self
+            .frame
+            .stack
+            .pop_operands(repeat_n(Category1, usize::from(dimension)))?;
+        self.define_on_stack(
+            Category1,
+            ArrayOperation::NewMultiDim {
+                array_type,
+                dimensions,
+            },
+        )
     }
 
     pub fn array_length(&mut self) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
         let array_ref = self.frame.stack.pop(Category1)?;
-        self.frame.stack.push(value, Category1)?;
-        let expr = ArrayOperation::Length { array_ref }.into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(Category1, ArrayOperation::Length { array_ref })
     }
 }

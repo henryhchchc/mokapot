@@ -1,6 +1,4 @@
-use crate::types::class_name::ClassName;
-
-use ValueCategory::Category1;
+use ValueCategory::{Category1, Category2};
 
 use super::{FrameError, LiftContext};
 use crate::{
@@ -8,8 +6,8 @@ use crate::{
         Operation,
         expression::{Expression, MathOperation},
     },
-    jvm::ConstantVal,
-    types::field_type::ValueCategory,
+    jvm::{ConstantVal, code::WideInstruction},
+    types::{class_name::ClassName, field_type::ValueCategory},
 };
 
 impl<'class> LiftContext<'_, '_> {
@@ -18,10 +16,7 @@ impl<'class> LiftContext<'_, '_> {
         constant: ConstantVal<'class>,
         category: ValueCategory,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        self.frame.stack.push(value, category)?;
-        let expr = Expression::Const(constant);
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(category, Expression::Const(constant))
     }
 
     pub fn increment(
@@ -60,9 +55,22 @@ impl<'class> LiftContext<'_, '_> {
         &mut self,
         class_name: &'class ClassName,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let value = self.definition_id();
-        self.frame.stack.push(value, Category1)?;
-        let expr = Expression::New(class_name);
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(Category1, Expression::New(class_name))
+    }
+
+    pub fn lift_wide(
+        &mut self,
+        instruction: WideInstruction,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
+        #[allow(clippy::enum_glob_use, reason = "exhaustive dispatch")]
+        use WideInstruction::*;
+        match instruction {
+            ILoad(idx) | FLoad(idx) | ALoad(idx) => self.load(idx, Category1),
+            LLoad(idx) | DLoad(idx) => self.load(idx, Category2),
+            IStore(idx) | FStore(idx) | AStore(idx) => self.store(idx, Category1),
+            LStore(idx) | DStore(idx) => self.store(idx, Category2),
+            IInc(idx, constant) => self.increment(idx, constant),
+            Ret(_) => panic!("wide ret reached non-control lifting"),
+        }
     }
 }

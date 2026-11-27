@@ -13,24 +13,18 @@ use crate::{
     },
 };
 
-#[derive(Clone, Copy)]
-enum CallResult {
-    Value(ValueId, ValueCategory),
-    Void,
-}
-
 impl<'class> LiftContext<'_, '_> {
     pub fn invoke_static(
         &mut self,
         method: MethodRef<'class>,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let result = self.call_result(&method.descriptor().return_type);
+        let descriptor = method.descriptor();
         let expr = Expression::Call {
             kind: InvocationKind::Static,
             method,
-            args: self.frame.stack.pop_arguments(method.descriptor())?,
+            args: self.frame.stack.pop_arguments(descriptor)?,
         };
-        self.finish_call(result, expr)
+        self.finish_call(&descriptor.return_type, expr)
     }
 
     pub fn invoke_instance(
@@ -38,15 +32,15 @@ impl<'class> LiftContext<'_, '_> {
         method: MethodRef<'class>,
         kind: impl FnOnce(ValueId) -> InvocationKind,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let result = self.call_result(&method.descriptor().return_type);
-        let args = self.frame.stack.pop_arguments(method.descriptor())?;
+        let descriptor = method.descriptor();
+        let args = self.frame.stack.pop_arguments(descriptor)?;
         let this = self.frame.stack.pop(Category1)?;
         let expr = Expression::Call {
             kind: kind(this),
             method,
             args,
         };
-        self.finish_call(result, expr)
+        self.finish_call(&descriptor.return_type, expr)
     }
 
     pub fn invoke_dynamic(
@@ -55,36 +49,25 @@ impl<'class> LiftContext<'_, '_> {
         bootstrap_method_index: u16,
         name: &'class JavaStr,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        let result = self.call_result(&descriptor.return_type);
         let expr = Expression::Closure {
             captures: self.frame.stack.pop_arguments(descriptor)?,
             bootstrap_method_index,
             name,
             closure_descriptor: descriptor,
         };
-        self.finish_call(result, expr)
+        self.finish_call(&descriptor.return_type, expr)
     }
 
     fn finish_call(
         &mut self,
-        result: CallResult,
+        return_type: &ReturnType,
         expr: Expression<'class>,
     ) -> Result<Option<Operation<'class>>, FrameError> {
-        match result {
-            CallResult::Value(value, category) => {
-                self.frame.stack.push(value, category)?;
-                Ok(Some(Operation::Definition { value, expr }))
-            }
-            CallResult::Void => Ok(Some(Operation::Effect { expr })),
-        }
-    }
-
-    fn call_result(&mut self, return_type: &ReturnType) -> CallResult {
         match return_type {
             ReturnType::Some(return_type) => {
-                CallResult::Value(self.definition_id(), return_type.value_category())
+                self.define_on_stack(return_type.value_category(), expr)
             }
-            ReturnType::Void => CallResult::Void,
+            ReturnType::Void => Ok(Some(Operation::Effect { expr })),
         }
     }
 }
