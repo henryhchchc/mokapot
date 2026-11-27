@@ -1,6 +1,6 @@
 //! Slice decoding for JVM wire values.
 
-use crate::intrinsics::ExactSizeIteratorExt;
+use std::num::{NonZeroU8, NonZeroU16};
 
 use zerocopy::{
     FromBytes, Immutable, KnownLayout, Unaligned,
@@ -8,6 +8,7 @@ use zerocopy::{
 };
 
 use super::{ParseError, fixed_layout::FixedLayout};
+use crate::{intrinsics::ExactSizeIteratorExt, jvm::errors::ParsingErrorContext};
 
 /// Parses one raw JVM structure, advancing the input past it.
 /// Composite failures may leave the input partially consumed.
@@ -41,6 +42,18 @@ impl_decode_integer!(u16, U16);
 impl_decode_integer!(i16, I16);
 impl_decode_integer!(u32, U32);
 impl_decode_integer!(i32, I32);
+
+impl<'a> Decode<'a> for NonZeroU8 {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        Self::new(decode_value(bytes)?).context("Expected a nonzero value")
+    }
+}
+
+impl<'a> Decode<'a> for NonZeroU16 {
+    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
+        Self::new(decode_value(bytes)?).context("Expected a nonzero value")
+    }
+}
 
 impl<'a, T: FixedLayout> Decode<'a> for T {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {

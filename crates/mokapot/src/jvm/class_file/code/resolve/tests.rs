@@ -75,7 +75,7 @@ fn invokeinterface_parses_interface_method_refs() {
     let Instruction::InvokeInterface(method, count) = data.as_borrowed(&class.constant_pool) else {
         panic!("expected invokeinterface")
     };
-    assert_eq!(count, 1);
+    assert_eq!(count.get(), 1);
     assert_eq!(
         method.into_owned(),
         MethodReference {

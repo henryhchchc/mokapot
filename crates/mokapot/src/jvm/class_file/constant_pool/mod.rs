@@ -1,5 +1,7 @@
 //! Indexed constant-pool entries and binary parsing.
 
+use std::num::NonZeroU16;
+
 mod decode;
 mod resolve;
 pub(super) use resolve::{ConstantPoolBuilder, resolve};
@@ -21,12 +23,9 @@ pub struct RawConstantPool<'a> {
 impl<'a> RawConstantPool<'a> {
     pub(super) fn parse_prefix(
         bytes: &mut &'a [u8],
-        constant_pool_count: u16,
+        constant_pool_count: NonZeroU16,
     ) -> Result<Self, ParseError> {
-        if constant_pool_count == 0 {
-            return Err(ParseError::malform("Zero constant pool count"));
-        }
-        let count = usize::from(constant_pool_count);
+        let count = usize::from(constant_pool_count.get());
         let mut slots = Vec::with_capacity(count);
         slots.push(Slot::Padding);
         while slots.len() < count {

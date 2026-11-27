@@ -28,7 +28,8 @@ impl<'a> Decode<'a> for ClassFile<'a> {
         }
         let minor_version = decode_value(bytes)?;
         let major_version = decode_value(bytes)?;
-        let constant_pool_count: u16 = decode_value(bytes)?;
+        let constant_pool_count = decode_value(bytes)
+            .map_err(|error| error.add_context("Invalid constant pool count"))?;
         let constant_pool = RawConstantPool::parse_prefix(bytes, constant_pool_count)?;
         let access_flags = decode_value(bytes)?;
         let this_class = decode_value(bytes)?;

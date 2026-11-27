@@ -148,7 +148,7 @@ fn parses_instruction_operands_and_switch_alignment() {
                 22.into(),
                 InvokeInterface {
                     method_index: 0xfedc,
-                    count: 7
+                    count: NonZeroU8::new(7).unwrap()
                 }
             ),
         ]

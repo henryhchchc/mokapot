@@ -21,7 +21,7 @@ fn instance_invocations_require_a_receiver() {
     let target = pool.insert_method_ref(method_ref);
     for invocation in [
         InstructionData::InvokeVirtual(target),
-        InstructionData::InvokeInterface(target, 4),
+        InstructionData::InvokeInterface(target, 4_u8.try_into().unwrap()),
         InstructionData::InvokeSpecial(target),
     ] {
         let body = [

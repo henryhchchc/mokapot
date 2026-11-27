@@ -214,7 +214,8 @@ fn checked_ids_preserve_values_and_reject_invalid_indices() {
 fn class_and_package_names_parse_with_distinct_tags() {
     // Utf8 "a/b/C", Class #1, Package #1.
     let bytes = [1, 0, 5, b'a', b'/', b'b', b'/', b'C', 7, 0, 1, 20, 0, 1];
-    let pool = resolve(RawConstantPool::parse_prefix(&mut bytes.as_slice(), 4).unwrap())
+    let count = 4_u16.try_into().unwrap();
+    let pool = resolve(RawConstantPool::parse_prefix(&mut bytes.as_slice(), count).unwrap())
         .unwrap()
         .finish();
     let class_name: ClassName = "a/b/C".parse().unwrap();

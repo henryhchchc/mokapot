@@ -209,7 +209,7 @@ pub enum RawInstruction<'a> {
     InvokeVirtual { method_index: u16 } = 0xB6,
     InvokeSpecial { method_index: u16 } = 0xB7,
     InvokeStatic { method_index: u16 } = 0xB8,
-    InvokeInterface { method_index: u16, count: u8 } = 0xB9,
+    InvokeInterface { method_index: u16, count: NonZeroU8 } = 0xB9,
     InvokeDynamic { dynamic_index: u16 } = 0xBA,
     New { index: u16 } = 0xBB,
     NewArray { atype: u8 } = 0xBC,
@@ -564,7 +564,11 @@ impl<'a> RawInstruction<'a> {
             }
             0xb9 => {
                 let method_index = decode_value(bytes)?;
-                let count: u8 = decode_value(bytes)?;
+                let count = decode_value(bytes).map_err(|error| {
+                    error.add_context(format_args!(
+                        "Invalid invokeinterface count at instruction {pc}"
+                    ))
+                })?;
                 let zero: u8 = decode_value(bytes)?;
                 if zero != 0 {
                     Err(ParseError::malform("Zero paddings are not zero"))?;
@@ -665,15 +669,14 @@ impl<'a> RawInstruction<'a> {
             0xca => Breakpoint,
             0xfe => ImpDep1,
             0xff => ImpDep2,
-            0xc5 => {
-                let index = decode_value(bytes)?;
-                let dimensions = NonZeroU8::new(decode_value(bytes)?).ok_or_else(|| {
-                    ParseError::malform(format_args!(
-                        "Zero multianewarray dimensions at instruction {pc}"
+            0xc5 => MultiANewArray {
+                index: decode_value(bytes)?,
+                dimensions: decode_value(bytes).map_err(|error| {
+                    error.add_context(format_args!(
+                        "Invalid multianewarray dimensions at instruction {pc}"
                     ))
-                })?;
-                MultiANewArray { index, dimensions }
-            }
+                })?,
+            },
             0xbb => New {
                 index: decode_value(bytes)?,
             },
