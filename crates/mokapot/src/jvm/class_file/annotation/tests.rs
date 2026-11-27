@@ -1,5 +1,6 @@
 use super::*;
 use crate::jvm::class_file::{Decode, resolve::decode_resolved};
+use crate::jvm::constant_pool::pool_index;
 use crate::jvm::{
     Class,
     annotation::{Annotation, ElementValue, TypeAnnotation},
@@ -20,7 +21,7 @@ fn context() -> ResolutionContext {
         RawEntry::Utf8(b"\xed\xa0\x80"),
         RawEntry::Utf8(b"Example"),
         RawEntry::Class {
-            name_index: 9.into(),
+            name: pool_index(9),
         },
     ]);
     ResolutionContext {
@@ -30,7 +31,7 @@ fn context() -> ResolutionContext {
 }
 
 fn class_with_pool(pool: ConstantPoolBuilder) -> Class {
-    let name = pool.class_id(10).unwrap();
+    let name = pool.class_id(10_u16.try_into().unwrap()).unwrap();
     Class {
         name,
         constant_pool: pool.finish(),
@@ -42,10 +43,11 @@ fn class_with_pool(pool: ConstantPoolBuilder) -> Class {
 fn raw_annotations_preserve_constant_pool_indices() {
     let bytes = [0x12, 0x34, 0, 1, 0xab, 0xcd, b'c', 0, 5];
     let annotation = raw::Annotation::decode(&mut bytes.as_slice()).unwrap();
-    assert_eq!(annotation.type_index, 0x1234);
+    assert_eq!(annotation.annotation_type.get(), 0x1234);
     assert!(matches!(
         annotation.element_value_pairs.as_ref(),
-        [(0xabcd, raw::ElementValueInfo::ClassInfo(5))]
+        [(name, raw::ElementValueInfo::ClassInfo(class))]
+            if name.get() == 0xabcd && class.get() == 5
     ));
 }
 

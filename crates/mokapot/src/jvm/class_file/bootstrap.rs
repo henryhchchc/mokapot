@@ -12,11 +12,11 @@ impl Resolve for &raw::BootstrapMethod {
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let method = ctx
             .constant_pool
-            .method_handle_id(self.bootstrap_method_ref.get())?;
+            .method_handle_id(self.bootstrap_method_ref)?;
         let arguments = self
             .bootstrap_arguments
             .iter()
-            .map(|index| ctx.constant_pool.constant_value_id(index.get()))
+            .map(|&index| ctx.constant_pool.constant_value_id(index))
             .try_collect_exact()?;
 
         Ok(BootstrapMethodData { method, arguments })

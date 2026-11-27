@@ -1,7 +1,8 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use super::{
     BlockExit, Cfg, CfgNode, Error, ExceptionArm, ExceptionTarget,
+    block_exit::ExceptionArms,
     layout::{BlockLayout, BlockShape},
 };
 use crate::{
@@ -13,142 +14,99 @@ use crate::{
 pub(super) fn build(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     let body = method.body().ok_or(ErrorKind::MissingOrEmptyBody)?;
     let mut layout = BlockLayout::of(body)?;
-    let reachable = ReachableNodes::discover(&layout);
-    let ids = NodeIds::allocate(&reachable);
-    let blocks = materialize(&mut layout, &reachable, &ids);
+    let mut discovery = Discovery::default();
+    let entry = discovery.id_for(NodeKey::Code(layout.entry()));
+    let mut blocks = HashMap::new();
+    while let Some((node, id)) = discovery.pending.pop_front() {
+        let block = match node {
+            NodeKey::Code(pc) => {
+                let BlockShape { end_pc, exit } = layout.take(pc);
+                CfgNode::Code {
+                    start_pc: pc,
+                    end_pc,
+                    exit: link_exit(exit, &mut discovery),
+                }
+            }
+            NodeKey::LandingPad(pc) => CfgNode::LandingPad {
+                successor: discovery.id_for(NodeKey::Code(pc)),
+            },
+        };
+        blocks.insert(id, block);
+    }
 
     Ok(Cfg {
         method,
         body,
-        entry: ids.entry,
+        entry,
         blocks,
     })
 }
 
-/// Reachable topology nodes in deterministic breadth-first order.
-struct ReachableNodes {
-    entry: NodeKey,
-    order: Vec<NodeKey>,
+#[derive(Default)]
+struct Discovery {
+    allocator: IdAllocator<BlockId>,
+    ids: HashMap<NodeKey, BlockId>,
+    pending: VecDeque<(NodeKey, BlockId)>,
 }
 
-impl ReachableNodes {
-    /// Discovers topology without allocating identities or consuming the layout.
-    fn discover(layout: &BlockLayout) -> Self {
-        let entry = NodeKey::Code(layout.entry());
-        let mut seen = HashSet::from([entry]);
-        let mut pending = VecDeque::from([entry]);
-        let mut order = Vec::new();
-
-        while let Some(node) = pending.pop_front() {
-            order.push(node);
-            node.visit_successors(layout, |successor| {
-                if seen.insert(successor) {
-                    pending.push_back(successor);
-                }
-            });
-        }
-        Self { entry, order }
-    }
-}
-
-/// Dense identities assigned after the reachable topology is fixed.
-struct NodeIds {
-    entry: BlockId,
-    by_key: HashMap<NodeKey, BlockId>,
-}
-
-impl NodeIds {
-    fn allocate(reachable: &ReachableNodes) -> Self {
-        let mut allocator = IdAllocator::default();
-        let by_key: HashMap<_, _> = reachable
-            .order
-            .iter()
-            .copied()
-            .map(|node| (node, allocator.new_id()))
-            .collect();
-        let entry = by_key[&reachable.entry];
-        Self { entry, by_key }
-    }
-
-    fn get(&self, node: NodeKey) -> BlockId {
-        self.by_key[&node]
-    }
-}
-
-/// Materializes reachable nodes now that every target identity is known.
-fn materialize(
-    layout: &mut BlockLayout,
-    reachable: &ReachableNodes,
-    ids: &NodeIds,
-) -> HashMap<BlockId, CfgNode> {
-    reachable
-        .order
-        .iter()
-        .copied()
-        .map(|node| {
-            let id = ids.get(node);
-            let block = match node {
-                NodeKey::Code(pc) => {
-                    let BlockShape { end_pc, exit } = layout.take(pc);
-                    CfgNode::Code {
-                        start_pc: pc,
-                        end_pc,
-                        exit: link_exit(exit, ids),
-                    }
-                }
-                NodeKey::LandingPad(pc) => CfgNode::LandingPad {
-                    successor: ids.get(NodeKey::Code(pc)),
-                },
-            };
-            (id, block)
+impl Discovery {
+    /// Returns a node's identity, queuing it on the first visit.
+    fn id_for(&mut self, node: NodeKey) -> BlockId {
+        *self.ids.entry(node).or_insert_with(|| {
+            let id = self.allocator.new_id();
+            self.pending.push_back((node, id));
+            id
         })
-        .collect()
+    }
 }
 
-/// Links a block exit without changing graph topology.
-fn link_exit(exit: BlockExit<ProgramCounter>, ids: &NodeIds) -> BlockExit<BlockId> {
+/// Links a block exit, discovering new targets in arm order.
+fn link_exit<'class>(
+    exit: BlockExit<'class, ProgramCounter>,
+    discovery: &mut Discovery,
+) -> BlockExit<'class, BlockId> {
     use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
     match exit {
         Continue {
             next,
             exception_arms,
         } => Continue {
-            next: ids.get(NodeKey::Code(next)),
-            exception_arms: link_exception_arms(exception_arms, ids),
+            next: discovery.id_for(NodeKey::Code(next)),
+            exception_arms: link_exception_arms(exception_arms, discovery),
         },
         Goto { target } => Goto {
-            target: ids.get(NodeKey::Code(target)),
+            target: discovery.id_for(NodeKey::Code(target)),
         },
         Branch { taken, otherwise } => Branch {
-            taken: ids.get(NodeKey::Code(taken)),
-            otherwise: ids.get(NodeKey::Code(otherwise)),
+            taken: discovery.id_for(NodeKey::Code(taken)),
+            otherwise: discovery.id_for(NodeKey::Code(otherwise)),
         },
         Switch { cases, default } => Switch {
             cases: cases
                 .into_iter()
-                .map(|(value, target)| (value, ids.get(NodeKey::Code(target))))
+                .map(|(value, target)| (value, discovery.id_for(NodeKey::Code(target))))
                 .collect(),
-            default: ids.get(NodeKey::Code(default)),
+            default: discovery.id_for(NodeKey::Code(default)),
         },
         Return { exception_arms } => Return {
-            exception_arms: link_exception_arms(exception_arms, ids),
+            exception_arms: link_exception_arms(exception_arms, discovery),
         },
         Throw { exception_arms } => Throw {
-            exception_arms: link_exception_arms(exception_arms, ids),
+            exception_arms: link_exception_arms(exception_arms, discovery),
         },
     }
 }
 
-fn link_exception_arms(
-    exception_arms: Vec<ExceptionArm<ProgramCounter>>,
-    ids: &NodeIds,
-) -> Vec<ExceptionArm<BlockId>> {
+fn link_exception_arms<'class>(
+    exception_arms: ExceptionArms<'class, ProgramCounter>,
+    discovery: &mut Discovery,
+) -> ExceptionArms<'class, BlockId> {
     exception_arms
         .into_iter()
         .map(|arm| ExceptionArm {
             target: match arm.target {
                 ExceptionTarget::Handler(pc) => {
-                    ExceptionTarget::Handler(ids.get(NodeKey::LandingPad(pc)))
+                    ExceptionTarget::Handler(discovery.id_for(NodeKey::LandingPad(pc)))
                 }
                 ExceptionTarget::Unwind => ExceptionTarget::Unwind,
             },
@@ -157,7 +115,7 @@ fn link_exception_arms(
         .collect()
 }
 
-/// A topology node whose block identity has not yet been allocated.
+/// A topology node identified by its kind and bytecode location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum NodeKey {
     /// A bytecode block starting at the given location.
@@ -166,64 +124,38 @@ enum NodeKey {
     LandingPad(ProgramCounter),
 }
 
-impl NodeKey {
-    /// Visits each structural successor in arm order.
-    fn visit_successors(self, layout: &BlockLayout, mut visit: impl FnMut(Self)) {
-        match self {
-            Self::Code(pc) => visit_exit_successors(&layout.block(pc).exit, visit),
-            Self::LandingPad(pc) => visit(Self::Code(pc)),
-        }
-    }
-}
-
-fn visit_exit_successors(exit: &BlockExit<ProgramCounter>, mut visit: impl FnMut(NodeKey)) {
-    use BlockExit::{Branch, Continue, Goto, Return, Switch, Throw};
-
-    match exit {
-        Continue {
-            next,
-            exception_arms,
-        } => {
-            visit(NodeKey::Code(*next));
-            visit_exception_successors(exception_arms, &mut visit);
-        }
-        Goto { target } => visit(NodeKey::Code(*target)),
-        Branch { taken, otherwise } => {
-            visit(NodeKey::Code(*taken));
-            visit(NodeKey::Code(*otherwise));
-        }
-        Switch { cases, default } => {
-            for target in cases.values() {
-                visit(NodeKey::Code(*target));
-            }
-            visit(NodeKey::Code(*default));
-        }
-        Return { exception_arms } | Throw { exception_arms } => {
-            visit_exception_successors(exception_arms, &mut visit);
-        }
-    }
-}
-
-fn visit_exception_successors(
-    arms: &[ExceptionArm<ProgramCounter>],
-    visit: &mut impl FnMut(NodeKey),
-) {
-    for arm in arms {
-        if let ExceptionTarget::Handler(pc) = arm.target {
-            visit(NodeKey::LandingPad(pc));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::ir::test::prelude::*;
 
     #[test]
     fn rejects_methods_without_bodies() {
         let mut method = method([(0, InstructionData::Return)], "()V", vec![]);
         method.data_mut().body = None;
-        let error = super::build(method.as_method()).err().unwrap();
-        assert_eq!(error.kind, super::ErrorKind::MissingOrEmptyBody);
+        let error = build(method.as_method()).err().unwrap();
+        assert_eq!(error.kind, ErrorKind::MissingOrEmptyBody);
+    }
+
+    #[test]
+    fn assigns_ids_in_breadth_first_arm_order() {
+        let instructions = [
+            (0, InstructionData::IConst0),
+            (1, InstructionData::IfEq(10.into())),
+            (4, InstructionData::Return),
+            (10, InstructionData::Goto(20.into())),
+            (20, InstructionData::Return),
+        ];
+        let method = method(instructions, "()V", vec![]);
+        let cfg = build(method.as_method()).unwrap();
+        let mut allocator = IdAllocator::default();
+        let [entry, taken, otherwise, next] = std::array::from_fn(|_| allocator.new_id());
+
+        assert_eq!(cfg.entry_block(), entry);
+        let starts = [taken, otherwise, next].map(|id| match cfg.block(id) {
+            CfgNode::Code { start_pc, .. } => *start_pc,
+            CfgNode::LandingPad { .. } => panic!("expected a code block"),
+        });
+        assert_eq!(starts, [10.into(), 4.into(), 20.into()]);
     }
 }

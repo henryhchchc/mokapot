@@ -7,30 +7,29 @@ use crate::{
         ControlTransfer, Operation, ValueId,
         expression::{BooleanVariable, Expression, PathValue},
     },
-    jvm::ConstantValue,
+    jvm::ConstantVal,
 };
 
 /// A forward dataflow analysis that propagates path conditions through a CFG.
 #[derive(Debug)]
-pub(super) struct PathConditionProblem<'method> {
-    method: &'method MokaIRMethod,
-    constants: HashMap<ValueId, &'method ConstantValue>,
+pub(super) struct PathConditionProblem<'method, 'class> {
+    method: &'method MokaIRMethod<'class>,
+    constants: HashMap<ValueId, ConstantVal<'class>>,
     budget: SolvingBudget,
 }
 
-impl<'method> PathConditionProblem<'method> {
+impl<'method, 'class> PathConditionProblem<'method, 'class> {
     /// Creates a path-condition analysis over the given method.
     #[must_use]
-    pub(super) fn new(method: &'method MokaIRMethod, budget: SolvingBudget) -> Self {
+    pub(super) fn new(method: &'method MokaIRMethod<'class>, budget: SolvingBudget) -> Self {
         let constants = method
             .blocks
             .values()
             .flat_map(|block| &block.operations)
             .filter_map(|operation| match operation {
-                Operation::Definition {
-                    value,
-                    expr: Expression::Const(constant),
-                } => Some((*value, constant)),
+                Operation::Definition(value, Expression::Const(constant)) => {
+                    Some((*value, *constant))
+                }
                 _ => None,
             })
             .collect();
@@ -41,14 +40,18 @@ impl<'method> PathConditionProblem<'method> {
         }
     }
 
-    fn normalize_guard(&self, guard: &BranchGuard<Predicate>) -> Option<BranchGuard<Predicate>> {
+    fn normalize_guard(
+        &self,
+        guard: &BranchGuard<Predicate<'class>>,
+    ) -> Option<BranchGuard<Predicate<'class>>> {
         let mut literals = Vec::new();
         for literal in guard.literals() {
             let (predicate, positive) = match literal {
                 BooleanVariable::Positive(predicate) => (predicate, true),
                 BooleanVariable::Negative(predicate) => (predicate, false),
             };
-            let canonical: BooleanVariable<Predicate> = self.normalize_predicate(predicate).into();
+            let canonical: BooleanVariable<Predicate<'class>> =
+                self.normalize_predicate(predicate).into();
             let canonical = if positive { canonical } else { !canonical };
             let (predicate, positive) = match &canonical {
                 BooleanVariable::Positive(predicate) => (predicate, true),
@@ -65,12 +68,12 @@ impl<'method> PathConditionProblem<'method> {
         Some(literals.into_iter().collect())
     }
 
-    fn normalize_predicate(&self, predicate: &Predicate) -> Predicate {
-        let value = |value: &PathValue| match value {
-            PathValue::Variable(id) => self.constants.get(id).map_or_else(
-                || value.clone(),
-                |constant| PathValue::Constant((*constant).clone()),
-            ),
+    fn normalize_predicate(&self, predicate: &Predicate<'class>) -> Predicate<'class> {
+        let value = |value: &PathValue<'class>| match value {
+            PathValue::Variable(id) => self
+                .constants
+                .get(id)
+                .map_or_else(|| value.clone(), |constant| PathValue::Constant(*constant)),
             PathValue::Constant(_) => value.clone(),
         };
         match predicate.map_values(value) {
@@ -81,7 +84,11 @@ impl<'method> PathConditionProblem<'method> {
     }
 }
 
-fn normalize_equality(lhs: PathValue, rhs: PathValue, equal: bool) -> Predicate {
+const fn normalize_equality<'class>(
+    lhs: PathValue<'class>,
+    rhs: PathValue<'class>,
+    equal: bool,
+) -> Predicate<'class> {
     use Predicate::{Equal, IsNonZero, IsNotNull, IsNull, IsZero, NotEqual};
     let (lhs, rhs) = match (lhs, rhs) {
         (constant @ PathValue::Constant(_), variable @ PathValue::Variable(_)) => {
@@ -90,14 +97,12 @@ fn normalize_equality(lhs: PathValue, rhs: PathValue, equal: bool) -> Predicate 
         pair => pair,
     };
     match (&lhs, &rhs, equal) {
-        (PathValue::Variable(_), PathValue::Constant(ConstantValue::Integer(0)), true) => {
-            IsZero(lhs)
-        }
-        (PathValue::Variable(_), PathValue::Constant(ConstantValue::Integer(0)), false) => {
+        (PathValue::Variable(_), PathValue::Constant(ConstantVal::Integer(0)), true) => IsZero(lhs),
+        (PathValue::Variable(_), PathValue::Constant(ConstantVal::Integer(0)), false) => {
             IsNonZero(lhs)
         }
-        (PathValue::Variable(_), PathValue::Constant(ConstantValue::Null), true) => IsNull(lhs),
-        (PathValue::Variable(_), PathValue::Constant(ConstantValue::Null), false) => IsNotNull(lhs),
+        (PathValue::Variable(_), PathValue::Constant(ConstantVal::Null), true) => IsNull(lhs),
+        (PathValue::Variable(_), PathValue::Constant(ConstantVal::Null), false) => IsNotNull(lhs),
         (_, _, true) => Equal(lhs, rhs),
         (_, _, false) => NotEqual(lhs, rhs),
     }
@@ -105,15 +110,15 @@ fn normalize_equality(lhs: PathValue, rhs: PathValue, equal: bool) -> Predicate 
 
 fn evaluate_atom(predicate: &Predicate) -> Option<bool> {
     use Predicate::{Equal, IsNegative, IsNull, IsPositive, IsZero, LessThan};
-    let integer = |value: &PathValue| match value {
-        PathValue::Constant(ConstantValue::Integer(value)) => Some(*value),
+    let integer = |value: &PathValue<'_>| match value {
+        PathValue::Constant(ConstantVal::Integer(value)) => Some(*value),
         _ => None,
     };
     let integers = |lhs: &PathValue, rhs: &PathValue| Some((integer(lhs)?, integer(rhs)?));
     match predicate {
         Equal(lhs, rhs) => {
-            if matches!(lhs, PathValue::Constant(ConstantValue::Null))
-                && matches!(rhs, PathValue::Constant(ConstantValue::Null))
+            if matches!(lhs, PathValue::Constant(ConstantVal::Null))
+                && matches!(rhs, PathValue::Constant(ConstantVal::Null))
             {
                 Some(true)
             } else {
@@ -121,7 +126,7 @@ fn evaluate_atom(predicate: &Predicate) -> Option<bool> {
             }
         }
         LessThan(lhs, rhs) => integers(lhs, rhs).map(|(lhs, rhs)| lhs < rhs),
-        IsNull(value) => matches!(value, PathValue::Constant(ConstantValue::Null)).then_some(true),
+        IsNull(value) => matches!(value, PathValue::Constant(ConstantVal::Null)).then_some(true),
         IsZero(value) => integer(value).map(|value| value == 0),
         IsPositive(value) => integer(value).map(|value| value > 0),
         IsNegative(value) => integer(value).map(|value| value < 0),
@@ -129,10 +134,10 @@ fn evaluate_atom(predicate: &Predicate) -> Option<bool> {
     }
 }
 
-impl DataflowProblem for PathConditionProblem<'_> {
+impl<'class> DataflowProblem for PathConditionProblem<'_, 'class> {
     type Location = BlockId;
 
-    type Fact = PathConditionFact;
+    type Fact = PathConditionFact<'class>;
 
     type Err = !;
 
@@ -169,22 +174,25 @@ impl DataflowProblem for PathConditionProblem<'_> {
 /// Facts are reduced without generalization; the returned ones are generalized
 /// by [`PathCondition::analyze_with_budget`].
 #[derive(Debug, Clone)]
-pub(super) struct PathConditionFact {
-    inner: PathCondition<Predicate>,
+pub(super) struct PathConditionFact<'class> {
+    inner: PathCondition<Predicate<'class>>,
     budget: SolvingBudget,
 }
 
-impl PathConditionFact {
+impl<'class> PathConditionFact<'class> {
     pub(super) fn one(budget: SolvingBudget) -> Self {
         Self::new(PathCondition::one(), budget)
     }
 
-    pub(super) fn new(inner: PathCondition<Predicate>, budget: SolvingBudget) -> Self {
+    pub(super) fn new(inner: PathCondition<Predicate<'class>>, budget: SolvingBudget) -> Self {
         let inner = inner.reduce_without_generalization(budget);
         Self { inner, budget }
     }
 
-    pub(super) fn conjoin_branch_guard(&self, branch_guard: BranchGuard<Predicate>) -> Self {
+    pub(super) fn conjoin_branch_guard(
+        &self,
+        branch_guard: BranchGuard<Predicate<'class>>,
+    ) -> Self {
         if branch_guard.is_tautology() {
             return self.clone();
         }
@@ -195,27 +203,27 @@ impl PathConditionFact {
         self.inner.is_contradiction()
     }
 
-    pub(super) fn into_inner(self) -> PathCondition<Predicate> {
+    pub(super) fn into_inner(self) -> PathCondition<Predicate<'class>> {
         self.inner
     }
 }
 
-impl PartialEq for PathConditionFact {
+impl PartialEq for PathConditionFact<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.partial_cmp(other) == Some(cmp::Ordering::Equal)
     }
 }
 
-impl Eq for PathConditionFact {}
+impl Eq for PathConditionFact<'_> {}
 
-impl PartialOrd for PathConditionFact {
+impl PartialOrd for PathConditionFact<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         debug_assert_eq!(self.budget, other.budget);
         self.inner.cover.partial_cmp(&other.inner.cover)
     }
 }
 
-impl JoinSemiLattice for PathConditionFact {
+impl JoinSemiLattice for PathConditionFact<'_> {
     fn join_assign(&mut self, other: Self) -> bool {
         debug_assert_eq!(self.budget, other.budget);
         if other.inner.cover == self.inner.cover || other.inner.cover.implies(&self.inner.cover) {
@@ -235,7 +243,7 @@ mod tests {
             BranchGuard,
             test::prelude::{code, ids, ir_method, void},
         },
-        jvm::ConstantValue::Null,
+        jvm::ConstantVal::Null,
     };
 
     #[test]
@@ -245,7 +253,7 @@ mod tests {
         let [entry] = ids(0);
         let method = ir_method(entry, HashMap::from([code(entry, void())]));
         let problem = PathConditionProblem::new(&method, SolvingBudget::default());
-        let int = |value| PathValue::Constant(ConstantValue::Integer(value));
+        let int = |value| PathValue::Constant(ConstantVal::Integer(value));
         let cases = [
             (Positive(GreaterThanOrEqual(int(1), int(2))), false),
             (Positive(NotEqual(int(0), int(1))), true),

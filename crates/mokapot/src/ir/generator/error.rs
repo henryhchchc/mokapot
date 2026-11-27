@@ -20,7 +20,8 @@ pub enum ErrorKind {
     /// A tableswitch has no targets or its case values exceed `i32`.
     #[display("tableswitch has an invalid range")]
     InvalidTableSwitchRange,
-    /// A multianewarray has no dimensions or exceeds its array type's rank.
+    /// A multianewarray specifies more dimensions than its type has.
+    /// Class-file parsing now reports this error before IR generation.
     #[display("multianewarray has invalid dimensions")]
     InvalidMultiArrayDimensions,
     /// Legacy `jsr`/`ret` subroutines are unsupported.

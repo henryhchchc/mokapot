@@ -590,6 +590,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "simd_cesu8",
+ "smallvec",
  "thiserror",
  "walkdir",
  "zerocopy",
@@ -890,6 +891,12 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "smallvec"
+version = "1.16.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59"
 
 [[package]]
 name = "statrs"

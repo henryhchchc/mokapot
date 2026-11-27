@@ -29,18 +29,16 @@ impl Resolve for raw::LocalVariableInfo {
         let raw::LocalVariableInfo {
             start_pc,
             length,
-            name_index,
-            descriptor_index,
+            name,
+            descriptor,
             index,
         } = raw;
         let start_pc = ProgramCounter::from(start_pc);
         let length: u16 = length.into();
 
         let effective_range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.utf8_id(name_index.into())?;
-        let field_type = ctx
-            .constant_pool
-            .intern_field_type(descriptor_index.into())?;
+        let name = ctx.constant_pool.utf8_id(name)?;
+        let field_type = ctx.constant_pool.intern_field_type(descriptor)?;
         let id = LocalVariableId {
             range: effective_range,
             index: index.into(),
@@ -60,16 +58,16 @@ impl Resolve for raw::LocalVariableTypeInfo {
         let raw::LocalVariableTypeInfo {
             start_pc,
             length,
-            name_index,
-            signature_index,
+            name,
+            signature,
             index,
         } = raw;
         let start_pc = ProgramCounter::from(start_pc);
         let length: u16 = length.into();
 
         let range = start_pc..(start_pc + length).context("Invalid jump offset")?;
-        let name = ctx.constant_pool.utf8_id(name_index.into())?;
-        let signature = ctx.constant_pool.utf8_id(signature_index.into())?;
+        let name = ctx.constant_pool.utf8_id(name)?;
+        let signature = ctx.constant_pool.utf8_id(signature)?;
         let id = LocalVariableId {
             range,
             index: index.into(),
@@ -126,6 +124,7 @@ fn entry<'a>(
 mod tests {
     use super::*;
     use crate::jvm::class_file::constant_pool::{RawConstantPool, RawEntry, resolve};
+    use crate::jvm::constant_pool::pool_index;
     use crate::jvm::errors::ParseErrorKind;
 
     #[test]
@@ -140,10 +139,10 @@ mod tests {
             RawEntry::Utf8(b"TT;"),
         ]);
         let mut pool = resolve(raw).unwrap();
-        let names = [1, 2, 3].map(|index| pool.utf8_id(index).unwrap());
-        let int = pool.intern_field_type(4).unwrap();
-        let long = pool.intern_field_type(5).unwrap();
-        let signature = pool.utf8_id(6).unwrap();
+        let names = [1_u16, 2, 3].map(|index| pool.utf8_id(index.try_into().unwrap()).unwrap());
+        let int = pool.intern_field_type(pool_index(4)).unwrap();
+        let long = pool.intern_field_type(pool_index(5)).unwrap();
+        let signature = pool.utf8_id(6_u16.try_into().unwrap()).unwrap();
         assert_ne!(names[0], names[1]);
         let id = LocalVariableId {
             range: 0.into()..2.into(),

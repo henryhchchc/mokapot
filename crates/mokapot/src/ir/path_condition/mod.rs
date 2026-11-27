@@ -24,13 +24,14 @@ mod tests;
 pub use budget::SolvingBudget;
 use cover::Cover;
 
-impl PathCondition<Predicate> {
+impl<'class> PathCondition<Predicate<'class>> {
     /// Computes path conditions at the reachable blocks of `method`.
     ///
-    /// Predicates in the result own their operands. Constant SSA definitions
+    /// Predicates in the result borrow JVM constants from the declaring class.
+    /// Constant SSA definitions
     /// are substituted into edge guards, and decidable guards are folded.
     #[must_use]
-    pub fn analyze(method: &MokaIRMethod) -> HashMap<BlockId, Self> {
+    pub fn analyze(method: &MokaIRMethod<'class>) -> HashMap<BlockId, Self> {
         Self::analyze_with_budget(method, SolvingBudget::default())
     }
 
@@ -40,7 +41,7 @@ impl PathCondition<Predicate> {
     /// reduced once with the full budget.
     #[must_use]
     pub fn analyze_with_budget(
-        method: &MokaIRMethod,
+        method: &MokaIRMethod<'class>,
         budget: SolvingBudget,
     ) -> HashMap<BlockId, Self> {
         let mut problem = analyzer::PathConditionProblem::new(method, budget);

@@ -7,9 +7,12 @@ use mokapot::ir::{
     },
 };
 
-fn method_ir(class_name: &str, name: &str) -> MokaIRMethod {
+fn fixture_class(class_name: &str) -> Class {
     let bytes = support::class_bytes(&format!("org/mokapot/test/{class_name}"));
-    let class = Class::from_bytes(&bytes).unwrap();
+    Class::from_bytes(&bytes).unwrap()
+}
+
+fn method_ir<'class>(class: &'class Class, name: &str) -> MokaIRMethod<'class> {
     let method = class
         .methods()
         .find(|method| method.name() == name)
@@ -17,7 +20,7 @@ fn method_ir(class_name: &str, name: &str) -> MokaIRMethod {
     MokaIRMethod::from_method(method).unwrap()
 }
 
-fn operations(ir: &MokaIRMethod) -> Vec<&Operation> {
+fn operations<'ir, 'class>(ir: &'ir MokaIRMethod<'class>) -> Vec<&'ir Operation<'class>> {
     let mut operations = Vec::new();
     for (_, block) in reachable_blocks(ir) {
         operations.extend(&block.operations);
@@ -26,15 +29,15 @@ fn operations(ir: &MokaIRMethod) -> Vec<&Operation> {
     operations
 }
 
-fn definition<'ir>(operations: &[&'ir Operation], value: ValueId) -> &'ir Expression {
+fn definition<'ir, 'class>(
+    operations: &[&'ir Operation<'class>],
+    value: ValueId,
+) -> &'ir Expression<'class> {
     operations
         .iter()
         .find_map(|operation| match operation {
-            Operation::Definition {
-                value: defined,
-                expr,
-            } if *defined == value => Some(expr),
-            Operation::Definition { .. } | Operation::Effect { .. } => None,
+            Operation::Definition(defined, expr) if *defined == value => Some(expr),
+            Operation::Definition(..) | Operation::Effect(..) => None,
         })
         .expect("the value has a definition")
 }
@@ -46,12 +49,12 @@ fn adds_one(operations: &[&Operation], expression: &Expression, value: ValueId) 
             (*left == value
                 && matches!(
                     definition(operations, *right),
-                    Expression::Const(ConstantValue::Integer(1))
+                    Expression::Const(ConstantVal::Integer(1))
                 ))
                 || (*right == value
                     && matches!(
                         definition(operations, *left),
-                        Expression::Const(ConstantValue::Integer(1))
+                        Expression::Const(ConstantVal::Integer(1))
                     ))
         }
         _ => false,
@@ -60,30 +63,28 @@ fn adds_one(operations: &[&Operation], expression: &Expression, value: ValueId) 
 
 #[test]
 fn java_fixture_preserves_field_and_array_operands() {
-    let ir = method_ir("IrSemantics", "run");
+    let class = fixture_class("IrSemantics");
+    let ir = method_ir(&class, "run");
     let operations = operations(&ir);
 
     let read_value = operations
         .iter()
         .find_map(|operation| match operation {
-            Operation::Definition {
+            Operation::Definition(
                 value,
-                expr: Expression::Array(ArrayOperation::Read { array_ref, index }),
-            } => Some((*value, *array_ref, *index)),
+                Expression::Array(ArrayOperation::Read { array_ref, index }),
+            ) => Some((*value, *array_ref, *index)),
             _ => None,
         })
         .expect("array read defines a value");
     let write = operations
         .iter()
         .find_map(|operation| match operation {
-            Operation::Effect {
-                expr:
-                    Expression::Array(ArrayOperation::Write {
-                        array_ref,
-                        index,
-                        value,
-                    }),
-            } => Some((*array_ref, *index, *value)),
+            Operation::Effect(Expression::Array(ArrayOperation::Write {
+                array_ref,
+                index,
+                value,
+            })) => Some((*array_ref, *index, *value)),
             _ => None,
         })
         .expect("array write is an effect");
@@ -95,21 +96,21 @@ fn java_fixture_preserves_field_and_array_operands() {
     ));
     assert!(operations.iter().any(|operation| matches!(
         operation,
-        Operation::Definition { expr: Expression::Field(FieldAccess::ReadInstance { field, .. }), .. }
-            if field.name == "value"
+        Operation::Definition(_, Expression::Field(FieldAccess::ReadInstance { field, .. }))
+            if field.name() == "value"
     )));
     assert!(operations.iter().any(|operation| matches!(
         operation,
-        Operation::Effect { expr: Expression::Field(FieldAccess::WriteInstance { field, value, .. }) }
-            if field.name == "value" && *value == read_value.0
+        Operation::Effect(Expression::Field(FieldAccess::WriteInstance { field, value, .. }))
+            if field.name() == "value" && *value == read_value.0
     )));
     let dimensions = operations
         .iter()
         .find_map(|operation| match operation {
-            Operation::Definition {
-                expr: Expression::Array(ArrayOperation::NewMultiDim { dimensions, .. }),
-                ..
-            } => Some(dimensions),
+            Operation::Definition(
+                _,
+                Expression::Array(ArrayOperation::NewMultiDim { dimensions, .. }),
+            ) => Some(dimensions),
             _ => None,
         })
         .expect("multidimensional allocation defines a value");
@@ -121,26 +122,26 @@ fn java_fixture_preserves_field_and_array_operands() {
     ));
     assert!(matches!(
         definition(&operations, dimensions[1]),
-        Expression::Const(ConstantValue::Integer(2))
+        Expression::Const(ConstantVal::Integer(2))
     ));
 }
 
 #[test]
 fn java_fixture_preserves_call_and_monitor_operands() {
-    let ir = method_ir("IrSemantics", "run");
+    let class = fixture_class("IrSemantics");
+    let ir = method_ir(&class, "run");
     let operations = operations(&ir);
     let interface_call = operations
         .iter()
         .find_map(|operation| match operation {
-            Operation::Definition {
+            Operation::Definition(
                 value,
-                expr:
-                    Expression::Call {
-                        kind: InvocationKind::Interface { this },
-                        method,
-                        args,
-                    },
-            } if method.name == "applyAsInt" => Some((*value, *this, args)),
+                Expression::Call {
+                    kind: InvocationKind::Interface { this },
+                    method,
+                    args,
+                },
+            ) if method.name() == "applyAsInt" => Some((*value, *this, args)),
             _ => None,
         })
         .expect("interface call preserves its receiver and result");
@@ -149,19 +150,18 @@ fn java_fixture_preserves_call_and_monitor_operands() {
     let static_call = operations
         .iter()
         .find_map(|operation| match operation {
-            Operation::Definition {
+            Operation::Definition(
                 value,
-                expr:
-                    Expression::Call {
-                        kind: InvocationKind::Static,
-                        method,
-                        args,
-                    },
-            } if method.name == "combine" => Some((*value, method, args)),
+                Expression::Call {
+                    kind: InvocationKind::Static,
+                    method,
+                    args,
+                },
+            ) if method.name() == "combine" => Some((*value, method, args)),
             _ => None,
         })
         .expect("static call defines its result");
-    assert_eq!(static_call.1.descriptor, "(IJ)J".parse().unwrap());
+    assert_eq!(*static_call.1.descriptor(), "(IJ)J".parse().unwrap());
     assert_eq!(static_call.2.len(), 2);
     assert!(matches!(
         definition(&operations, static_call.2[0]),
@@ -177,15 +177,15 @@ fn java_fixture_preserves_call_and_monitor_operands() {
     )));
 
     let acquire = operations.iter().find_map(|operation| match operation {
-        Operation::Effect {
-            expr: Expression::Synchronization(LockOperation::Acquire(value)),
-        } => Some(value),
+        Operation::Effect(Expression::Synchronization(LockOperation::Acquire(value))) => {
+            Some(value)
+        }
         _ => None,
     });
     let release = operations.iter().find_map(|operation| match operation {
-        Operation::Effect {
-            expr: Expression::Synchronization(LockOperation::Release(value)),
-        } => Some(value),
+        Operation::Effect(Expression::Synchronization(LockOperation::Release(value))) => {
+            Some(value)
+        }
         _ => None,
     });
     assert_eq!(acquire, Some(&ir.parameters[2]));
@@ -194,25 +194,24 @@ fn java_fixture_preserves_call_and_monitor_operands() {
 
 #[test]
 fn java_fixture_lifts_capturing_lambda_closures() {
-    let ir = method_ir("TestAnalysis", "test");
+    let class = get_test_class();
+    let ir = method_ir(&class, "test");
     assert!(operations(&ir).iter().any(|operation| matches!(
         operation,
-        Operation::Definition {
-            expr: Expression::Closure { name, captures, .. },
-            ..
-        } if name == "applyAsInt" && captures.as_slice() == &ir.parameters[..1]
+        Operation::Definition(_, Expression::Closure { name, captures, .. }) if *name == "applyAsInt" && captures.as_slice() == &ir.parameters[..1]
     )));
 }
 
 #[test]
 fn java_fixture_preserves_signed_immediate_boundaries() {
+    let class = fixture_class("IrSemantics");
     for (name, expected) in [
         ("byteMin", -128),
         ("byteMax", 127),
         ("shortMin", -32768),
         ("shortMax", 32767),
     ] {
-        let ir = method_ir("IrSemantics", name);
+        let ir = method_ir(&class, name);
         let operations = operations(&ir);
         let Terminator::Return {
             value: Some(returned),
@@ -223,7 +222,7 @@ fn java_fixture_preserves_signed_immediate_boundaries() {
         };
         assert!(matches!(
             definition(&operations, *returned),
-            Expression::Const(ConstantValue::Integer(actual)) if *actual == expected
+            Expression::Const(ConstantVal::Integer(actual)) if *actual == expected
         ));
     }
 }

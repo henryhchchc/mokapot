@@ -4,28 +4,27 @@ use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endi
 
 use super::super::{
     Decode, ParseError,
-    decoder::{borrow_slice, decode_value, parse_repeated},
-    fixed_layout::FixedLayout,
+    decoder::{parse_repeated, try_borrow_view},
 };
-use crate::intrinsics::see_jvm_spec;
+use crate::{intrinsics::see_jvm_spec, jvm::ConstantPoolIndex};
 
 #[doc = see_jvm_spec!(4, 7, 16)]
 pub struct Annotation {
-    pub type_index: u16,
-    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
+    pub annotation_type: ConstantPoolIndex,
+    pub element_value_pairs: Box<[(ConstantPoolIndex, ElementValueInfo)]>,
 }
 
 impl<'a> Decode<'a> for Annotation {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let type_index = decode_value(bytes)?;
-        let num_element_value_pairs: u16 = decode_value(bytes)?;
+        let annotation_type = Decode::decode(bytes)?;
+        let num_element_value_pairs = u16::decode(bytes)?;
         let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
-            let element_name_index = decode_value(bytes)?;
+            let element_name = Decode::decode(bytes)?;
             let element_value = ElementValueInfo::decode(bytes)?;
-            Ok((element_name_index, element_value))
+            Ok((element_name, element_value))
         })?;
         Ok(Self {
-            type_index,
+            annotation_type,
             element_value_pairs,
         })
     }
@@ -33,31 +32,31 @@ impl<'a> Decode<'a> for Annotation {
 
 #[doc = see_jvm_spec!(4, 7, 16, 1)]
 pub enum ElementValueInfo {
-    Const(u8, u16),
+    Const(u8, ConstantPoolIndex),
     Enum {
-        type_name_index: u16,
-        const_name_index: u16,
+        type_name: ConstantPoolIndex,
+        const_name: ConstantPoolIndex,
     },
-    ClassInfo(u16),
+    ClassInfo(ConstantPoolIndex),
     Annotation(Annotation),
     Array(Box<[ElementValueInfo]>),
 }
 
 impl<'a> Decode<'a> for ElementValueInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let tag: u8 = decode_value(bytes)?;
+        let tag = u8::decode(bytes)?;
         match tag {
             tag @ (b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's') => {
-                Ok(Self::Const(tag, decode_value(bytes)?))
+                Ok(Self::Const(tag, Decode::decode(bytes)?))
             }
             b'e' => Ok(Self::Enum {
-                type_name_index: decode_value(bytes)?,
-                const_name_index: decode_value(bytes)?,
+                type_name: Decode::decode(bytes)?,
+                const_name: Decode::decode(bytes)?,
             }),
-            b'c' => Ok(Self::ClassInfo(decode_value(bytes)?)),
+            b'c' => Ok(Self::ClassInfo(Decode::decode(bytes)?)),
             b'@' => Ok(Self::Annotation(Annotation::decode(bytes)?)),
             b'[' => {
-                let num_values: u16 = decode_value(bytes)?;
+                let num_values = u16::decode(bytes)?;
                 let values = parse_repeated(bytes, num_values, Self::decode)?;
                 Ok(Self::Array(values))
             }
@@ -75,32 +74,30 @@ pub struct TypePathElement {
     pub argument_index: u8,
 }
 
-impl FixedLayout for TypePathElement {}
-
 #[doc = see_jvm_spec!(4, 7, 20)]
 pub struct TypeAnnotation<'a> {
     pub target_info: TargetInfo<'a>,
     pub target_path: &'a [TypePathElement],
-    pub type_index: u16,
-    pub element_value_pairs: Box<[(u16, ElementValueInfo)]>,
+    pub annotation_type: ConstantPoolIndex,
+    pub element_value_pairs: Box<[(ConstantPoolIndex, ElementValueInfo)]>,
 }
 
 impl<'a> Decode<'a> for TypeAnnotation<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         let target_info = TargetInfo::decode(bytes)?;
-        let target_path_length: u8 = decode_value(bytes)?;
-        let target_path = borrow_slice(bytes, usize::from(target_path_length))?;
-        let type_index = decode_value(bytes)?;
-        let num_element_value_pairs: u16 = decode_value(bytes)?;
+        let target_path_length = u8::decode(bytes)?;
+        let target_path = try_borrow_view(bytes, usize::from(target_path_length))?;
+        let annotation_type = Decode::decode(bytes)?;
+        let num_element_value_pairs = u16::decode(bytes)?;
         let element_value_pairs = parse_repeated(bytes, num_element_value_pairs, |bytes| {
-            let element_name_index = decode_value(bytes)?;
+            let element_name = Decode::decode(bytes)?;
             let element_value = ElementValueInfo::decode(bytes)?;
-            Ok((element_name_index, element_value))
+            Ok((element_name, element_value))
         })?;
         Ok(Self {
             target_info,
             target_path,
-            type_index,
+            annotation_type,
             element_value_pairs,
         })
     }
@@ -177,78 +174,78 @@ pub enum TargetInfo<'a> {
 
 impl<'a> Decode<'a> for TargetInfo<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let target_type: u8 = decode_value(bytes)?;
+        let target_type = u8::decode(bytes)?;
         let target_info = match target_type {
             0x00 => Self::TypeParameterOfClass {
-                type_parameter_index: decode_value(bytes)?,
+                type_parameter_index: Decode::decode(bytes)?,
             },
             0x01 => Self::TypeParameterOfMethod {
-                type_parameter_index: decode_value(bytes)?,
+                type_parameter_index: Decode::decode(bytes)?,
             },
             0x10 => Self::SuperType {
-                supertype_index: decode_value(bytes)?,
+                supertype_index: Decode::decode(bytes)?,
             },
             0x11 => Self::TypeParameterBoundOfClass {
-                type_parameter_index: decode_value(bytes)?,
-                bound_index: decode_value(bytes)?,
+                type_parameter_index: Decode::decode(bytes)?,
+                bound_index: Decode::decode(bytes)?,
             },
             0x12 => Self::TypeParameterBoundOfMethod {
-                type_parameter_index: decode_value(bytes)?,
-                bound_index: decode_value(bytes)?,
+                type_parameter_index: Decode::decode(bytes)?,
+                bound_index: Decode::decode(bytes)?,
             },
             0x13 => Self::Field,
             0x14 => Self::MethodReturn,
             0x15 => Self::Receiver,
             0x16 => Self::FormalParameter {
-                formal_parameter_index: decode_value(bytes)?,
+                formal_parameter_index: Decode::decode(bytes)?,
             },
             0x17 => Self::Throws {
-                throws_type_index: decode_value(bytes)?,
+                throws_type_index: Decode::decode(bytes)?,
             },
             0x40 => {
-                let table_length: u16 = decode_value(bytes)?;
-                let table = borrow_slice(bytes, usize::from(table_length))?;
+                let table_length = u16::decode(bytes)?;
+                let table = try_borrow_view(bytes, usize::from(table_length))?;
                 Self::LocalVariable(table)
             }
             0x41 => {
-                let table_length: u16 = decode_value(bytes)?;
-                let table = borrow_slice(bytes, usize::from(table_length))?;
+                let table_length = u16::decode(bytes)?;
+                let table = try_borrow_view(bytes, usize::from(table_length))?;
                 Self::ResourceVariable(table)
             }
             0x42 => Self::Catch {
-                exception_table_index: decode_value(bytes)?,
+                exception_table_index: Decode::decode(bytes)?,
             },
             0x43 => Self::InstanceOf {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x44 => Self::New {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x45 => Self::ConstructorReference {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x46 => Self::MethodReference {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             },
             0x47 => Self::TypeInCast {
-                offset: decode_value(bytes)?,
-                type_argument_index: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
+                type_argument_index: Decode::decode(bytes)?,
             },
             0x48 => Self::TypeArgumentInConstructor {
-                offset: decode_value(bytes)?,
-                type_argument_index: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
+                type_argument_index: Decode::decode(bytes)?,
             },
             0x49 => Self::TypeArgumentInCall {
-                offset: decode_value(bytes)?,
-                type_argument_index: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
+                type_argument_index: Decode::decode(bytes)?,
             },
             0x4a => Self::TypeArgumentInConstructorReference {
-                offset: decode_value(bytes)?,
-                type_argument_index: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
+                type_argument_index: Decode::decode(bytes)?,
             },
             0x4b => Self::TypeArgumentInMethodReference {
-                offset: decode_value(bytes)?,
-                type_argument_index: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
+                type_argument_index: Decode::decode(bytes)?,
             },
             unexpected => Err(ParseError::malform(format!(
                 "Invalid target type: {unexpected:x}"
@@ -265,5 +262,3 @@ pub struct LocalVariableTarget {
     pub length: U16,
     pub index: U16,
 }
-
-impl FixedLayout for LocalVariableTarget {}

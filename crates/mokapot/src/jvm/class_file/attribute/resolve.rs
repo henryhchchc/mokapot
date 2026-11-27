@@ -1,9 +1,7 @@
 //! Resolution of raw attribute payloads.
 
-use zerocopy::byteorder::big_endian::U16;
-
 use super::super::{
-    ParseError, ResolutionContext,
+    Decode, ParseError, ResolutionContext,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
     flags::parse_flags,
     resolve::{Resolve, resolve_table},
@@ -12,30 +10,23 @@ use super::raw;
 use crate::{
     intrinsics::ExactSizeIteratorExt,
     jvm::{
+        ConstantPoolIndex,
         class::nesting::InnerClassData,
         code::LineNumberTableEntry,
-        constant_pool::{ClassId, ConstantValueId},
         method::{ParameterAccessFlags, ParameterInfoData},
     },
 };
 
-impl Resolve for raw::ConstantValue {
-    type Output = ConstantValueId;
-
-    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
-        ctx.constant_pool
-            .constant_value_id(self.constantvalue_index.get())
-    }
-}
-
-impl Resolve for &raw::Exceptions {
-    type Output = Box<[ClassId]>;
-
-    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
-        resolve_indices(&self.exception_index_table, |index| {
-            ctx.constant_pool.class_id(index)
-        })
-    }
+pub(super) fn decode_pool_indices<T>(
+    bytes: &mut &[u8],
+    resolve: impl FnMut(ConstantPoolIndex) -> Result<T, ParseError>,
+) -> Result<Box<[T]>, ParseError> {
+    <&raw::ConstantPoolIndices>::decode(bytes)?
+        .indices
+        .iter()
+        .copied()
+        .map(resolve)
+        .try_collect_exact()
 }
 
 impl Resolve for &raw::InnerClasses {
@@ -83,32 +74,17 @@ impl Resolve for &raw::MethodParameters {
     }
 }
 
-fn resolve_indices<T>(
-    indices: &[U16],
-    mut resolve: impl FnMut(u16) -> Result<T, ParseError>,
-) -> Result<Box<[T]>, ParseError> {
-    indices
-        .iter()
-        .map(|index| resolve(index.get()))
-        .try_collect_exact()
-}
-
 impl Resolve for raw::MethodParameterInfo {
     type Output = ParameterInfoData;
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
-        let raw::MethodParameterInfo {
-            name_index,
-            access_flags,
-        } = raw;
-        let name_index = name_index.get();
+        let raw::MethodParameterInfo { name, access_flags } = raw;
         let access_flags = access_flags.get();
-        let name = if name_index == 0 {
-            None
-        } else {
-            Some(ctx.constant_pool.utf8_id(name_index)?)
-        };
+        let name = name
+            .get()
+            .map(|index| ctx.constant_pool.utf8_id(index))
+            .transpose()?;
         let access_flags =
             parse_flags::<ParameterAccessFlags>(access_flags, "Invalid parameter access flags")?;
         Ok(ParameterInfoData { name, access_flags })

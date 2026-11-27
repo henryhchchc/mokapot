@@ -2,8 +2,6 @@
 
 use crate::jvm::{annotation::AnnotationsData, class::record_component::RecordComponentData};
 
-use zerocopy::byteorder::big_endian::U16;
-
 use crate::jvm::class_file::attribute::extract_attributes;
 
 pub(super) mod raw;
@@ -14,12 +12,12 @@ mod decode;
 
 use super::{
     ParseError, ResolutionContext, attribute::AttributeInfo, constant_pool::RawConstantPool,
-    field::FieldInfo, method::MethodInfo, resolve::Resolve,
+    resolve::Resolve,
 };
 use crate::{
     intrinsics::{ExactSizeIteratorExt, see_jvm_spec},
     jvm::{
-        Class,
+        Class, ConstantPoolIndex,
         class::{self, Version},
         errors::ParseErrorKind,
     },
@@ -33,11 +31,11 @@ pub(crate) struct ClassFile<'a> {
     major_version: u16,
     constant_pool: RawConstantPool<'a>,
     access_flags: u16,
-    this_class: u16,
-    super_class: u16,
-    interfaces: &'a [U16],
-    fields: Box<[FieldInfo<'a>]>,
-    methods: Box<[MethodInfo<'a>]>,
+    this_class: ConstantPoolIndex,
+    super_class: Option<ConstantPoolIndex>,
+    interfaces: &'a [ConstantPoolIndex],
+    fields: Box<[raw::MemberInfo<'a>]>,
+    methods: Box<[raw::MemberInfo<'a>]>,
     attributes: Box<[&'a AttributeInfo]>,
 }
 
@@ -139,12 +137,12 @@ impl Class {
         let class_id = constant_pool.class_id(this_class)?;
         let class_name = constant_pool.class_name(class_id);
         let super_class = match super_class {
-            0 if class_name.as_java_str() == "java/lang/Object" => None,
-            0 if access_flags.contains(class::AccessFlags::MODULE) => None,
-            0 => Err(ParseError::malform(
+            None if class_name.as_java_str() == "java/lang/Object" => None,
+            None if access_flags.contains(class::AccessFlags::MODULE) => None,
+            None => Err(ParseError::malform(
                 "Class must have a super type except for java/lang/Object or a module",
             ))?,
-            it => Some(constant_pool.class_id(it)?),
+            Some(index) => Some(constant_pool.class_id(index)?),
         };
 
         let mut ctx = ResolutionContext {
@@ -186,15 +184,15 @@ impl Class {
             super_class,
             interfaces: interfaces
                 .iter()
-                .map(|it| ctx.constant_pool.class_id(it.get()))
+                .map(|&index| ctx.constant_pool.class_id(index))
                 .try_collect_exact()?,
             fields: fields
                 .into_iter()
-                .map(|it| it.resolve(&mut ctx))
+                .map(|it| it.resolve_field(&mut ctx))
                 .try_collect_exact()?,
             methods: methods
                 .into_iter()
-                .map(|it| it.resolve(&mut ctx))
+                .map(|it| it.resolve_method(&mut ctx))
                 .try_collect_exact()?,
             source_file,
             inner_classes,
@@ -230,14 +228,14 @@ impl Resolve for raw::RecordComponentInfo<'_> {
 
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw::RecordComponentInfo {
-            name_index,
-            descriptor_index,
+            name,
+            descriptor,
             attributes,
         } = self;
-        let name = ctx.constant_pool.utf8_id(name_index)?;
+        let name = ctx.constant_pool.utf8_id(name)?;
         let component_type = ctx
             .constant_pool
-            .intern_field_type(descriptor_index)
+            .intern_field_type(descriptor)
             .map_err(|error| error.add_context("Invalid component type descriptor"))?;
         let attributes = attributes.into_iter().map(|it| it.resolve(ctx));
 

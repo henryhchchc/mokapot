@@ -7,55 +7,55 @@ use crate::{
     types::field_type::ValueCategory,
 };
 
-impl LiftContext<'_, '_> {
-    pub fn read_static(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
-        let value = self.definition_id();
-        self.frame
-            .stack
-            .push(value, field.field_type().value_category())?;
-        let expr = FieldAccess::ReadStatic {
-            field: field.into_owned(),
-        }
-        .into();
-        Ok(Some(Operation::Definition { value, expr }))
+impl<'class> LiftContext<'_, '_> {
+    pub fn read_static(
+        &mut self,
+        field: FieldRef<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
+        self.define_on_stack(
+            field.field_type().value_category(),
+            FieldAccess::ReadStatic { field },
+        )
     }
 
-    pub fn read_instance(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
-        let value = self.definition_id();
+    pub fn read_instance(
+        &mut self,
+        field: FieldRef<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let object_ref = self.frame.stack.pop(Category1)?;
-        self.frame
-            .stack
-            .push(value, field.field_type().value_category())?;
-        let expr = FieldAccess::ReadInstance {
-            object_ref,
-            field: field.into_owned(),
-        }
-        .into();
-        Ok(Some(Operation::Definition { value, expr }))
+        self.define_on_stack(
+            field.field_type().value_category(),
+            FieldAccess::ReadInstance { object_ref, field },
+        )
     }
 
-    pub fn write_static(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
+    pub fn write_static(
+        &mut self,
+        field: FieldRef<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.pop_field_value(field)?;
-        let field = field.into_owned();
-        Ok(Some(Operation::Effect {
-            expr: FieldAccess::WriteStatic { field, value }.into(),
-        }))
+        Ok(Some(Operation::Effect(
+            FieldAccess::WriteStatic { field, value }.into(),
+        )))
     }
 
-    pub fn write_instance(&mut self, field: FieldRef<'_>) -> Result<Option<Operation>, FrameError> {
+    pub fn write_instance(
+        &mut self,
+        field: FieldRef<'class>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         let value = self.pop_field_value(field)?;
         let object_ref = self.frame.stack.pop(Category1)?;
-        Ok(Some(Operation::Effect {
-            expr: FieldAccess::WriteInstance {
+        Ok(Some(Operation::Effect(
+            FieldAccess::WriteInstance {
                 object_ref,
-                field: field.into_owned(),
+                field,
                 value,
             }
             .into(),
-        }))
+        )))
     }
 
-    fn pop_field_value(&mut self, field: FieldRef<'_>) -> Result<ValueId, FrameError> {
+    fn pop_field_value(&mut self, field: FieldRef<'class>) -> Result<ValueId, FrameError> {
         self.frame.stack.pop(field.field_type().value_category())
     }
 }

@@ -1,5 +1,7 @@
 //! Indexed constant-pool entries and binary parsing.
 
+use std::num::NonZeroU16;
+
 mod decode;
 mod resolve;
 pub(super) use resolve::{ConstantPoolBuilder, resolve};
@@ -7,6 +9,7 @@ pub(super) use resolve::{ConstantPoolBuilder, resolve};
 use crate::jvm::constant_pool::storage::{PoolStorage, Slot};
 use crate::{
     intrinsics::see_jvm_spec,
+    jvm::ConstantPoolIndex,
     jvm::class_file::{Decode, ParseError},
 };
 use zerocopy::byteorder::big_endian::{F32, F64, I32, I64, U16};
@@ -21,16 +24,18 @@ pub struct RawConstantPool<'a> {
 impl<'a> RawConstantPool<'a> {
     pub(super) fn parse_prefix(
         bytes: &mut &'a [u8],
-        constant_pool_count: u16,
+        constant_pool_count: NonZeroU16,
     ) -> Result<Self, ParseError> {
-        if constant_pool_count == 0 {
-            return Err(ParseError::malform("Zero constant pool count"));
-        }
-        let count = usize::from(constant_pool_count);
+        let count = usize::from(constant_pool_count.get());
         let mut slots = Vec::with_capacity(count);
         slots.push(Slot::Padding);
         while slots.len() < count {
-            let entry = RawEntry::decode(bytes)?;
+            let entry = RawEntry::decode(bytes).map_err(|error| {
+                error.add_context(format_args!(
+                    "Invalid constant pool entry at index {}",
+                    slots.len()
+                ))
+            })?;
             let padding = entry.slot_width() == 2;
             slots.push(Slot::Entry(entry));
             if padding {
@@ -98,54 +103,54 @@ pub enum RawEntry<'a> {
     #[doc = see_jvm_spec!(4, 4, 1)]
     Class {
         /// The index of its internal name or array descriptor.
-        name_index: U16,
+        name: ConstantPoolIndex,
     } = 7,
     /// A string.
     #[doc = see_jvm_spec!(4, 4, 3)]
     String {
         /// The index in the constant pool of its UTF-8 value.
         /// The entry at that index must be a [`RawEntry::Utf8`].
-        string_index: U16,
+        string: ConstantPoolIndex,
     } = 8,
     /// A field reference.
     #[doc = see_jvm_spec!(4, 4, 2)]
     FieldRef {
         /// The index in the constant pool of the class containing the field.
         /// The entry at that index must be a [`RawEntry::Class`].
-        class_index: U16,
+        class: ConstantPoolIndex,
         /// The index in the constant pool of the name and type of the field.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
-        name_and_type_index: U16,
+        name_and_type: ConstantPoolIndex,
     } = 9,
     /// A method reference.
     #[doc = see_jvm_spec!(4, 4, 2)]
     MethodRef {
         /// The index in the constant pool of the class containing the method.
         /// The entry at that index must be a [`RawEntry::Class`].
-        class_index: U16,
+        class: ConstantPoolIndex,
         /// The index in the constant pool of the name and type of the method.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
-        name_and_type_index: U16,
+        name_and_type: ConstantPoolIndex,
     } = 10,
     /// An interface method reference.
     #[doc = see_jvm_spec!(4, 4, 2)]
     InterfaceMethodRef {
         /// The index in the constant pool of the interface containing the method.
         /// The entry at that index must be a [`RawEntry::Class`].
-        class_index: U16,
+        class: ConstantPoolIndex,
         /// The index in the constant pool of the name and type of the method.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
-        name_and_type_index: U16,
+        name_and_type: ConstantPoolIndex,
     } = 11,
     /// A name and type.
     #[doc = see_jvm_spec!(4, 4, 6)]
     NameAndType {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`RawEntry::Utf8`].
-        name_index: U16,
+        name: ConstantPoolIndex,
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
         /// The entry at that index must be a [`RawEntry::Utf8`].
-        descriptor_index: U16,
+        descriptor: ConstantPoolIndex,
     } = 12,
     /// A method handle.
     #[doc = see_jvm_spec!(4, 4, 8)]
@@ -154,14 +159,14 @@ pub enum RawEntry<'a> {
         reference_kind: u8,
         /// The index in the constant pool of the method handle.
         /// The entry at that index must be a [`RawEntry::MethodRef`], [`RawEntry::InterfaceMethodRef`] or [`RawEntry::FieldRef`].
-        reference_index: U16,
+        reference: ConstantPoolIndex,
     } = 15,
     /// A method type.
     #[doc = see_jvm_spec!(4, 4, 9)]
     MethodType {
         /// The index in the constant pool of the UTF-8 string containing the descriptor.
         /// The entry at that index must be a [`RawEntry::Utf8`].
-        descriptor_index: U16,
+        descriptor: ConstantPoolIndex,
     } = 16,
     /// A dynamically computed constant.
     #[doc = see_jvm_spec!(4, 4, 10)]
@@ -170,7 +175,7 @@ pub enum RawEntry<'a> {
         bootstrap_method_attr_index: U16,
         /// The index in the constant pool of the name and type of the constant.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
-        name_and_type_index: U16,
+        name_and_type: ConstantPoolIndex,
     } = 17,
     /// A dynamic call site linked through the bootstrap methods table.
     #[doc = see_jvm_spec!(4, 4, 10)]
@@ -179,21 +184,21 @@ pub enum RawEntry<'a> {
         bootstrap_method_attr_index: U16,
         /// The index in the constant pool of the name and type of the constant.
         /// The entry at that index must be a [`RawEntry::NameAndType`].
-        name_and_type_index: U16,
+        name_and_type: ConstantPoolIndex,
     } = 18,
     /// A module.
     #[doc = see_jvm_spec!(4, 4, 11)]
     Module {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`RawEntry::Utf8`].
-        name_index: U16,
+        name: ConstantPoolIndex,
     } = 19,
     /// A package.
     #[doc = see_jvm_spec!(4, 4, 12)]
     Package {
         /// The index in the constant pool of the UTF-8 string containing the name.
         /// The entry at that index must be a [`RawEntry::Utf8`].
-        name_index: U16,
+        name: ConstantPoolIndex,
     } = 20,
 }
 

@@ -41,14 +41,14 @@ impl Resolve for raw::Annotation {
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
         let raw = self;
         let raw::Annotation {
-            type_index,
+            annotation_type,
             element_value_pairs,
         } = raw;
-        let annotation_type = ctx.constant_pool.intern_field_type(type_index)?;
+        let annotation_type = ctx.constant_pool.intern_field_type(annotation_type)?;
         let element_value_pairs = element_value_pairs
             .into_iter()
-            .map(|(name_idx, raw_value)| {
-                let element_name = ctx.constant_pool.utf8_id(name_idx)?;
+            .map(|(name, raw_value)| {
+                let element_name = ctx.constant_pool.utf8_id(name)?;
                 let element_value = raw_value.resolve(ctx)?;
                 Ok((element_name, element_value))
             })
@@ -68,7 +68,7 @@ impl Resolve for raw::TypeAnnotation<'_> {
         let raw::TypeAnnotation {
             target_info,
             target_path,
-            type_index,
+            annotation_type,
             element_value_pairs,
         } = raw;
 
@@ -78,11 +78,11 @@ impl Resolve for raw::TypeAnnotation<'_> {
             .copied()
             .map(TypePathElement::try_from)
             .try_collect_exact()?;
-        let annotation_type = ctx.constant_pool.intern_field_type(type_index)?;
+        let annotation_type = ctx.constant_pool.intern_field_type(annotation_type)?;
         let element_value_pairs = element_value_pairs
             .into_iter()
-            .map(|(name_idx, value)| {
-                let element_name = ctx.constant_pool.utf8_id(name_idx)?;
+            .map(|(name, value)| {
+                let element_name = ctx.constant_pool.utf8_id(name)?;
                 let element_value = value.resolve(ctx)?;
                 Ok((element_name, element_value))
             })
@@ -246,10 +246,10 @@ impl Resolve for raw::ElementValueInfo {
         match raw {
             raw::ElementValueInfo::Const(
                 tag @ (b'B' | b'C' | b'I' | b'S' | b'Z' | b'F' | b'D' | b'J'),
-                idx,
+                value,
             ) => {
                 use ConstantVal::{Double, Float, Integer, Long};
-                let id = cp.constant_value_id(idx)?;
+                let id = cp.constant_value_id(value)?;
                 let kind = match (tag, cp.constant_value(id)) {
                     (b'B', Integer(_)) => PrimitiveType::Byte,
                     (b'C', Integer(_)) => PrimitiveType::Char,
@@ -263,25 +263,25 @@ impl Resolve for raw::ElementValueInfo {
                 };
                 Ok(ElementValueData::Primitive(kind, id))
             }
-            raw::ElementValueInfo::Const(b's', idx) => {
-                Ok(ElementValueData::String(cp.utf8_id(idx)?))
+            raw::ElementValueInfo::Const(b's', value) => {
+                Ok(ElementValueData::String(cp.utf8_id(value)?))
             }
             raw::ElementValueInfo::Const(_, _) => {
                 Err(ParseError::malform("Invalid constant value tag"))
             }
             raw::ElementValueInfo::Enum {
-                type_name_index,
-                const_name_index,
+                type_name,
+                const_name,
             } => {
-                let enum_type = cp.intern_field_type(type_name_index)?;
-                let const_name = cp.utf8_id(const_name_index)?;
+                let enum_type = cp.intern_field_type(type_name)?;
+                let const_name = cp.utf8_id(const_name)?;
                 Ok(ElementValueData::EnumConstant {
                     enum_type,
                     const_name,
                 })
             }
-            raw::ElementValueInfo::ClassInfo(idx) => {
-                let return_descriptor = cp.intern_return_type(idx)?;
+            raw::ElementValueInfo::ClassInfo(descriptor) => {
+                let return_descriptor = cp.intern_return_type(descriptor)?;
                 Ok(ElementValueData::Class { return_descriptor })
             }
             raw::ElementValueInfo::Annotation(annotation_info) => Ok(

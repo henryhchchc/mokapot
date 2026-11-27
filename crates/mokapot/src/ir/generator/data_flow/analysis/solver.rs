@@ -10,17 +10,14 @@ use crate::{
     intrinsics::Worklist,
     ir::{
         BlockId,
-        generator::{
-            control_flow::Cfg,
-            error::{Error, ResultExt},
-        },
+        generator::{control_flow::Cfg, error::Error},
     },
 };
 
 pub(crate) struct DataflowSolver<'method, 'cfg> {
     interpreter: BlockInterpreter<'method, 'cfg>,
     values: ValueContext,
-    blocks: HashMap<BlockId, BlockState>,
+    blocks: HashMap<BlockId, BlockState<'method>>,
 }
 
 impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
@@ -36,7 +33,7 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
         })
     }
 
-    pub(crate) fn solve(mut self) -> Result<DataflowParts, Error> {
+    pub(crate) fn solve(mut self) -> Result<DataflowParts<'method>, Error> {
         let entry = self.interpreter.entry_block();
         let mut worklist = Worklist::default();
         worklist.schedule(entry);
@@ -58,13 +55,13 @@ impl<'method, 'cfg> DataflowSolver<'method, 'cfg> {
 
             for (source, target, frame) in outputs {
                 let input_changed = match self.blocks.entry(target) {
-                    Entry::Occupied(mut entry) => {
-                        let result = entry.get_mut().add_frame(source, frame, &mut self.values);
-                        match self.interpreter.block_pc(target) {
-                            Some(pc) => result.at_pc(pc)?,
-                            None => result?,
-                        }
-                    }
+                    Entry::Occupied(mut entry) => entry
+                        .get_mut()
+                        .add_frame(source, frame, &mut self.values)
+                        .map_err(|kind| Error {
+                            pc: self.interpreter.block_pc(target),
+                            kind: kind.into(),
+                        })?,
                     Entry::Vacant(entry) => {
                         entry.insert(BlockState::new(source, frame));
                         true

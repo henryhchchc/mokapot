@@ -1,12 +1,10 @@
-use zerocopy::{
-    FromBytes, Immutable, KnownLayout, Unaligned,
-    byteorder::big_endian::{U16, U32},
-};
+use zerocopy::{Immutable, KnownLayout, TryFromBytes, Unaligned, byteorder::big_endian::U32};
 
 mod extract;
 pub(super) mod raw;
 mod resolve;
 pub(super) use extract::extract_attributes;
+use resolve::decode_pool_indices;
 
 use super::{
     Decode, ParseError, ResolutionContext,
@@ -14,13 +12,14 @@ use super::{
     class::raw as class_raw,
     code::raw as code_raw,
     code::{LocalVariableDescriptorEntry, LocalVariableSignatureEntry},
-    decoder::{borrow_view, decode_value, parse_repeated},
+    decoder::{parse_repeated, try_borrow_view},
     module::raw as module_raw,
     resolve::{Resolve, decode_resolved},
 };
 use crate::{
     intrinsics::see_jvm_spec,
     jvm::{
+        ConstantPoolIndex,
         annotation::{AnnotationData, ElementValueData, TypeAnnotationData},
         attribute::AttributeData,
         class::{
@@ -37,10 +36,10 @@ use crate::{
 
 /// Represent an attribute of a class file, method, field, or code.
 #[doc = see_jvm_spec!(4, 7)]
-#[derive(Debug, FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Debug, TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub(crate) struct AttributeInfo {
-    attribute_name_index: U16,
+    attribute_name: ConstantPoolIndex,
     attribute_length: U32,
     info: [u8],
 }
@@ -49,11 +48,11 @@ impl<'a> Decode<'a> for &'a AttributeInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
         // Probe the header to bound the borrowed view to this attribute.
         let mut header = *bytes;
-        let _: u16 = decode_value(&mut header)?;
-        let attribute_length: u32 = decode_value(&mut header)?;
+        u16::decode(&mut header)?;
+        let attribute_length = u32::decode(&mut header)?;
         let attribute_length = usize::try_from(attribute_length)
             .expect("32-bit size is not supported on the current platform");
-        borrow_view::<AttributeInfo>(bytes, attribute_length)
+        try_borrow_view(bytes, attribute_length)
     }
 }
 
@@ -138,24 +137,25 @@ impl Resolve for &AttributeInfo {
         reason = "Dispatches JVM attributes with explicit wire counts"
     )]
     fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
-        let name_id = ctx.constant_pool.utf8_id(self.attribute_name_index.get())?;
+        let pool = &ctx.constant_pool;
+        let name_id = pool.utf8_id(self.attribute_name)?;
         let mut info = &self.info;
         let bytes = &mut info;
 
-        let result = match ctx.constant_pool.utf8(name_id).as_bytes() {
-            b"ConstantValue" => {
-                decode_resolved::<raw::ConstantValue>(bytes, ctx).map(Attribute::ConstantValue)
-            }
+        let result = match pool.utf8(name_id).as_bytes() {
+            b"ConstantValue" => pool
+                .constant_value_id(Decode::decode(bytes)?)
+                .map(Attribute::ConstantValue),
             b"Code" => decode_resolved::<code_raw::Code>(bytes, ctx).map(Attribute::Code),
             b"StackMapTable" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<code_raw::StackMapFrameInfo>(bytes, ctx)
                 })
                 .map(Attribute::StackMapTable)
             }
             b"Exceptions" => {
-                decode_resolved::<&raw::Exceptions>(bytes, ctx).map(Attribute::Exceptions)
+                decode_pool_indices(bytes, |index| pool.class_id(index)).map(Attribute::Exceptions)
             }
             b"InnerClasses" => {
                 decode_resolved::<&raw::InnerClasses>(bytes, ctx).map(Attribute::InnerClasses)
@@ -164,10 +164,12 @@ impl Resolve for &AttributeInfo {
                 .map(Attribute::EnclosingMethod),
             b"Synthetic" => Ok(Attribute::Synthetic),
             b"Deprecated" => Ok(Attribute::Deprecated),
-            b"Signature" => decode_resolved::<raw::Signature>(bytes, ctx).map(Attribute::Signature),
-            b"SourceFile" => {
-                decode_resolved::<raw::SourceFile>(bytes, ctx).map(Attribute::SourceFile)
-            }
+            b"Signature" => pool
+                .utf8_id(Decode::decode(bytes)?)
+                .map(Attribute::Signature),
+            b"SourceFile" => pool
+                .utf8_id(Decode::decode(bytes)?)
+                .map(Attribute::SourceFile),
             b"SourceDebugExtension" => {
                 return Ok(Attribute::SourceDebugExtension(info.into()));
             }
@@ -181,23 +183,23 @@ impl Resolve for &AttributeInfo {
                     .map(Attribute::LocalVariableTypeTable)
             }
             b"RuntimeVisibleAnnotations" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleAnnotations)
             }
             b"RuntimeInvisibleAnnotations" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeInvisibleAnnotations)
             }
             b"RuntimeVisibleParameterAnnotations" => {
-                let count: u8 = decode_value(bytes)?;
+                let count = u8::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
-                    let count: u16 = decode_value(bytes)?;
+                    let count = u16::decode(bytes)?;
                     parse_repeated(bytes, count, |bytes| {
                         decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                     })
@@ -205,9 +207,9 @@ impl Resolve for &AttributeInfo {
                 .map(Attribute::RuntimeVisibleParameterAnnotations)
             }
             b"RuntimeInvisibleParameterAnnotations" => {
-                let count: u8 = decode_value(bytes)?;
+                let count = u8::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
-                    let count: u16 = decode_value(bytes)?;
+                    let count = u16::decode(bytes)?;
                     parse_repeated(bytes, count, |bytes| {
                         decode_resolved::<annotation_raw::Annotation>(bytes, ctx)
                     })
@@ -215,14 +217,14 @@ impl Resolve for &AttributeInfo {
                 .map(Attribute::RuntimeInvisibleParameterAnnotations)
             }
             b"RuntimeVisibleTypeAnnotations" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
                 .map(Attribute::RuntimeVisibleTypeAnnotations)
             }
             b"RuntimeInvisibleTypeAnnotations" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<annotation_raw::TypeAnnotation>(bytes, ctx)
                 })
@@ -231,7 +233,7 @@ impl Resolve for &AttributeInfo {
             b"AnnotationDefault" => decode_resolved::<annotation_raw::ElementValueInfo>(bytes, ctx)
                 .map(Attribute::AnnotationDefault),
             b"BootstrapMethods" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<&class_raw::BootstrapMethod>(bytes, ctx)
                 })
@@ -242,24 +244,25 @@ impl Resolve for &AttributeInfo {
             b"Module" => {
                 decode_resolved::<module_raw::ModuleInfo>(bytes, ctx).map(Attribute::Module)
             }
-            b"ModulePackages" => {
-                decode_resolved::<&raw::ModulePackages>(bytes, ctx).map(Attribute::ModulePackages)
-            }
-            b"ModuleMainClass" => {
-                decode_resolved::<raw::ModuleMainClass>(bytes, ctx).map(Attribute::ModuleMainClass)
-            }
-            b"NestHost" => decode_resolved::<raw::NestHost>(bytes, ctx).map(Attribute::NestHost),
+            b"ModulePackages" => decode_pool_indices(bytes, |index| pool.package_id(index))
+                .map(Attribute::ModulePackages),
+            b"ModuleMainClass" => pool
+                .class_id(Decode::decode(bytes)?)
+                .map(Attribute::ModuleMainClass),
+            b"NestHost" => pool
+                .class_id(Decode::decode(bytes)?)
+                .map(Attribute::NestHost),
             b"NestMembers" => {
-                decode_resolved::<&raw::NestMembers>(bytes, ctx).map(Attribute::NestMembers)
+                decode_pool_indices(bytes, |index| pool.class_id(index)).map(Attribute::NestMembers)
             }
             b"Record" => {
-                let count: u16 = decode_value(bytes)?;
+                let count = u16::decode(bytes)?;
                 parse_repeated(bytes, count, |bytes| {
                     decode_resolved::<class_raw::RecordComponentInfo>(bytes, ctx)
                 })
                 .map(Attribute::Record)
             }
-            b"PermittedSubclasses" => decode_resolved::<&raw::PermittedSubclasses>(bytes, ctx)
+            b"PermittedSubclasses" => decode_pool_indices(bytes, |index| pool.class_id(index))
                 .map(Attribute::PermittedSubclasses),
             _ => {
                 return Ok(Attribute::Unrecognized(AttributeData {
@@ -283,6 +286,7 @@ mod tests {
     use crate::jvm::{
         class::Version,
         class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
+        constant_pool::pool_index,
         errors::ParseErrorKind,
     };
 
@@ -299,11 +303,11 @@ mod tests {
         let bytes = [0x12, 0x34, 0, 0, 0, 2, 0xaa, 0xbb, 0, 1, 0, 0, 0, 0];
         let mut remaining = bytes.as_slice();
         let attribute = <&AttributeInfo>::decode(&mut remaining).unwrap();
-        assert_eq!(attribute.attribute_name_index.get(), 0x1234);
+        assert_eq!(attribute.attribute_name.get(), 0x1234);
         assert_eq!(&attribute.info, [0xaa, 0xbb]);
 
         let empty = <&AttributeInfo>::decode(&mut remaining).unwrap();
-        assert_eq!(empty.attribute_name_index.get(), 1);
+        assert_eq!(empty.attribute_name.get(), 1);
         assert_eq!(&empty.info, b"");
         assert_eq!(remaining, b"");
     }
@@ -367,16 +371,16 @@ mod tests {
     }
 
     #[test]
-    fn parses_module_packages_with_package_constant_pool_entries() {
+    fn validates_module_package_indices() {
         let raw_pool = RawConstantPool::from_entries([
             RawEntry::Utf8(b"ModulePackages"),
             RawEntry::Utf8(b"example/api"),
             RawEntry::Package {
-                name_index: 2.into(),
+                name: pool_index(2),
             },
             RawEntry::Utf8(b"example/internal"),
             RawEntry::Package {
-                name_index: 4.into(),
+                name: pool_index(4),
             },
         ]);
         let attribute_name_index = 1;
@@ -401,6 +405,14 @@ mod tests {
         assert_eq!(
             ctx.constant_pool.package_name(packages[1]).as_java_str(),
             "example/internal"
+        );
+
+        let bytes = attribute_bytes(attribute_name_index, &[0, 1, 0, 0]);
+        let attribute_info = <&AttributeInfo>::decode(&mut bytes.as_slice()).unwrap();
+        let error = attribute_info.resolve(&mut ctx).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::InvalidConstantPoolIndex { index: 0 }
         );
     }
 

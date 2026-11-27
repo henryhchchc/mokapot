@@ -1,7 +1,7 @@
 //! Rewrites the single IR value identity space during canonicalization.
 
 use crate::ir::{
-    BranchGuard, ControlTransfer, Operation, Successor, Terminator, ValueId,
+    BranchGuard, ControlTransfer, Operation, Terminator, ValueId,
     expression::{
         ArrayOperation, BooleanVariable, Conversion, Expression, FieldAccess, InvocationKind,
         LockOperation, MathOperation, PathValue, Predicate,
@@ -23,22 +23,22 @@ fn remap_value<E>(
     Ok(())
 }
 
-impl RemapValues for Operation {
+impl RemapValues for Operation<'_> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
     ) -> Result<(), E> {
         match self {
-            Self::Definition { value, expr } => {
+            Self::Definition(value, expr) => {
                 remap_value(value, remap)?;
                 remap_expression(expr, remap)
             }
-            Self::Effect { expr } => remap_expression(expr, remap),
+            Self::Effect(expr) => remap_expression(expr, remap),
         }
     }
 }
 
-impl RemapValues for Terminator<Successor> {
+impl RemapValues for Terminator<'_> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
@@ -57,7 +57,7 @@ impl RemapValues for Terminator<Successor> {
     }
 }
 
-impl RemapValues for ControlTransfer {
+impl RemapValues for ControlTransfer<'_> {
     fn try_remap_values<E>(
         &mut self,
         remap: &mut impl FnMut(ValueId) -> Result<ValueId, E>,
@@ -254,7 +254,7 @@ mod tests {
             (InvocationKind::Interface { this }, interface_kind),
             (InvocationKind::Special { this }, special_kind),
         ] {
-            let mut operation = effect(call(kind, method.clone(), [argument]));
+            let mut operation = effect(call(kind, &method, [argument]));
             let mut remap = |value| {
                 Ok::<_, !>(if value == this {
                     new_this
@@ -264,7 +264,7 @@ mod tests {
                 })
             };
             operation.try_remap_values(&mut remap).unwrap();
-            let expected = effect(call(expected_kind, method.clone(), [new_argument]));
+            let expected = effect(call(expected_kind, &method, [new_argument]));
             assert_eq!(operation, expected);
         }
     }

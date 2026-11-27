@@ -2,8 +2,12 @@ use super::*;
 
 #[test]
 fn builds_ir_blocks_and_provenance() {
-    let ir = get_test_ir();
-
+    let class = get_test_class();
+    let method = class
+        .methods()
+        .find(|method| method.name() == "test")
+        .unwrap();
+    let ir = MokaIRMethod::from_method(method).unwrap();
     // The `ldc` at `0x0000` may fail, so lifting folds it into the block's
     // `Try` terminator instead of an ordinary operation.
     let first = ir
@@ -14,10 +18,7 @@ fn builds_ir_blocks_and_provenance() {
         .unwrap();
     assert!(matches!(
         first,
-        Operation::Definition {
-            expr: Expression::Const(ConstantValue::String(value)),
-            ..
-        } if value.to_str().as_deref() == Ok("233")
+        Operation::Definition(_, Expression::Const(ConstantVal::String(value))) if value.to_str().as_deref() == Ok("233")
     ));
 
     assert_eq!(

@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use crate::{
     jvm::{
-        ConstantPool, JavaStr,
+        ConstantPool, ConstantPoolIndex, JavaStr,
         class::MethodHandleData,
         constant_pool::{Entry, FieldTypeId, MethodDescriptorId, NameAndType, ReturnTypeId},
         errors::{ParseError, ParsingErrorContext},
@@ -70,11 +70,11 @@ impl ConstantPoolBuilder {
 
     pub(crate) fn intern_method_descriptor(
         &mut self,
-        source: u16,
+        source: ConstantPoolIndex,
     ) -> Result<MethodDescriptorId, ParseError> {
         if let Some(id) = self
             .method_descriptor_indices
-            .get(usize::from(source))
+            .get(usize::from(source.get()))
             .copied()
             .flatten()
         {
@@ -85,15 +85,18 @@ impl ConstantPoolBuilder {
         let id = self.pool.push_method_descriptor(value)?;
         *self
             .method_descriptor_indices
-            .get_mut(usize::from(source))
+            .get_mut(usize::from(source.get()))
             .context("Invalid source index")? = Some(id);
         Ok(id)
     }
 
-    pub(crate) fn intern_field_type(&mut self, source: u16) -> Result<FieldTypeId, ParseError> {
+    pub(crate) fn intern_field_type(
+        &mut self,
+        source: ConstantPoolIndex,
+    ) -> Result<FieldTypeId, ParseError> {
         if let Some(id) = self
             .field_type_indices
-            .get(usize::from(source))
+            .get(usize::from(source.get()))
             .copied()
             .flatten()
         {
@@ -104,15 +107,18 @@ impl ConstantPoolBuilder {
         let id = self.pool.push_field_type(value)?;
         *self
             .field_type_indices
-            .get_mut(usize::from(source))
+            .get_mut(usize::from(source.get()))
             .context("Invalid source index")? = Some(id);
         Ok(id)
     }
 
-    pub(crate) fn intern_return_type(&mut self, source: u16) -> Result<ReturnTypeId, ParseError> {
+    pub(crate) fn intern_return_type(
+        &mut self,
+        source: ConstantPoolIndex,
+    ) -> Result<ReturnTypeId, ParseError> {
         if let Some(id) = self
             .return_type_indices
-            .get(usize::from(source))
+            .get(usize::from(source.get()))
             .copied()
             .flatten()
         {
@@ -123,7 +129,7 @@ impl ConstantPoolBuilder {
         let id = self.pool.push_return_type(value)?;
         *self
             .return_type_indices
-            .get_mut(usize::from(source))
+            .get_mut(usize::from(source.get()))
             .context("Invalid source index")? = Some(id);
         Ok(id)
     }
@@ -155,50 +161,43 @@ fn resolve_entry(
         RawEntry::Float(value) => Entry::Float(value.into()),
         RawEntry::Long(value) => Entry::Long(value.into()),
         RawEntry::Double(value) => Entry::Double(value.into()),
-        RawEntry::Class { name_index } => resolve_class(pool, name_index.into())?,
-        RawEntry::String { string_index } => Entry::String(pool.utf8_id(string_index.into())?),
-        RawEntry::NameAndType {
-            name_index,
-            descriptor_index,
-        } => {
-            let name = pool.utf8_id(name_index.into())?;
-            let descriptor_index = descriptor_index.into();
-            let descriptor = pool.get_utf8(descriptor_index)?;
-            let value = if descriptor.as_bytes().starts_with(b"(") {
-                NameAndType::Method(name, pool.intern_method_descriptor(descriptor_index)?)
+        RawEntry::Class { name } => resolve_class(pool, name)?,
+        RawEntry::String { string } => Entry::String(pool.utf8_id(string)?),
+        RawEntry::NameAndType { name, descriptor } => {
+            let name = pool.utf8_id(name)?;
+            let value = if pool.get_utf8(descriptor)?.as_bytes().starts_with(b"(") {
+                NameAndType::Method(name, pool.intern_method_descriptor(descriptor)?)
             } else {
-                NameAndType::Field(name, pool.intern_field_type(descriptor_index)?)
+                NameAndType::Field(name, pool.intern_field_type(descriptor)?)
             };
             Entry::NameAndType(value)
         }
-        RawEntry::MethodType { descriptor_index } => {
-            Entry::MethodType(pool.intern_method_descriptor(descriptor_index.into())?)
+        RawEntry::MethodType { descriptor } => {
+            Entry::MethodType(pool.intern_method_descriptor(descriptor)?)
         }
-        RawEntry::Module { name_index } => Entry::Module(
-            ModuleName::try_from(pool.get_utf8(name_index.into())?)
-                .context("Invalid module name")?,
+        RawEntry::Module { name } => Entry::Module(
+            ModuleName::try_from(pool.get_utf8(name)?).context("Invalid module name")?,
         ),
-        RawEntry::Package { name_index } => Entry::Package(
-            PackageName::try_from(pool.get_utf8(name_index.into())?)
-                .context("Invalid package name")?,
+        RawEntry::Package { name } => Entry::Package(
+            PackageName::try_from(pool.get_utf8(name)?).context("Invalid package name")?,
         ),
         RawEntry::FieldRef {
-            class_index,
-            name_and_type_index,
+            class,
+            name_and_type,
         } => Entry::FieldRef(FieldRefData {
-            owner: pool.reference_type_id(class_index.into())?,
-            name_and_type: pool.field_name_and_type_id(name_and_type_index.into())?,
+            owner: pool.reference_type_id(class)?,
+            name_and_type: pool.field_name_and_type_id(name_and_type)?,
         }),
         RawEntry::MethodRef {
-            class_index,
-            name_and_type_index,
+            class,
+            name_and_type,
         }
         | RawEntry::InterfaceMethodRef {
-            class_index,
-            name_and_type_index,
+            class,
+            name_and_type,
         } => {
-            let owner = pool.reference_type_id(class_index.into())?;
-            let name_and_type = pool.method_name_and_type_id(name_and_type_index.into())?;
+            let owner = pool.reference_type_id(class)?;
+            let name_and_type = pool.method_name_and_type_id(name_and_type)?;
             let value = MethodRefData {
                 owner,
                 name_and_type,
@@ -211,32 +210,28 @@ fn resolve_entry(
         }
         RawEntry::Dynamic {
             bootstrap_method_attr_index,
-            name_and_type_index,
+            name_and_type,
         } => Entry::Dynamic {
             bootstrap_method_attr_index: bootstrap_method_attr_index.into(),
-            name_and_type: pool.field_name_and_type_id(name_and_type_index.into())?,
+            name_and_type: pool.field_name_and_type_id(name_and_type)?,
         },
         RawEntry::InvokeDynamic {
             bootstrap_method_attr_index,
-            name_and_type_index,
+            name_and_type,
         } => Entry::InvokeDynamic {
             bootstrap_method_attr_index: bootstrap_method_attr_index.into(),
-            name_and_type: pool.method_name_and_type_id(name_and_type_index.into())?,
+            name_and_type: pool.method_name_and_type_id(name_and_type)?,
         },
         RawEntry::MethodHandle {
             reference_kind,
-            reference_index,
-        } => Entry::MethodHandle(resolve_method_handle(
-            pool,
-            reference_kind,
-            reference_index.into(),
-        )?),
+            reference,
+        } => Entry::MethodHandle(resolve_method_handle(pool, reference_kind, reference)?),
     };
     pool.pool.insert_resolved_at(index, entry)
 }
 
-fn resolve_class(pool: &ConstantPoolBuilder, name_index: u16) -> Result<Entry, ParseError> {
-    let name = pool.get_utf8(name_index)?;
+fn resolve_class(pool: &ConstantPoolBuilder, name: ConstantPoolIndex) -> Result<Entry, ParseError> {
+    let name = pool.get_utf8(name)?;
     let reference_type = ReferenceType::try_from(name).context("Invalid type reference")?;
     let is_binary_name = !(name.as_bytes().starts_with(b"[")
         || name.as_bytes().starts_with(b"L") && name.as_bytes().ends_with(b";"));
@@ -249,7 +244,7 @@ fn resolve_class(pool: &ConstantPoolBuilder, name_index: u16) -> Result<Entry, P
 fn resolve_method_handle(
     pool: &ConstantPoolBuilder,
     kind: u8,
-    index: u16,
+    index: ConstantPoolIndex,
 ) -> Result<MethodHandleData, ParseError> {
     Ok(match kind {
         1 => MethodHandleData::GetField(pool.field_ref_id(index)?),

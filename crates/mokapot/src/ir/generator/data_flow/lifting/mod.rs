@@ -5,7 +5,6 @@ mod calls;
 mod fields;
 mod operations;
 mod values;
-mod wide;
 
 use ValueCategory::{Category1, Category2};
 
@@ -13,13 +12,16 @@ use super::{Frame, FrameError, StackOperation, values::ValueContext};
 use crate::{
     ir::{
         Operation, ValueId,
-        expression::{Conversion, InvocationKind, LockOperation, MathOperation, NaNTreatment},
+        expression::{
+            ArrayElementType, Conversion, Expression, InvocationKind, LockOperation, MathOperation,
+            NaNTreatment,
+        },
     },
     jvm::{
-        ConstantValue,
+        ConstantVal,
         code::{Instruction as JVM, ProgramCounter},
     },
-    types::field_type::{FieldType, ValueCategory},
+    types::field_type::ValueCategory,
 };
 
 struct LiftContext<'values, 'frame> {
@@ -29,39 +31,39 @@ struct LiftContext<'values, 'frame> {
 }
 
 #[expect(clippy::too_many_lines, reason = "exhaustive JVM instruction dispatch")]
-pub(super) fn lift_instruction(
+pub(super) fn lift_instruction<'class>(
     values: &mut ValueContext,
-    jvm_instruction: &JVM,
+    jvm_instruction: &JVM<'class>,
     pc: ProgramCounter,
     frame: &mut Frame,
-) -> Result<Option<Operation>, FrameError> {
+) -> Result<Option<Operation<'class>>, FrameError> {
     #[allow(clippy::enum_glob_use, reason = "all variants are used")]
     use JVM::*;
 
     let mut cx = LiftContext { values, pc, frame };
 
     match jvm_instruction {
-        AConstNull => cx.constant(ConstantValue::Null, Category1),
+        AConstNull => cx.constant(ConstantVal::Null, Category1),
         IConstM1 | IConst0 | IConst1 | IConst2 | IConst3 | IConst4 | IConst5 => {
             let value = i32::from(jvm_instruction.opcode()) - i32::from(IConst0.opcode());
-            cx.constant(ConstantValue::Integer(value), Category1)
+            cx.constant(ConstantVal::Integer(value), Category1)
         }
         LConst0 | LConst1 => {
             let value = i64::from(jvm_instruction.opcode()) - i64::from(LConst0.opcode());
-            cx.constant(ConstantValue::Long(value), Category2)
+            cx.constant(ConstantVal::Long(value), Category2)
         }
         FConst0 | FConst1 | FConst2 => {
             let value = f32::from(jvm_instruction.opcode()) - f32::from(FConst0.opcode());
-            cx.constant(ConstantValue::Float(value), Category1)
+            cx.constant(ConstantVal::Float(value), Category1)
         }
         DConst0 | DConst1 => {
             let value = f64::from(jvm_instruction.opcode()) - f64::from(DConst0.opcode());
-            cx.constant(ConstantValue::Double(value), Category2)
+            cx.constant(ConstantVal::Double(value), Category2)
         }
-        BiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
-        SiPush(value) => cx.constant(ConstantValue::Integer(i32::from(*value)), Category1),
-        Ldc(value) | LdcW(value) => cx.constant(value.into_owned(), Category1),
-        Ldc2W(value) => cx.constant(value.into_owned(), Category2),
+        BiPush(value) => cx.constant(ConstantVal::Integer(i32::from(*value)), Category1),
+        SiPush(value) => cx.constant(ConstantVal::Integer(i32::from(*value)), Category1),
+        Ldc(value) | LdcW(value) => cx.constant(*value, Category1),
+        Ldc2W(value) => cx.constant(*value, Category2),
         ILoad(idx) | FLoad(idx) | ALoad(idx) => cx.load((*idx).into(), Category1),
         LLoad(idx) | DLoad(idx) => cx.load((*idx).into(), Category2),
         ILoad0 | FLoad0 | ALoad0 => cx.load(0, Category1),
@@ -88,11 +90,9 @@ pub(super) fn lift_instruction(
         LALoad | DALoad => cx.array_read(Category2),
         IAStore | FAStore | AAStore | BAStore | CAStore | SAStore => cx.array_write(Category1),
         LAStore | DAStore => cx.array_write(Category2),
-        ANewArray(element_type) => cx.new_array((*element_type).clone().into()),
-        NewArray(element_type) => cx.new_array(FieldType::Base(*element_type)),
-        MultiANewArray(element_type, dim) => {
-            cx.new_multi_array((*element_type).clone().into(), *dim)
-        }
+        ANewArray(element_type) => cx.new_array(ArrayElementType::Reference(element_type)),
+        NewArray(element_type) => cx.new_array(ArrayElementType::Primitive(*element_type)),
+        MultiANewArray(element_type, dim) => cx.new_multi_array(element_type, dim.get()),
         ArrayLength => cx.array_length(),
         Pop => cx.stack_effect(StackOperation::Pop),
         Pop2 => cx.stack_effect(StackOperation::Pop2),
@@ -113,8 +113,8 @@ pub(super) fn lift_instruction(
         LMul | DMul => cx.binary(MathOperation::Multiply, Category2),
         LDiv | DDiv => cx.binary(MathOperation::Divide, Category2),
         LRem | DRem => cx.binary(MathOperation::Remainder, Category2),
-        INeg | FNeg => cx.unary(MathOperation::Negate, Category1),
-        LNeg | DNeg => cx.unary(MathOperation::Negate, Category2),
+        INeg | FNeg => cx.unary(MathOperation::Negate, Category1, Category1),
+        LNeg | DNeg => cx.unary(MathOperation::Negate, Category2, Category2),
         IShl => cx.binary(MathOperation::ShiftLeft, Category1),
         IShr => cx.binary(MathOperation::ShiftRight, Category1),
         IUShr => cx.binary(MathOperation::LogicalShiftRight, Category1),
@@ -127,21 +127,21 @@ pub(super) fn lift_instruction(
         LAnd => cx.binary(MathOperation::BitwiseAnd, Category2),
         LOr => cx.binary(MathOperation::BitwiseOr, Category2),
         LXor => cx.binary(MathOperation::BitwiseXor, Category2),
-        I2F => cx.conversion(Conversion::Int2Float, Category1, Category1),
-        I2L => cx.conversion(Conversion::Int2Long, Category1, Category2),
-        I2D => cx.conversion(Conversion::Int2Double, Category1, Category2),
-        L2I => cx.conversion(Conversion::Long2Int, Category2, Category1),
-        L2F => cx.conversion(Conversion::Long2Float, Category2, Category1),
-        L2D => cx.conversion(Conversion::Long2Double, Category2, Category2),
-        F2I => cx.conversion(Conversion::Float2Int, Category1, Category1),
-        F2L => cx.conversion(Conversion::Float2Long, Category1, Category2),
-        F2D => cx.conversion(Conversion::Float2Double, Category1, Category2),
-        D2I => cx.conversion(Conversion::Double2Int, Category2, Category1),
-        D2L => cx.conversion(Conversion::Double2Long, Category2, Category2),
-        D2F => cx.conversion(Conversion::Double2Float, Category2, Category1),
-        I2B => cx.conversion(Conversion::Int2Byte, Category1, Category1),
-        I2C => cx.conversion(Conversion::Int2Char, Category1, Category1),
-        I2S => cx.conversion(Conversion::Int2Short, Category1, Category1),
+        I2F => cx.unary(Conversion::Int2Float, Category1, Category1),
+        I2L => cx.unary(Conversion::Int2Long, Category1, Category2),
+        I2D => cx.unary(Conversion::Int2Double, Category1, Category2),
+        L2I => cx.unary(Conversion::Long2Int, Category2, Category1),
+        L2F => cx.unary(Conversion::Long2Float, Category2, Category1),
+        L2D => cx.unary(Conversion::Long2Double, Category2, Category2),
+        F2I => cx.unary(Conversion::Float2Int, Category1, Category1),
+        F2L => cx.unary(Conversion::Float2Long, Category1, Category2),
+        F2D => cx.unary(Conversion::Float2Double, Category1, Category2),
+        D2I => cx.unary(Conversion::Double2Int, Category2, Category1),
+        D2L => cx.unary(Conversion::Double2Long, Category2, Category2),
+        D2F => cx.unary(Conversion::Double2Float, Category2, Category1),
+        I2B => cx.unary(Conversion::Int2Byte, Category1, Category1),
+        I2C => cx.unary(Conversion::Int2Char, Category1, Category1),
+        I2S => cx.unary(Conversion::Int2Short, Category1, Category1),
         LCmp => cx.compare_long(),
         FCmpL => cx.compare_float(NaNTreatment::IsSmallest, Category1),
         FCmpG => cx.compare_float(NaNTreatment::IsLargest, Category1),
@@ -168,13 +168,13 @@ pub(super) fn lift_instruction(
         } => cx.invoke_dynamic(descriptor, *bootstrap_method_index, name),
         Nop | Breakpoint | ImpDep1 | ImpDep2 => Ok(None),
         New(class) => cx.new_object(class),
-        CheckCast(target) => cx.conversion(
-            |value| Conversion::CheckCast(value, (*target).clone()),
+        CheckCast(target) => cx.unary(
+            |value| Conversion::CheckCast(value, target),
             Category1,
             Category1,
         ),
-        InstanceOf(target) => cx.conversion(
-            |value| Conversion::InstanceOf(value, (*target).clone()),
+        InstanceOf(target) => cx.unary(
+            |value| Conversion::InstanceOf(value, target),
             Category1,
             Category1,
         ),
@@ -185,22 +185,35 @@ pub(super) fn lift_instruction(
     }
 }
 
-impl LiftContext<'_, '_> {
-    fn monitor<OP>(&mut self, operation: OP) -> Result<Option<Operation>, FrameError>
+impl<'class> LiftContext<'_, '_> {
+    fn monitor<OP>(&mut self, operation: OP) -> Result<Option<Operation<'class>>, FrameError>
     where
         OP: FnOnce(ValueId) -> LockOperation,
     {
         let object_ref = self.frame.stack.pop(Category1)?;
         let expr = operation(object_ref).into();
-        Ok(Some(Operation::Effect { expr }))
+        Ok(Some(Operation::Effect(expr)))
     }
 
-    fn stack_effect(&mut self, operation: StackOperation) -> Result<Option<Operation>, FrameError> {
+    fn stack_effect(
+        &mut self,
+        operation: StackOperation,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
         self.frame.stack.apply(operation)?;
         Ok(None)
     }
 
     fn definition_id(&mut self) -> ValueId {
         self.values.definition_at(self.pc)
+    }
+
+    fn define_on_stack(
+        &mut self,
+        category: ValueCategory,
+        expr: impl Into<Expression<'class>>,
+    ) -> Result<Option<Operation<'class>>, FrameError> {
+        let value = self.definition_id();
+        self.frame.stack.push(value, category)?;
+        Ok(Some(Operation::Definition(value, expr.into())))
     }
 }

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use smallvec::SmallVec;
+
 use super::{BlockId, InstructionLocation};
 use crate::jvm::code::ProgramCounter;
 
@@ -9,7 +11,7 @@ use crate::jvm::code::ProgramCounter;
 /// non-synthetic IR node has at most one JVM origin.
 #[derive(Debug, Clone)]
 pub struct SourceMap {
-    by_pc: HashMap<ProgramCounter, Vec<InstructionLocation>>,
+    by_pc: HashMap<ProgramCounter, SmallVec<[InstructionLocation; 1]>>,
     by_location: HashMap<InstructionLocation, ProgramCounter>,
 }
 

@@ -2,21 +2,20 @@
 
 use crate::types::class_name::ClassName;
 
-use std::collections::BTreeMap;
+use smallvec::SmallVec;
 
 use super::fallibility::fallthrough_may_throw;
 use crate::{
     ir::generator::error::ErrorKind,
     jvm::code::{Instruction, MethodBody, ProgramCounter, WideInstruction},
-    types::{field_type::FieldType, reference_type::ReferenceType},
 };
 
 /// The structural exit of one decoded instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BlockExit<T> {
+pub(crate) enum BlockExit<'class, T> {
     Continue {
         next: T,
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: ExceptionArms<'class, T>,
     },
     Goto {
         target: T,
@@ -26,34 +25,38 @@ pub(crate) enum BlockExit<T> {
         otherwise: T,
     },
     Switch {
-        cases: BTreeMap<i32, T>,
+        /// Cases in ascending key order.
+        cases: Box<[(i32, T)]>,
         default: T,
     },
     Return {
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: ExceptionArms<'class, T>,
     },
     Throw {
-        exception_arms: Vec<ExceptionArm<T>>,
+        exception_arms: ExceptionArms<'class, T>,
     },
 }
 
-impl<T> BlockExit<T> {
+impl<T> BlockExit<'_, T> {
     /// Whether this exit forces the following instruction into a new block.
     ///
     /// A continuation without exception arms proceeds into the next instruction
     /// without its own terminator.
-    pub(crate) const fn forces_block_boundary(&self) -> bool {
+    pub(crate) fn forces_block_boundary(&self) -> bool {
         !matches!(self, Self::Continue { exception_arms, .. } if exception_arms.is_empty())
     }
 }
 
+/// Ordered exception arms with inline storage for a single arm.
+pub(super) type ExceptionArms<'class, T> = SmallVec<[ExceptionArm<'class, T>; 1]>;
+
 /// One ordered exception arm of a throwing instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExceptionArm<T> {
+pub(crate) struct ExceptionArm<'class, T> {
     /// Where the exception transfers.
     pub target: ExceptionTarget<T>,
     /// The caught type, or `None` for catch-all.
-    pub catch_type: Option<ClassName>,
+    pub catch_type: Option<&'class ClassName>,
 }
 
 /// An exception successor destination.
@@ -84,11 +87,12 @@ pub(crate) enum ArmKey {
     Exception(usize),
 }
 
-impl BlockExit<ProgramCounter> {
+impl<'class> BlockExit<'class, ProgramCounter> {
     /// Classifies the control transfer of `instruction` at `pc` within `body`.
     pub(super) fn of(
-        body: MethodBody<'_>,
+        body: MethodBody<'class>,
         pc: ProgramCounter,
+        next_pc: Option<ProgramCounter>,
         instruction: &Instruction,
     ) -> Result<Self, ErrorKind> {
         use Instruction::{
@@ -96,17 +100,8 @@ impl BlockExit<ProgramCounter> {
             IfGe, IfGt, IfICmpEq, IfICmpGe, IfICmpGt, IfICmpLe, IfICmpLt, IfICmpNe, IfLe, IfLt,
             IfNe, IfNonNull, IfNull, Jsr, JsrW, LReturn, Ret, Return, Wide,
         };
-        let next = || {
-            body.instructions()
-                .next_pc_of(&pc)
-                .ok_or(ErrorKind::MissingFallthrough)
-        };
-        if let Instruction::MultiANewArray(array_type, dimensions) = instruction
-            && !valid_multi_array_dimensions(array_type, *dimensions)
-        {
-            return Err(ErrorKind::InvalidMultiArrayDimensions);
-        }
-        Ok(match instruction {
+        let next_pc = || next_pc.ok_or(ErrorKind::MissingFallthrough);
+        let block_exit = match instruction {
             IReturn | LReturn | FReturn | DReturn | AReturn | Return => Self::Return {
                 exception_arms: exception_arms(body, pc),
             },
@@ -119,7 +114,7 @@ impl BlockExit<ProgramCounter> {
             | IfICmpGe(target) | IfICmpGt(target) | IfICmpLe(target) | IfACmpEq(target)
             | IfACmpNe(target) | IfNull(target) | IfNonNull(target) => Self::Branch {
                 taken: *target,
-                otherwise: next()?,
+                otherwise: next_pc()?,
             },
             Jsr(_) | JsrW(_) | Ret(_) | Wide(WideInstruction::Ret(_)) => {
                 return Err(ErrorKind::UnsupportedLegacySubroutine);
@@ -141,48 +136,32 @@ impl BlockExit<ProgramCounter> {
                 match_targets,
                 default,
             } => Self::Switch {
-                cases: match_targets.iter().copied().collect(),
+                cases: Box::from(*match_targets),
                 default: *default,
             },
             _ => Self::Continue {
-                next: next()?,
+                next: next_pc()?,
                 exception_arms: if fallthrough_may_throw(instruction) {
                     exception_arms(body, pc)
                 } else {
-                    Vec::new()
+                    ExceptionArms::new()
                 },
             },
-        })
-    }
-}
-
-fn valid_multi_array_dimensions(array_type: &ReferenceType, dimensions: u8) -> bool {
-    let ReferenceType::Array(element_type) = array_type else {
-        return false;
-    };
-    let mut element_type = element_type.as_ref();
-    if dimensions == 0 {
-        return false;
-    }
-    for _ in 1..dimensions {
-        let FieldType::Array(inner) = element_type else {
-            return false;
         };
-        element_type = inner.as_ref();
+        Ok(block_exit)
     }
-    true
 }
 
 /// The ordered exception arms of the instruction at `pc`.
 ///
 /// Selection walks the table in order, so the first catch-all shadows later
 /// entries and an escaping exception unwinds.
-fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> Vec<ExceptionArm<ProgramCounter>> {
-    let mut exception_arms = Vec::new();
+fn exception_arms(body: MethodBody<'_>, pc: ProgramCounter) -> ExceptionArms<'_, ProgramCounter> {
+    let mut exception_arms = ExceptionArms::new();
     for entry in body.exception_table().filter(|entry| entry.covers(pc)) {
         exception_arms.push(ExceptionArm {
             target: ExceptionTarget::Handler(entry.handler_pc()),
-            catch_type: entry.catch_type().cloned(),
+            catch_type: entry.catch_type(),
         });
         if entry.catches_all() {
             return exception_arms;
@@ -213,27 +192,8 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let instruction = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
+                BlockExit::of(body, 0.into(), Some(10.into()), &instruction),
                 Err(ErrorKind::InvalidTableSwitchRange)
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_invalid_multianewarray_dimensions() {
-        for (array_type, dimensions) in [("[[I", 0), ("[I", 2), ("java/lang/Object", 1)] {
-            let mut pool = ConstantPool::new();
-            let array_type = pool.insert_reference_type(ref_t(array_type));
-            let instructions = [
-                (0, InstructionData::MultiANewArray(array_type, dimensions)),
-                (1, InstructionData::Return),
-            ];
-            let method = method_with_pool(pool, instructions, "()V", vec![]);
-            let body = method.as_method().body().unwrap();
-            let instruction = body.instruction_at(0.into()).unwrap();
-            assert_eq!(
-                BlockExit::of(body, 0.into(), &instruction),
-                Err(ErrorKind::InvalidMultiArrayDimensions)
             );
         }
     }
@@ -251,7 +211,7 @@ mod tests {
             let body = method.as_method().body().unwrap();
             let view = body.instruction_at(0.into()).unwrap();
             assert_eq!(
-                BlockExit::of(body, 0.into(), &view),
+                BlockExit::of(body, 0.into(), None, &view),
                 Err(ErrorKind::UnsupportedLegacySubroutine)
             );
         }
@@ -262,7 +222,7 @@ mod tests {
         let method = method([(4, InstructionData::Nop)], "()V", vec![]);
         let body = method.as_method().body().unwrap();
         assert_eq!(
-            BlockExit::of(body, 4.into(), &Instruction::Nop),
+            BlockExit::of(body, 4.into(), None, &Instruction::Nop),
             Err(ErrorKind::MissingFallthrough)
         );
     }

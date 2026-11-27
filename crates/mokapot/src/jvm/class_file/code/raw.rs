@@ -1,15 +1,18 @@
 //! Raw attribute types for the `Code` attribute and its sub-attributes.
 
-use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, byteorder::big_endian::U16};
-
-use super::super::fixed_layout::FixedLayout;
+use zerocopy::{
+    FromBytes, Immutable, KnownLayout, TryFromBytes, Unaligned, byteorder::big_endian::U16,
+};
 
 use super::super::{
     Decode, ParseError,
     attribute::AttributeInfo,
-    decoder::{borrow_bytes, borrow_slice, decode_value, parse_repeated},
+    decoder::{borrow_bytes, parse_repeated, try_borrow_view},
 };
-use crate::intrinsics::see_jvm_spec;
+use crate::{
+    intrinsics::see_jvm_spec,
+    jvm::{ConstantPoolIndex, constant_pool::OptionalConstantPoolIndex},
+};
 
 /// The `Code` attribute.
 #[doc = see_jvm_spec!(4, 7, 3)]
@@ -23,14 +26,14 @@ pub struct Code<'a> {
 
 impl<'a> Decode<'a> for Code<'a> {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let max_stack = decode_value(bytes)?;
-        let max_locals = decode_value(bytes)?;
-        let code_length: u32 = decode_value(bytes)?;
+        let max_stack = Decode::decode(bytes)?;
+        let max_locals = Decode::decode(bytes)?;
+        let code_length = u32::decode(bytes)?;
         let code_length = usize::try_from(code_length).expect("32-bit size is not supported.");
         let code = borrow_bytes(bytes, code_length)?;
-        let exception_table_length: u16 = decode_value(bytes)?;
-        let exception_table = borrow_slice(bytes, usize::from(exception_table_length))?;
-        let attributes_count: u16 = decode_value(bytes)?;
+        let exception_table_length = u16::decode(bytes)?;
+        let exception_table = try_borrow_view(bytes, usize::from(exception_table_length))?;
+        let attributes_count = u16::decode(bytes)?;
         let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
         Ok(Self {
             max_stack,
@@ -50,10 +53,8 @@ pub struct ExceptionTableEntry {
     pub start_pc: U16,
     pub end_pc: U16,
     pub handler_pc: U16,
-    pub catch_type: U16,
+    pub catch_type: OptionalConstantPoolIndex,
 }
-
-impl FixedLayout for ExceptionTableEntry {}
 
 #[doc = see_jvm_spec!(4, 7, 4)]
 pub enum StackMapFrameInfo {
@@ -91,7 +92,7 @@ pub enum StackMapFrameInfo {
 
 impl<'a> Decode<'a> for StackMapFrameInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let frame_type: u8 = decode_value(bytes)?;
+        let frame_type = u8::decode(bytes)?;
         match frame_type {
             frame_type @ 0..=63 => Ok(Self::SameFrame { frame_type }),
             frame_type @ 64..=127 => Ok(Self::SameLocals1StackItemFrame {
@@ -102,19 +103,19 @@ impl<'a> Decode<'a> for StackMapFrameInfo {
                 "Frame type {frame_type} is reserved for future use."
             ))),
             247 => Ok(Self::SameLocals1StackItemFrameExtended {
-                offset_delta: decode_value(bytes)?,
+                offset_delta: Decode::decode(bytes)?,
                 stack: VerificationTypeInfo::decode(bytes)?,
             }),
             frame_type @ 248..=250 => Ok(Self::ChopFrame {
                 frame_type,
-                offset_delta: decode_value(bytes)?,
+                offset_delta: Decode::decode(bytes)?,
             }),
             251 => Ok(Self::SameFrameExtended {
-                offset_delta: decode_value(bytes)?,
+                offset_delta: Decode::decode(bytes)?,
             }),
             frame_type @ 252..=254 => {
                 let locals_count = frame_type - 251;
-                let offset_delta = decode_value(bytes)?;
+                let offset_delta = Decode::decode(bytes)?;
                 let locals = parse_repeated(bytes, locals_count, VerificationTypeInfo::decode)?;
                 Ok(Self::AppendFrame {
                     offset_delta,
@@ -122,10 +123,10 @@ impl<'a> Decode<'a> for StackMapFrameInfo {
                 })
             }
             255 => {
-                let offset_delta = decode_value(bytes)?;
-                let number_of_locals: u16 = decode_value(bytes)?;
+                let offset_delta = Decode::decode(bytes)?;
+                let number_of_locals = u16::decode(bytes)?;
                 let locals = parse_repeated(bytes, number_of_locals, VerificationTypeInfo::decode)?;
-                let number_of_stack_items: u16 = decode_value(bytes)?;
+                let number_of_stack_items = u16::decode(bytes)?;
                 let stack =
                     parse_repeated(bytes, number_of_stack_items, VerificationTypeInfo::decode)?;
                 Ok(Self::FullFrame {
@@ -148,13 +149,13 @@ pub enum VerificationTypeInfo {
     Long = 4,
     Null = 5,
     UninitializedThis = 6,
-    Object { cpool_index: u16 } = 7,
+    Object { class: ConstantPoolIndex } = 7,
     Uninitialized { offset: u16 } = 8,
 }
 
 impl<'a> Decode<'a> for VerificationTypeInfo {
     fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let tag: u8 = decode_value(bytes)?;
+        let tag = u8::decode(bytes)?;
         match tag {
             0 => Ok(Self::Top),
             1 => Ok(Self::Integer),
@@ -164,10 +165,10 @@ impl<'a> Decode<'a> for VerificationTypeInfo {
             5 => Ok(Self::Null),
             6 => Ok(Self::UninitializedThis),
             7 => Ok(Self::Object {
-                cpool_index: decode_value(bytes)?,
+                class: Decode::decode(bytes)?,
             }),
             8 => Ok(Self::Uninitialized {
-                offset: decode_value(bytes)?,
+                offset: Decode::decode(bytes)?,
             }),
             _ => Err(ParseError::malform(format!(
                 "Unknown verification type tag: {tag}"
@@ -185,33 +186,27 @@ pub struct LineNumberTableEntry {
     pub line_number: U16,
 }
 
-impl FixedLayout for LineNumberTableEntry {}
-
 #[doc = see_jvm_spec!(4, 7, 13)]
-#[derive(Debug, Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Debug, Clone, Copy, TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableInfo {
     pub start_pc: U16,
     pub length: U16,
-    pub name_index: U16,
-    pub descriptor_index: U16,
+    pub name: ConstantPoolIndex,
+    pub descriptor: ConstantPoolIndex,
     pub index: U16,
 }
 
-impl FixedLayout for LocalVariableInfo {}
-
 #[doc = see_jvm_spec!(4, 7, 14)]
-#[derive(Debug, Clone, Copy, FromBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(Debug, Clone, Copy, TryFromBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct LocalVariableTypeInfo {
     pub start_pc: U16,
     pub length: U16,
-    pub name_index: U16,
-    pub signature_index: U16,
+    pub name: ConstantPoolIndex,
+    pub signature: ConstantPoolIndex,
     pub index: U16,
 }
-
-impl FixedLayout for LocalVariableTypeInfo {}
 
 #[cfg(test)]
 mod tests {
@@ -227,10 +222,8 @@ mod tests {
             frame,
             StackMapFrameInfo::SameLocals1StackItemFrameExtended {
                 offset_delta: 9,
-                stack: VerificationTypeInfo::Object {
-                    cpool_index: 0x1234
-                },
-            }
+                stack: VerificationTypeInfo::Object { class },
+            } if class.get() == 0x1234
         ));
     }
 }

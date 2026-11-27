@@ -17,6 +17,10 @@ pub(super) fn canonicalize_values(
     entry: &mut MethodEntry,
     blocks: &mut HashMap<BlockId, BasicBlock>,
 ) {
+    if blocks.values().all(|block| block.parameters.is_empty()) {
+        return;
+    }
+
     let mut arguments = {
         let entry_arguments = blocks[&entry.block]
             .parameters
@@ -44,7 +48,10 @@ pub(super) fn canonicalize_values(
             (parameter.value, candidate)
         })
         .collect();
-    SimplifiedParameters::for_block_inputs(inputs).apply(entry, blocks);
+    let simplified = SimplifiedParameters::for_block_inputs(inputs);
+    if !simplified.substitutions.is_empty() {
+        simplified.apply(entry, blocks);
+    }
 }
 
 /// The result of simplifying provisional block parameters.

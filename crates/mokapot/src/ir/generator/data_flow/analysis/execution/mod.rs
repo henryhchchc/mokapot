@@ -43,7 +43,7 @@ impl<'method, 'cfg> BlockInterpreter<'method, 'cfg> {
     }
 }
 
-impl BlockInterpreter<'_, '_> {
+impl<'method> BlockInterpreter<'method, '_> {
     /// Interprets one block, producing its analyzed block.
     ///
     /// Its successor targets and arms were fixed before frame analysis.
@@ -52,14 +52,14 @@ impl BlockInterpreter<'_, '_> {
         values: &mut ValueContext,
         block: BlockId,
         input: Frame,
-    ) -> Result<FrameBlock, Error> {
+    ) -> Result<FrameBlock<'method>, Error> {
         let node = self.cfg.block(block);
         match node {
             CfgNode::Code {
                 start_pc,
                 end_pc,
                 exit,
-            } => self.interpret_bytecode(values, *start_pc, *end_pc, exit.clone(), input),
+            } => self.interpret_bytecode(values, *start_pc, *end_pc, exit, input),
             CfgNode::LandingPad { successor } => {
                 let caught = *input.handler_exception()?;
                 let kind = BlockKind::LandingPad { exception: caught };
@@ -73,7 +73,7 @@ impl BlockInterpreter<'_, '_> {
         successor: BlockId,
         input: Frame,
         kind: BlockKind,
-    ) -> FrameBlock {
+    ) -> FrameBlock<'method> {
         let target = FrameArm::block(
             ArmKey::Unconditional,
             successor,
@@ -93,11 +93,11 @@ impl BlockInterpreter<'_, '_> {
         values: &mut ValueContext,
         start_pc: ProgramCounter,
         end_pc: ProgramCounter,
-        exit: BlockExit<BlockId>,
+        exit: &BlockExit<'method, BlockId>,
         input: Frame,
-    ) -> Result<FrameBlock, Error> {
+    ) -> Result<FrameBlock<'method>, Error> {
         let mut frame = input;
-        let mut instructions = self.cfg.instructions_in(start_pc, end_pc);
+        let mut instructions = self.cfg.body().instructions().range(start_pc..=end_pc);
         let (final_pc, instruction) = instructions
             .next_back()
             .expect("a structural block contains its final instruction");
@@ -114,7 +114,7 @@ impl BlockInterpreter<'_, '_> {
             }
         }
         let terminator_source = exit.forces_block_boundary().then_some(final_pc);
-        let exit_state = ExitState::new(instruction, final_pc, frame, &exit);
+        let exit_state = ExitState::new(instruction, final_pc, frame, exit);
         let terminator = exit_state
             .terminate(values, exit, &mut operations)
             .at_pc(final_pc)?;

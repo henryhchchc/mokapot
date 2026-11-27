@@ -18,6 +18,18 @@ fn invalid_opcodes_report_instruction_offset() {
     }
 }
 
+#[test]
+fn constant_pool_operands_reject_zero_indices() {
+    for mut bytes in [&[0x12, 0][..], &[0x13, 0, 0]] {
+        let len = bytes.len();
+        let error = RawInstruction::read_one(&mut bytes, len).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::InvalidConstantPoolIndex { index: 0 }
+        );
+    }
+}
+
 fn assert_malformed(bytes: &[u8]) {
     let mut reader = bytes;
     let error = RawInstruction::read_one(&mut reader, bytes.len()).unwrap_err();
@@ -30,11 +42,11 @@ fn assert_malformed(bytes: &[u8]) {
 proptest! {
     #[test]
     fn invokedynamic_rejects_nonzero_reserved_bytes(
-        dynamic_index in any::<u16>(),
+        dynamic in 1u16..=u16::MAX,
         reserved in 1u16..=u16::MAX,
     ) {
         let mut bytes = vec![0xba];
-        bytes.extend(dynamic_index.to_be_bytes());
+        bytes.extend(dynamic.to_be_bytes());
         bytes.extend(reserved.to_be_bytes());
         assert_malformed(&bytes);
     }
@@ -122,13 +134,8 @@ fn parses_instruction_operands_and_switch_alignment() {
             (0.into(), IConst0),
             (1.into(), BiPush { value: -2 }),
             (3.into(), SiPush { value: -292 }),
-            (6.into(), Ldc { const_index: 0xfe }),
-            (
-                8.into(),
-                LdcW {
-                    const_index: 0xfedc
-                }
-            ),
+            (6.into(), Ldc(0xfe_u16.try_into().unwrap())),
+            (8.into(), LdcW(0xfedc_u16.try_into().unwrap())),
             (11.into(), ILoad { index: 0xfe }),
             (
                 13.into(),
@@ -146,10 +153,7 @@ fn parses_instruction_operands_and_switch_alignment() {
             ),
             (
                 22.into(),
-                InvokeInterface {
-                    method_index: 0xfedc,
-                    count: 7
-                }
+                InvokeInterface(0xfedc_u16.try_into().unwrap(), NonZeroU8::new(7).unwrap())
             ),
         ]
     );

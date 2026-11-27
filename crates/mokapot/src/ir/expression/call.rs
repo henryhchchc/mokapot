@@ -46,7 +46,7 @@ mod tests {
             (InvocationKind::Interface { this }, interface_call),
             (InvocationKind::Special { this }, special_call),
         ] {
-            let expression = call(kind, method.clone(), [first, second]);
+            let expression = call(kind, &method, [first, second]);
             assert_eq!(expression.to_string(), expected);
         }
     }

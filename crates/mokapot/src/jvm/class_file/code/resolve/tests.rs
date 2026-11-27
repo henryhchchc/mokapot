@@ -3,7 +3,8 @@ use crate::ir::test::prelude::assert_matches;
 use crate::jvm::class_file::constant_pool::{
     ConstantPoolBuilder, RawConstantPool, RawEntry, resolve,
 };
-use crate::jvm::{Class, code::Instruction, references::MethodReference};
+use crate::jvm::constant_pool::pool_index;
+use crate::jvm::{Class, code::Instruction, errors::ParseErrorKind, references::MethodReference};
 
 #[test]
 fn tableswitch_resolves_backward_default_and_inclusive_range() {
@@ -33,25 +34,25 @@ fn empty_pool() -> ConstantPoolBuilder {
 fn interface_method_pool(is_interface: bool) -> ConstantPoolBuilder {
     let entry = if is_interface {
         RawEntry::InterfaceMethodRef {
-            class_index: 2.into(),
-            name_and_type_index: 5.into(),
+            class: pool_index(2),
+            name_and_type: pool_index(5),
         }
     } else {
         RawEntry::MethodRef {
-            class_index: 2.into(),
-            name_and_type_index: 5.into(),
+            class: pool_index(2),
+            name_and_type: pool_index(5),
         }
     };
     let raw = RawConstantPool::from_entries([
         RawEntry::Utf8(b"a/b/I"),
         RawEntry::Class {
-            name_index: 1.into(),
+            name: pool_index(1),
         },
         RawEntry::Utf8(b"m"),
         RawEntry::Utf8(b"()V"),
         RawEntry::NameAndType {
-            name_index: 3.into(),
-            descriptor_index: 4.into(),
+            name: pool_index(3),
+            descriptor: pool_index(4),
         },
         entry,
     ]);
@@ -66,7 +67,7 @@ fn invokeinterface_parses_interface_method_refs() {
         .unwrap();
     let mut pool = interface_method_pool(true);
     let data = InstructionData::from_raw_instruction(instruction, pc, &mut pool).unwrap();
-    let name = pool.class_id(2).unwrap();
+    let name = pool.class_id(2_u16.try_into().unwrap()).unwrap();
     let class = Class {
         name,
         constant_pool: pool.finish(),
@@ -75,7 +76,7 @@ fn invokeinterface_parses_interface_method_refs() {
     let Instruction::InvokeInterface(method, count) = data.as_borrowed(&class.constant_pool) else {
         panic!("expected invokeinterface")
     };
-    assert_eq!(count, 1);
+    assert_eq!(count.get(), 1);
     assert_eq!(
         method.into_owned(),
         MethodReference {
@@ -107,12 +108,34 @@ fn invocation_opcodes_preserve_pool_kind_validation() {
             } else {
                 assert_matches!(
                     result.unwrap_err().kind(),
-                    crate::jvm::errors::ParseErrorKind::UnexpectedConstantPoolEntry {
-                        index: 6,
-                        ..
-                    }
+                    ParseErrorKind::UnexpectedConstantPoolEntry { index: 6, .. }
                 );
             }
         }
+    }
+}
+
+#[test]
+fn multianewarray_validates_dimensions() {
+    for (descriptor, count, expected) in [
+        ("[[I", 0, Err(ParseErrorKind::Malformed)),
+        ("java/lang/Object", 1, Err(ParseErrorKind::Malformed)),
+        ("[I", 2, Err(ParseErrorKind::Malformed)),
+        ("[[I", 2, Ok(())),
+        ("[[I", 1, Ok(())),
+    ] {
+        let mut pool = resolve(RawConstantPool::from_entries([
+            RawEntry::Utf8(descriptor.as_bytes()),
+            RawEntry::Class {
+                name: pool_index(1),
+            },
+        ]))
+        .unwrap();
+        let bytes = [0, 0xc5, 0, 2, count];
+        let result = RawInstruction::iter_from_bytes(&bytes)
+            .nth(1)
+            .unwrap()
+            .and_then(|(pc, raw)| InstructionData::from_raw_instruction(raw, pc, &mut pool));
+        assert_eq!(result.map(|_| ()).map_err(|error| error.kind()), expected);
     }
 }

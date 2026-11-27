@@ -17,11 +17,12 @@ use crate::{
     ir::BlockId,
     jvm::{
         Method,
-        code::{Instruction, MethodBody, ProgramCounter},
+        code::{MethodBody, ProgramCounter},
     },
 };
 
 /// Builds the reachable control-flow graph used by the later dataflow stage.
+#[inline]
 pub(super) fn analyze(method: Method<'_>) -> Result<Cfg<'_>, Error> {
     builder::build(method)
 }
@@ -32,7 +33,7 @@ pub(crate) struct Cfg<'method> {
     method: Method<'method>,
     body: MethodBody<'method>,
     entry: BlockId,
-    blocks: HashMap<BlockId, CfgNode>,
+    blocks: HashMap<BlockId, CfgNode<'method>>,
 }
 
 impl<'method> Cfg<'method> {
@@ -51,27 +52,19 @@ impl<'method> Cfg<'method> {
     /// # Panics
     ///
     /// Panics unless `id` was allocated by this graph.
-    pub fn block(&self, id: BlockId) -> &CfgNode {
+    pub fn block(&self, id: BlockId) -> &CfgNode<'method> {
         self.blocks
             .get(&id)
             .expect("a CFG block identity belongs to its graph")
     }
-
-    pub fn instructions_in(
-        &self,
-        start: ProgramCounter,
-        end: ProgramCounter,
-    ) -> impl DoubleEndedIterator<Item = (ProgramCounter, Instruction<'method>)> {
-        self.body().instructions().range(start..=end)
-    }
 }
 
 #[derive(Debug)]
-pub(crate) enum CfgNode {
+pub(crate) enum CfgNode<'class> {
     Code {
         start_pc: ProgramCounter,
         end_pc: ProgramCounter,
-        exit: BlockExit<BlockId>,
+        exit: BlockExit<'class, BlockId>,
     },
     LandingPad {
         successor: BlockId,

@@ -1,59 +1,24 @@
-use zerocopy::byteorder::big_endian::U16;
-
 use crate::jvm::class_file::attribute::extract_attributes;
 use crate::jvm::class_file::flags::parse_flags;
 
-use super::{
-    Decode, ParseError,
-    attribute::AttributeInfo,
-    decoder::{decode_value, parse_repeated},
-    resolve::Resolve,
-};
-use crate::{
-    intrinsics::see_jvm_spec,
-    jvm::{Method, annotation::AnnotationsData, class_file::ResolutionContext, method},
-};
+use super::{ParseError, ResolutionContext, class::raw::MemberInfo, resolve::Resolve};
+use crate::jvm::{Method, annotation::AnnotationsData, method};
 
-/// The raw representation of a `method_info` structure.
-#[doc = see_jvm_spec!(4, 6)]
-#[derive(Debug)]
-pub(super) struct MethodInfo<'a> {
-    access_flags: u16,
-    name_index: u16,
-    descriptor_index: u16,
-    attributes: Box<[&'a AttributeInfo]>,
-}
-
-impl<'a> Decode<'a> for MethodInfo<'a> {
-    fn decode(bytes: &mut &'a [u8]) -> Result<Self, ParseError> {
-        let [access_flags, name_index, descriptor_index, attributes_count] =
-            decode_value::<[U16; 4]>(bytes)?.map(U16::get);
-        let attributes = parse_repeated(bytes, attributes_count, <&AttributeInfo>::decode)?;
-        Ok(Self {
+impl MemberInfo<'_> {
+    pub(super) fn resolve_method(
+        self,
+        ctx: &mut ResolutionContext,
+    ) -> Result<method::MethodData, ParseError> {
+        let Self {
             access_flags,
-            name_index,
-            descriptor_index,
-            attributes,
-        })
-    }
-}
-
-impl Resolve for MethodInfo<'_> {
-    type Output = method::MethodData;
-
-    fn resolve(self, ctx: &mut ResolutionContext) -> Result<Self::Output, ParseError> {
-        let MethodInfo {
-            access_flags,
-            name_index,
-            descriptor_index,
+            name,
+            descriptor,
             attributes,
         } = self;
         let access_flags =
             parse_flags::<method::AccessFlags>(access_flags, "Invalid method access flags")?;
-        let name = ctx.constant_pool.utf8_id(name_index)?;
-        let descriptor = ctx
-            .constant_pool
-            .intern_method_descriptor(descriptor_index)?;
+        let name = ctx.constant_pool.utf8_id(name)?;
+        let descriptor = ctx.constant_pool.intern_method_descriptor(descriptor)?;
         let name_value = ctx.constant_pool.utf8(name);
         let is_initializer = name_value == Method::CLASS_INITIALIZER_NAME;
         let has_parameters = !ctx
@@ -157,9 +122,14 @@ impl Resolve for MethodInfo<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jvm::constant_pool::pool_index;
     use crate::jvm::{
         class::Version,
-        class_file::constant_pool::{RawConstantPool, RawEntry, resolve},
+        class_file::{
+            Decode,
+            attribute::AttributeInfo,
+            constant_pool::{RawConstantPool, RawEntry, resolve},
+        },
         errors::ParseErrorKind,
     };
 
@@ -173,11 +143,11 @@ mod tests {
             RawEntry::Utf8(descriptor),
             RawEntry::Utf8(b"Code"),
         ]);
-        let name_index = 1;
-        let descriptor_index = 2;
+        let name = pool_index(1);
+        let descriptor = pool_index(2);
         let attribute_name_index = 3_u16;
         let mut constant_pool = resolve(pool).unwrap();
-        constant_pool.intern_method_descriptor(descriptor_index)?;
+        constant_pool.intern_method_descriptor(descriptor)?;
         let mut ctx = ResolutionContext {
             constant_pool,
             class_version: Version::from_versions(major, 0).unwrap(),
@@ -187,17 +157,17 @@ mod tests {
         attribute.extend(13_u32.to_be_bytes());
         attribute.extend([0, 0, 0, 1, 0, 0, 0, 1, 0xb1, 0, 0, 0, 0]);
         let attribute = <&AttributeInfo>::decode(&mut attribute.as_slice()).unwrap();
-        MethodInfo {
+        MemberInfo {
             access_flags: if is_static {
                 method::AccessFlags::STATIC.bits()
             } else {
                 0
             },
-            name_index,
-            descriptor_index,
+            name,
+            descriptor,
             attributes: Box::new([attribute]),
         }
-        .resolve(&mut ctx)
+        .resolve_method(&mut ctx)
     }
 
     #[test]
