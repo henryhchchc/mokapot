@@ -58,7 +58,7 @@ jobs:
           toolchain: stable
           components: clippy
       - name: Setup Checking Tools
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: clippy-sarif,sarif-fmt
       - name: Setup JDK
@@ -96,7 +96,7 @@ jobs:
             -- -D warnings 2>&1 | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
         continue-on-error: true
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v4.39.3
+        uses: github/codeql-action/upload-sarif@v4.39.5
         if: always()
         with:
           sarif_file: rust-clippy-results.sarif
@@ -120,7 +120,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-hack
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-hack
       - name: Checkout source code
@@ -161,7 +161,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Checkout source code
@@ -208,7 +208,7 @@ jobs:
           toolchain: nightly
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-llvm-cov
       - name: Checkout source code
@@ -255,7 +255,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - name: Setup Build Tools
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-llvm-cov,cargo-nextest
       - name: Setup JDK
@@ -305,7 +305,7 @@ jobs:
         with:
           toolchain: stable
       - name: Setup cargo-nextest
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-nextest
       - name: Setup JDK
@@ -368,7 +368,7 @@ jobs:
           toolchain: nightly
           components: miri
       - name: Setup cargo-nextest
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-nextest
       - name: Checkout source code
